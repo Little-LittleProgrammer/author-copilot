@@ -71,15 +71,92 @@ Electron Main Process
         `- NestJS control plane, managed mode
 ```
 
-### 4.1 React 渲染进程
+### 4.1 pnpm 与 Turborepo 工作区
+
+仓库使用 pnpm workspace 和 Turborepo。应用实现放在 `apps/`，只有跨应用共享或需要独立测试的稳定契约才放在 `packages/`，避免过早把桌面端内部模块拆成大量 workspace 包。
+
+```text
+author-copilot/
+  apps/
+    desktop/
+      src/
+        main/
+          bootstrap/
+          ipc/
+          project/
+          git/
+          ai/
+          knowledge/
+          credentials/
+          policy/
+        preload/
+        renderer/
+          app/
+          features/
+            project/
+            editor/
+            assistant/
+            change-review/
+          components/
+          i18n/
+          themes/
+      resources/
+        git/
+      electron-builder.yml
+      package.json
+    api/
+      src/
+        auth/
+        users/
+        entitlements/
+        quota/
+        claude-proxy/
+        observability/
+        common/
+      package.json
+  packages/
+    contracts/
+    project-schema/
+    config-eslint/
+    config-typescript/
+    test-utils/
+  tooling/
+    scripts/
+      fetch-git-runtime.ts
+      verify-git-runtime.ts
+      package-licenses.ts
+    git-runtime-manifest.json
+  infra/
+    docker-compose.yml
+    docker/
+  docs/
+  pnpm-workspace.yaml
+  turbo.json
+  package.json
+  pnpm-lock.yaml
+```
+
+目录边界遵循以下规则：
+
+- `apps/desktop/src/main` 实现本地能力，渲染进程不得直接引用其中模块。
+- `apps/desktop/src/preload` 只负责类型化 IPC 桥接，不承载业务逻辑。
+- `apps/desktop/src/renderer/features` 按用户能力组织界面，不按页面堆放全局状态。
+- `apps/api` 是独立部署的 NestJS 控制面，不读取本地作品目录。
+- `packages/contracts` 只包含 IPC、HTTP DTO、错误码和事件，不依赖 Electron 或 NestJS 实现。
+- `packages/project-schema` 只定义项目元数据 schema、迁移和校验。
+- Project、Git、AI 和 Knowledge 的实现先保留在桌面主进程；出现第二个真实消费者后再抽取 workspace 包。
+- Git 二进制不提交仓库。打包任务根据 `git-runtime-manifest.json` 下载固定版本、校验 SHA-256，并复制到 ASAR 外的资源目录。
+- 根 `package.json` 通过 `packageManager` 固定 pnpm 版本。Turbo 统一编排 `build`、`lint`、`typecheck`、`test` 和 `package`，各任务只声明真实的输入、输出和依赖。
+
+### 4.2 React 渲染进程
 
 渲染进程只负责界面状态和用户交互，包括作品结构树、Markdown 编辑器、AI 对话和变更审阅。它不能直接访问 Node.js、任意文件、Git、Shell 或凭证。
 
-### 4.2 Preload 与 IPC
+### 4.3 Preload 与 IPC
 
 Preload 通过 `contextBridge` 暴露按业务能力划分的类型化 API。IPC 不提供通用文件系统接口或 `exec(command)`，每个调用都校验来源、项目标识、授权路径和参数。
 
-### 4.3 Electron 主进程模块
+### 4.4 Electron 主进程模块
 
 - **Project Service**：项目登记、模板创建、导入预览、结构映射和原子文件读写。
 - **Git Service**：内置 Git 定位、仓库初始化、状态、差异、提交和 AI 任务回退点。
@@ -90,7 +167,7 @@ Preload 通过 `contextBridge` 暴露按业务能力划分的类型化 API。IPC
 
 模块通过明确接口协作。具体 RAG 引擎或 Claude plugin 必须位于 `Knowledge Index` 接口之后，不能绕过项目授权、数据存储或日志规则。
 
-### 4.4 NestJS 云端控制面
+### 4.5 NestJS 云端控制面
 
 后端只处理登录托管模式需要的能力：
 
