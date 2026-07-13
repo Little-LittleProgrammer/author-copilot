@@ -1,0 +1,28 @@
+{
+  "name": "@author-copilot/config-typescript",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./base.json": "./dist/base.json",
+    "./node.json": "./dist/node.json",
+    "./browser.json": "./dist/browser.json",
+    "./react.json": "./dist/react.json"
+  },
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "lint": "eslint . --config ../config-eslint/index.js",
+    "test": "vitest run",
+    "typecheck": "node --check ./scripts/build.mjs"
+  },
+  "devDependencies": {
+    "@author-copilot/config-eslint": "workspace:*",
+    "eslint": "10.7.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "extends": "@author-copilot/config-typescript/node.json",
+  "compilerOptions": {
+    "composite": true,
+    "types": ["node", "electron-vite/node"]
+  },
+  "include": [
+    "electron.vite.config.ts",
+    "e2e/**/*.ts",
+    "eslint.config.ts",
+    "playwright.config.ts",
+    "scripts/**/*.ts",
+    "vitest.config.ts",
+    "src/main/**/*.ts",
+    "src/preload/**/*.ts",
+    "src/shared/**/*.ts",
+    "tests/**/*.ts"
+  ]
+}

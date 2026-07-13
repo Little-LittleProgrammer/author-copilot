@@ -1,0 +1,67 @@
+# Author Copilot RAG candidate benchmark
+
+This spike provides one repeatable harness for local Knowledge Index candidates. It fixes the
+fixture, Markdown chunking, adapter contract, quality labels and metric definitions so candidate
+engines are compared on the same inputs.
+
+The bundled fixture is deliberately small. It covers Chinese and English Markdown, long and short
+chapters, duplicate titles, cross-file retrieval and near-synonym queries. It is a **smoke test only**
+and cannot approve an engine for M0.
+
+## Run
+
+Python 3.11 or newer is required. The SQLite candidate uses only Python's standard library and a
+Python build whose SQLite includes FTS5 with the trigram tokenizer. Trigram is intentional: the
+standard `unicode61` tokenizer does not segment continuous Chinese text into useful search terms.
+
+```bash
+cd spikes/rag-benchmark
+python3 benchmark.py generate --output .work/generated-fixture
+python3 -m unittest discover -s tests -v
+python3 benchmark.py run \
+  --adapter sqlite-fts5 \
+  --work-dir .work/sqlite-smoke \
+  --report reports/sqlite-fts5-smoke.json
+```
+
+The commands recreate their fixture directory, so repeated runs start from identical bytes. The
+report contains the fixture SHA-256 and runtime versions. Generated databases and fixtures stay
+under `.work/` and are ignored. Each adapter instance is project-scoped and rejects chunks from a
+different project ID.
+
+Trying the reserved LanceDB candidate fails explicitly and emits no metrics:
+
+```bash
+python3 benchmark.py run --adapter lancedb
+```
+
+`pyproject.toml` records the future, local-only LanceDB dependency range. The adapter must implement
+the same contract and pass the same labels before it can produce a benchmark report.
+
+## Metrics
+
+- `first_index_ms`: wall-clock time to create the complete candidate index from fixed chunks.
+- `index_size_bytes`: candidate database size after the initial index is committed and compacted.
+- `single_file_incremental_ms`: wall-clock time to replace every chunk for one changed Markdown file.
+- `single_file_incremental_verified`: an added marker is retrievable from the changed source.
+- `query_latency_ms.p50/p95`: latency distribution across every labeled query, repeated 20 times by
+  default. Fixture generation, indexing and quality scoring are excluded.
+- `recall_at_5`: expected source paths present in the top five, divided by all labeled source paths.
+- `source_path_range_accuracy`: recalled labeled sources whose returned source path and line range
+  contain the labeled evidence line, divided by recalled labeled sources. Misses belong to
+  `recall_at_5`; this metric independently detects incorrect citation metadata.
+
+All paths in labels, results and reports are project-relative. Chunking is engine-independent and
+preserves 1-based Markdown line ranges.
+
+## Formal M0 exit gate
+
+The formal comparison must replace this smoke fixture with **100,000, 1,000,000 and 5,000,000
+Chinese-character-scale corpora** and at least **100 human-labeled queries**. The implementation plan
+requires source path/range accuracy of 100%, Recall@5 of at least 80%, and 1,000,000-character query
+p95 below 300 ms on the recorded reference device. Single-file updates must also avoid blocking
+content saves. Electron packaging stability across macOS and Windows, x64 and arm64 is a separate
+required gate.
+
+Every smoke report sets `formal_exit_gate.satisfied_by_this_report` to `false`; smoke numbers must
+not be cited as an engine-selection result.

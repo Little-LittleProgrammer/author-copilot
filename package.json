@@ -1,0 +1,29 @@
+{
+  "name": "author-copilot",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local-first writing workspace with controlled AI assistance",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=24.16.0"
+  },
+  "scripts": {
+    "boundaries": "node tooling/scripts/check-boundaries.mjs",
+    "build": "turbo run build",
+    "clean": "turbo run clean",
+    "dev": "turbo run dev --parallel",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "turbo run lint",
+    "package": "turbo run package",
+    "test": "turbo run test",
+    "test:e2e": "pnpm --filter @author-copilot/desktop test:e2e",
+    "typecheck": "turbo run typecheck",
+    "verify": "pnpm format:check && pnpm boundaries && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e"
+  },
+  "devDependencies": {
+    "prettier": "3.9.5",
+    "turbo": "2.10.4",
+    "typescript": "6.0.3"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "extends": "@author-copilot/config-typescript/node.json",
+  "compilerOptions": {
+    "declaration": false,
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}

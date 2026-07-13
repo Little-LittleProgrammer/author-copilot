@@ -1,0 +1,8 @@
+packages:
+  - .
+
+allowBuilds:
+  electron-winstaller: false
+
+overrides:
+  "@electron/get@^3.0.0": 3.1.0

@@ -1,0 +1,66 @@
+{
+  "name": "@author-copilot/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Secure Electron desktop shell for Author Copilot",
+  "author": "Author Copilot contributors",
+  "type": "module",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "build": "electron-vite build",
+    "clean": "rm -rf out release coverage",
+    "dev": "electron-vite dev",
+    "lint": "eslint --config eslint.config.ts .",
+    "package": "pnpm build && electron-builder",
+    "package:mac:arm64": "pnpm build && electron-builder --mac --arm64",
+    "package:mac:x64": "pnpm build && electron-builder --mac --x64",
+    "package:win:arm64": "pnpm build && electron-builder --win --arm64",
+    "package:win:x64": "pnpm build && electron-builder --win --x64",
+    "smoke": "pnpm build && node ./scripts/electron-smoke.ts",
+    "test": "vitest run",
+    "test:e2e": "pnpm build && playwright test --config playwright.config.ts",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit"
+  },
+  "dependencies": {
+    "@author-copilot/contracts": "workspace:*",
+    "@author-copilot/project-schema": "workspace:*",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@author-copilot/config-eslint": "workspace:*",
+    "@author-copilot/config-typescript": "workspace:*",
+    "@playwright/test": "1.61.1",
+    "@types/node": "24.10.4",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@swc/core": "1.15.43",
+    "@vitejs/plugin-react-swc": "4.3.1",
+    "electron": "43.1.0",
+    "electron-builder": "26.15.3",
+    "electron-vite": "6.0.0-beta.1",
+    "eslint": "10.7.0",
+    "rolldown": "1.1.5",
+    "vite": "8.1.4",
+    "vitest": "4.1.10"
+  },
+  "build": {
+    "appId": "com.authorcopilot.desktop",
+    "productName": "Author Copilot",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true
+    },
+    "win": {
+      "verifyUpdateCodeSignature": true
+    }
+  }
+}

@@ -1,0 +1,84 @@
+name: Desktop package matrix
+
+on:
+  schedule:
+    - cron: "17 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-package-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Package ${{ matrix.os }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos
+            target: mac
+            arch: x64
+            runner: macos-15
+            executable: apps/desktop/release/mac/Author Copilot.app/Contents/MacOS/Author Copilot
+          - os: macos
+            target: mac
+            arch: arm64
+            runner: macos-15-xlarge
+            executable: apps/desktop/release/mac-arm64/Author Copilot.app/Contents/MacOS/Author Copilot
+          - os: windows
+            target: win
+            arch: x64
+            runner: windows-2025
+            executable: apps/desktop/release/win-unpacked/Author Copilot.exe
+          - os: windows
+            target: win
+            arch: arm64
+            runner: windows-11-arm
+            executable: apps/desktop/release/win-arm64-unpacked/Author Copilot.exe
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Package desktop
+        id: package
+        run: pnpm --filter @author-copilot/desktop package:${{ matrix.target }}:${{ matrix.arch }}
+
+      - name: Smoke-test packaged application
+        if: matrix.os != 'windows' || matrix.arch != 'arm64'
+        run: node apps/desktop/scripts/electron-smoke.ts --executable "${{ matrix.executable }}"
+
+      - name: Record Windows ARM64 launch verification gap
+        if: matrix.os == 'windows' && matrix.arch == 'arm64'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Write-Error "TODO(M1-04): add a signed Windows ARM64 installer launch smoke test; packaging alone is not startup evidence."
+
+      - name: Upload desktop package
+        if: always() && steps.package.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: author-copilot-${{ matrix.os }}-${{ matrix.arch }}
+          path: apps/desktop/release/**
+          if-no-files-found: error
+          retention-days: 14
