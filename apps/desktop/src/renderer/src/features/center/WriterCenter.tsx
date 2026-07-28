@@ -6,22 +6,30 @@ import {
   FilePlus2,
   FolderInput,
   Grid2X2,
+  Languages,
+  LogOut,
+  Palette,
   Plus,
   Search,
   WalletCards,
 } from "lucide-react";
 
-import type { MessageKey } from "../../i18n/index.js";
+import type { Locale, MessageKey } from "../../i18n/index.js";
 import type { ProjectSummary, ProjectType } from "../project/types.js";
 
 type WorkFilter = "all" | ProjectType;
 
 interface WriterCenterProps {
+  readonly account: string;
   readonly error: string | undefined;
+  readonly locale: Locale;
   readonly loading: boolean;
   readonly onCreate: (type: ProjectType) => void;
   readonly onImport: () => void;
+  readonly onLocaleChange: (locale: Locale) => void;
+  readonly onLogout: () => void;
   readonly onOpenProject: (project: ProjectSummary) => void;
+  readonly onOpenTheme: () => void;
   readonly projects: readonly ProjectSummary[];
   readonly t: (key: MessageKey) => string;
 }
@@ -33,11 +41,16 @@ const filters: readonly { id: WorkFilter; label: MessageKey }[] = [
 ];
 
 export function WriterCenter({
+  account,
   error,
+  locale,
   loading,
   onCreate,
   onImport,
+  onLocaleChange,
+  onLogout,
   onOpenProject,
+  onOpenTheme,
   projects,
   t,
 }: WriterCenterProps): JSX.Element {
@@ -52,13 +65,26 @@ export function WriterCenter({
           project.name.toLocaleLowerCase().includes(normalizedQuery)),
     );
   }, [filter, projects, query]);
+  const accountName = account.split("@")[0] ?? account;
 
   return (
     <div className="writer-center">
       <aside className="center-sidebar">
-        <div className="center-sidebar-heading">
-          <span>{t("writerCenter")}</span>
-          <strong>{t("creationWorkspace")}</strong>
+        <div className="center-profile">
+          <span className="center-profile-avatar" aria-hidden="true">
+            {accountName.charAt(0).toLocaleUpperCase() || "A"}
+          </span>
+          <strong>{accountName}</strong>
+          <span>{account}</span>
+          <button
+            className="center-profile-logout sidebar-tooltip"
+            type="button"
+            aria-label={t("logout")}
+            data-tooltip={t("logout")}
+            onClick={onLogout}
+          >
+            <LogOut size={14} />
+          </button>
         </div>
         <nav className="center-menu" aria-label={t("writerCenter")}>
           <div className="center-menu-group">
@@ -94,6 +120,28 @@ export function WriterCenter({
             </button>
           </div>
         </nav>
+        <div className="center-sidebar-tools" aria-label={t("appearance")}>
+          <button
+            className="sidebar-tool sidebar-tooltip"
+            type="button"
+            aria-label={t("themeSettings")}
+            data-tooltip={t("themeSettings")}
+            onClick={onOpenTheme}
+          >
+            <Palette size={17} />
+          </button>
+          <button
+            className="sidebar-tool sidebar-tooltip"
+            type="button"
+            aria-label={t("language")}
+            data-tooltip={`${t("language")}: ${locale === "zh-CN" ? "中文" : "English"}`}
+            onClick={() =>
+              onLocaleChange(locale === "zh-CN" ? "en-US" : "zh-CN")
+            }
+          >
+            <Languages size={17} />
+          </button>
+        </div>
       </aside>
 
       <main className="works-page">
@@ -195,6 +243,7 @@ export function WriterCenter({
                 key={project.id}
                 className={`work-card work-card-${index % 4}`}
                 type="button"
+                aria-label={`${t("openWork")}: ${project.name}`}
                 onClick={() => onOpenProject(project)}
               >
                 <span className="work-cover" aria-hidden="true">

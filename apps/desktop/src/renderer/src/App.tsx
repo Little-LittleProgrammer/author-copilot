@@ -1,32 +1,19 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
-import { ArrowLeft, LogOut, Palette } from "lucide-react";
+import { BookOpen, Grid2X2, X } from "lucide-react";
 
 import type { RuntimeInfo } from "@author-copilot/contracts";
 
-import {
-  EditorWorkspace,
-  type WorkspaceTab,
-} from "./features/editor/EditorWorkspace.js";
 import { LoginPage } from "./features/auth/LoginPage.js";
 import { WriterCenter } from "./features/center/WriterCenter.js";
+import { ProjectEditorTab } from "./features/editor/ProjectEditorTab.js";
 import { ProjectDialog } from "./features/project/ProjectDialog.js";
-import { ProjectSidebar } from "./features/project/ProjectSidebar.js";
 import { errorMessage, getProjectApi } from "./features/project/project-api.js";
-import {
-  ProjectApiError,
-  type DocumentSnapshot,
-  type ProjectSummary,
-  type ProjectType,
-  type StructureNode,
-} from "./features/project/types.js";
-import { VersionDialog } from "./features/version/VersionDialog.js";
-import type { VersionResult } from "./features/version/version-api.js";
+import type { ProjectSummary, ProjectType } from "./features/project/types.js";
 import { useI18n } from "./i18n/index.js";
 import { ThemeDialog } from "./themes/ThemeDialog.js";
 import { useTheme } from "./themes/index.js";
 
-type AppView = "center" | "editor" | "login";
-
+const centerTabId = "writer-center";
 const sessionKey = "author-copilot.session";
 
 function initialAccount(): string | undefined {
@@ -38,42 +25,22 @@ export function App(): JSX.Element {
   const themeController = useTheme();
   const [themeDialogOpen, setThemeDialogOpen] = useState(false);
   const [account, setAccount] = useState<string | undefined>(initialAccount);
-  const [view, setView] = useState<AppView>(() =>
-    initialAccount() === undefined ? "login" : "center",
-  );
   const [runtime, setRuntime] = useState<RuntimeInfo>();
   const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
-  const [activeProject, setActiveProject] = useState<ProjectSummary>();
-  const [structure, setStructure] = useState<readonly StructureNode[]>([]);
-  const [document, setDocument] = useState<DocumentSnapshot>();
-  const [content, setContent] = useState("");
-  const [loading, setLoading] = useState(() => getProjectApi() !== undefined);
-  const [saving, setSaving] = useState(false);
-  const [versionNotice, setVersionNotice] = useState<string>();
-  const [versionDialogOpen, setVersionDialogOpen] = useState(false);
-  const [error, setError] = useState<string>();
-  const [dialog, setDialog] = useState<ProjectType | "import" | null>(null);
-  const [tab, setTab] = useState<WorkspaceTab>("content");
-  const dirty = document !== undefined && content !== document.content;
-
-  const loadProject = useCallback((project: ProjectSummary) => {
-    const api = getProjectApi();
-    setActiveProject(project);
-    setDocument(undefined);
-    setContent("");
-    setStructure([]);
-    setError(undefined);
-    setVersionNotice(undefined);
-    if (api === undefined) return;
-    setLoading(true);
-    void api
-      .getStructure({ projectId: project.id })
-      .then(setStructure)
-      .catch((reason: unknown) =>
-        setError(errorMessage(reason, "Project operation failed.")),
-      )
-      .finally(() => setLoading(false));
-  }, []);
+  const [projectsLoading, setProjectsLoading] = useState(
+    () => getProjectApi() !== undefined,
+  );
+  const [projectsError, setProjectsError] = useState<string>();
+  const [projectDialog, setProjectDialog] = useState<
+    ProjectType | "import" | null
+  >(null);
+  const [openProjects, setOpenProjects] = useState<readonly ProjectSummary[]>(
+    [],
+  );
+  const [activeTabId, setActiveTabId] = useState(centerTabId);
+  const [dirtyProjectIds, setDirtyProjectIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
 
   useEffect(() => {
     void window.authorCopilot.system
@@ -84,95 +51,21 @@ export function App(): JSX.Element {
     if (api === undefined) return;
     void api
       .list()
-      .then((items) => {
-        setProjects(items);
-      })
+      .then(setProjects)
       .catch((reason: unknown) =>
-        setError(errorMessage(reason, "Project operation failed.")),
+        setProjectsError(errorMessage(reason, t("errorGeneric"))),
       )
-      .finally(() => setLoading(false));
-  }, [loadProject]);
+      .finally(() => setProjectsLoading(false));
+  }, [t]);
 
-  const selectDocument = useCallback(
-    (node: StructureNode) => {
-      const api = getProjectApi();
-      if (
-        api === undefined ||
-        activeProject === undefined ||
-        node.path === undefined
-      )
-        return;
-      if (dirty && !window.confirm(t("discardPrompt"))) return;
-      setLoading(true);
-      setError(undefined);
-      void api
-        .readDocument({ projectId: activeProject.id, path: node.path })
-        .then((snapshot) => {
-          setDocument(snapshot);
-          setContent(snapshot.content);
-          setTab("content");
-        })
-        .catch((reason: unknown) =>
-          setError(errorMessage(reason, t("errorGeneric"))),
-        )
-        .finally(() => setLoading(false));
-    },
-    [activeProject, dirty, t],
-  );
-
-  const save = useCallback(() => {
-    const api = getProjectApi();
-    if (
-      api === undefined ||
-      activeProject === undefined ||
-      document === undefined
-    )
-      return;
-    setSaving(true);
-    setError(undefined);
-    setVersionNotice(undefined);
-    void api
-      .saveDocument({
-        content,
-        expectedVersion: document.version,
-        path: document.path,
-        projectId: activeProject.id,
-      })
-      .then((snapshot) => {
-        setDocument(snapshot);
-        setContent(snapshot.content);
-      })
-      .catch((reason: unknown) => {
-        setError(
-          reason instanceof ProjectApiError && reason.code === "conflict"
-            ? t("documentChanged")
-            : errorMessage(reason, t("errorGeneric")),
-        );
-      })
-      .finally(() => setSaving(false));
-  }, [activeProject, content, document, t]);
-
-  const completeVersion = useCallback(
-    (result: VersionResult) => {
-      setError(undefined);
-      setVersionNotice(
-        result.created
-          ? `${t("versionSaved")} ${result.shortCommitId ?? ""}`.trim()
-          : t("versionNoChanges"),
-      );
-    },
-    [t],
-  );
-
-  const reload = useCallback(() => {
-    if (document === undefined) return;
-    selectDocument({
-      id: document.path,
-      kind: "document",
-      name: document.path,
-      path: document.path,
-    });
-  }, [document, selectDocument]);
+  const openProject = useCallback((project: ProjectSummary) => {
+    setOpenProjects((current) =>
+      current.some(({ id }) => id === project.id)
+        ? current
+        : [...current, project],
+    );
+    setActiveTabId(project.id);
+  }, []);
 
   const completeProject = useCallback(
     (project: ProjectSummary) => {
@@ -180,171 +73,167 @@ export function App(): JSX.Element {
         ...current.filter(({ id }) => id !== project.id),
         project,
       ]);
-      loadProject(project);
-      setView("editor");
+      openProject(project);
     },
-    [loadProject],
+    [openProject],
   );
 
-  const openProject = useCallback(
-    (project: ProjectSummary) => {
-      loadProject(project);
-      setView("editor");
-    },
-    [loadProject],
-  );
+  const updateDirtyState = useCallback((projectId: string, dirty: boolean) => {
+    setDirtyProjectIds((current) => {
+      const next = new Set(current);
+      if (dirty) next.add(projectId);
+      else next.delete(projectId);
+      return next;
+    });
+  }, []);
 
-  const returnToCenter = useCallback(() => {
-    if (dirty && !window.confirm(t("discardPrompt"))) return;
-    setView("center");
-  }, [dirty, t]);
+  const closeProject = useCallback(
+    (projectId: string) => {
+      if (
+        dirtyProjectIds.has(projectId) &&
+        !window.confirm(t("closeDirtyTabPrompt"))
+      )
+        return;
+
+      const closingIndex = openProjects.findIndex(({ id }) => id === projectId);
+      const remaining = openProjects.filter(({ id }) => id !== projectId);
+      setOpenProjects(remaining);
+      setDirtyProjectIds((current) => {
+        const next = new Set(current);
+        next.delete(projectId);
+        return next;
+      });
+      if (activeTabId === projectId) {
+        setActiveTabId(
+          remaining[Math.max(0, closingIndex - 1)]?.id ?? centerTabId,
+        );
+      }
+    },
+    [activeTabId, dirtyProjectIds, openProjects, t],
+  );
 
   const logout = useCallback(() => {
-    if (dirty && !window.confirm(t("discardPrompt"))) return;
+    if (dirtyProjectIds.size > 0 && !window.confirm(t("logoutDirtyTabsPrompt")))
+      return;
     localStorage.removeItem(sessionKey);
     setAccount(undefined);
-    setView("login");
-  }, [dirty, t]);
+    setOpenProjects([]);
+    setDirtyProjectIds(new Set());
+    setActiveTabId(centerTabId);
+  }, [dirtyProjectIds.size, t]);
 
   const login = useCallback((nextAccount: string, remember: boolean) => {
     if (remember) localStorage.setItem(sessionKey, nextAccount);
     else localStorage.removeItem(sessionKey);
     setAccount(nextAccount);
-    setView("center");
+    setActiveTabId(centerTabId);
   }, []);
 
-  const accountName = account?.split("@")[0] ?? "";
+  const authenticated = account !== undefined;
 
   return (
-    <div className={`app-shell app-view-${view}`}>
-      <header className="titlebar">
-        {view === "editor" ? (
-          <button
-            className="icon-button titlebar-back"
-            type="button"
-            aria-label={t("backToWorks")}
-            title={t("backToWorks")}
-            onClick={returnToCenter}
-          >
-            <ArrowLeft size={17} />
-          </button>
-        ) : null}
-        <div className="brand-mark" aria-hidden="true">
-          A
-        </div>
-        <h1>{t("appName")}</h1>
-        <div className="titlebar-tools">
-          <select
-            aria-label={t("language")}
-            title={t("language")}
-            value={locale}
-            onChange={(event) =>
-              setLocale(event.target.value as "en-US" | "zh-CN")
-            }
-          >
-            <option value="zh-CN">中文</option>
-            <option value="en-US">EN</option>
-          </select>
-          <button
-            className="icon-button"
-            type="button"
-            aria-label={t("themeSettings")}
-            title={t("themeSettings")}
-            onClick={() => setThemeDialogOpen(true)}
-          >
-            <Palette size={16} />
-          </button>
-          {account !== undefined ? (
-            <>
-              <span className="titlebar-divider" aria-hidden="true" />
-              <span className="account-avatar" aria-hidden="true">
-                {accountName.charAt(0).toLocaleUpperCase() || "A"}
-              </span>
-              <span className="account-name">{accountName}</span>
-              <button
-                className="icon-button"
-                type="button"
-                aria-label={t("logout")}
-                title={t("logout")}
-                onClick={logout}
-              >
-                <LogOut size={16} />
-              </button>
-            </>
-          ) : null}
-        </div>
-      </header>
-
-      {view === "login" ? <LoginPage onLogin={login} t={t} /> : null}
-      {view === "center" ? (
-        <WriterCenter
-          error={error}
-          loading={loading}
-          onCreate={setDialog}
-          onImport={() => setDialog("import")}
-          onOpenProject={openProject}
-          projects={projects}
-          t={t}
-        />
-      ) : null}
-      {view === "editor" ? (
+    <div
+      className={`app-shell ${authenticated ? "app-view-tabs" : "app-view-login"} platform-${runtime?.platform ?? "unknown"}`}
+    >
+      {!authenticated ? (
+        <LoginPage onLogin={login} t={t} />
+      ) : (
         <>
-          <div className="workspace">
-            <ProjectSidebar
-              activeDocumentPath={document?.path}
-              activeProject={activeProject}
-              loading={loading}
-              onSelectDocument={selectDocument}
-              structure={structure}
-              t={t}
-            />
-            <EditorWorkspace
-              activeProject={activeProject}
-              content={content}
-              document={document}
-              dirty={dirty}
-              error={error}
-              loading={loading}
-              onChange={setContent}
-              onDiscard={() => {
-                if (document !== undefined) setContent(document.content);
-              }}
-              onCreateVersion={() => setVersionDialogOpen(true)}
-              onReload={reload}
-              onSave={save}
-              onTabChange={setTab}
-              saving={saving}
-              tab={tab}
-              t={t}
-              versionNotice={versionNotice}
-            />
+          <nav className="app-tabs" role="tablist" aria-label={t("openTabs")}>
+            <button
+              className={`app-tab-item center-app-tab${
+                activeTabId === centerTabId ? " active" : ""
+              }`}
+              type="button"
+              role="tab"
+              aria-controls="panel-writer-center"
+              aria-selected={activeTabId === centerTabId}
+              onClick={() => setActiveTabId(centerTabId)}
+            >
+              <Grid2X2 size={14} aria-hidden="true" />
+              <span>{t("writerCenter")}</span>
+            </button>
+            {openProjects.map((project) => (
+              <div
+                key={project.id}
+                className={`app-tab-item${
+                  activeTabId === project.id ? " active" : ""
+                }`}
+              >
+                <button
+                  className="app-tab-main"
+                  type="button"
+                  role="tab"
+                  aria-controls={`panel-${project.id}`}
+                  aria-selected={activeTabId === project.id}
+                  onClick={() => setActiveTabId(project.id)}
+                >
+                  <BookOpen size={14} aria-hidden="true" />
+                  <span>{project.name}</span>
+                  {dirtyProjectIds.has(project.id) ? (
+                    <i className="app-tab-dirty" aria-label={t("unsaved")} />
+                  ) : null}
+                </button>
+                <button
+                  className="app-tab-close"
+                  type="button"
+                  aria-label={`${t("closeTab")}: ${project.name}`}
+                  title={`${t("closeTab")}: ${project.name}`}
+                  onClick={() => closeProject(project.id)}
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            ))}
+          </nav>
+
+          <div className="app-tab-content">
+            <section
+              id="panel-writer-center"
+              className="app-tab-panel"
+              role="tabpanel"
+              hidden={activeTabId !== centerTabId}
+            >
+              <WriterCenter
+                account={account}
+                error={projectsError}
+                locale={locale}
+                loading={projectsLoading}
+                onCreate={setProjectDialog}
+                onImport={() => setProjectDialog("import")}
+                onLocaleChange={setLocale}
+                onLogout={logout}
+                onOpenProject={openProject}
+                onOpenTheme={() => setThemeDialogOpen(true)}
+                projects={projects}
+                t={t}
+              />
+            </section>
+            {openProjects.map((project) => (
+              <section
+                key={project.id}
+                id={`panel-${project.id}`}
+                className="app-tab-panel"
+                role="tabpanel"
+                hidden={activeTabId !== project.id}
+              >
+                <ProjectEditorTab
+                  onDirtyChange={updateDirtyState}
+                  project={project}
+                  runtime={runtime}
+                  t={t}
+                />
+              </section>
+            ))}
           </div>
-          <footer className="statusbar">
-            <span>
-              {activeProject?.rootDisplayName ?? t("projectApiUnavailable")}
-            </span>
-            <span>
-              {runtime === undefined
-                ? ""
-                : `v${runtime.appVersion} · ${runtime.platform} ${runtime.arch}`}
-            </span>
-          </footer>
         </>
-      ) : null}
+      )}
+
       <ProjectDialog
-        key={`project-${dialog ?? "closed"}`}
-        kind={view === "center" ? dialog : null}
-        onClose={() => setDialog(null)}
+        key={`project-${projectDialog ?? "closed"}`}
+        kind={authenticated ? projectDialog : null}
+        onClose={() => setProjectDialog(null)}
         onComplete={completeProject}
-        t={t}
-      />
-      <VersionDialog
-        key={`version-${versionDialogOpen ? activeProject?.id : "closed"}`}
-        open={versionDialogOpen}
-        projectId={activeProject?.id}
-        projectName={activeProject?.name}
-        onClose={() => setVersionDialogOpen(false)}
-        onComplete={completeVersion}
         t={t}
       />
       <ThemeDialog

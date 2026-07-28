@@ -28,10 +28,16 @@ const inheritedEnvironment = Object.fromEntries(
 const execFileAsync = promisify(execFile);
 
 async function signIn(page: Page): Promise<void> {
+  await expect(page.locator(".app-tabs")).toHaveCount(0);
   await page.getByLabel(/邮箱|Email/u).fill("writer@example.com");
   await page.getByLabel(/密码|Password/u).fill("writer123");
   await page.getByTestId("login-submit").click();
   await expect(page.getByText(/我的作品|My works/u)).toBeVisible();
+  await expect(
+    page.locator(".app-tabs").getByRole("tab", {
+      name: /作家中心|Writer center/u,
+    }),
+  ).toHaveAttribute("aria-selected", "true");
 }
 
 async function launchApplication(
@@ -64,6 +70,19 @@ test("creates, edits, saves, and protects an externally changed novel", async ()
     await page.getByRole("button", { name: /新建小说|New novel/u }).click();
     await page.getByTestId("project-name").fill(projectTitle);
     await page.getByTestId("project-dialog-submit").click();
+
+    const appTabs = page.locator(".app-tabs");
+    await expect(
+      appTabs.getByRole("tab", { name: projectTitle }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(appTabs.getByRole("tab")).toHaveCount(2);
+    await appTabs.getByRole("tab", { name: /作家中心|Writer center/u }).click();
+    await page
+      .getByRole("button", {
+        name: /打开作品.*E2E 写作项目|Open work.*E2E 写作项目/u,
+      })
+      .click();
+    await expect(appTabs.getByRole("tab")).toHaveCount(2);
 
     await page.getByRole("button", { name: "01-正文" }).click();
     const editor = page.getByTestId("document-editor");
@@ -196,6 +215,10 @@ test("persists custom themes and local background images", async () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dawn");
     await page.getByRole("button", { name: /自定义|Custom/u }).click();
     await page
+      .locator('.color-fields input[type="color"]')
+      .first()
+      .fill("#e3bf00");
+    await page
       .locator('.background-upload input[type="file"]')
       .setInputFiles(backgroundPath);
     await expect(page.locator(".background-preview img")).toBeVisible();
@@ -208,6 +231,44 @@ test("persists custom themes and local background images", async () => {
       "data-has-background",
       "true",
     );
+    const themeTokens = await page.evaluate(() => {
+      const root = document.documentElement;
+      const primaryButton = document.querySelector<HTMLElement>(
+        ".works-actions .button.primary",
+      );
+      const avatar = document.querySelector<HTMLElement>(
+        ".center-profile-avatar",
+      );
+      if (primaryButton === null || avatar === null) return undefined;
+      const rootStyle = root.style;
+      const primaryStyle = getComputedStyle(primaryButton);
+      return {
+        accent: rootStyle.getPropertyValue("--accent"),
+        accentGradient: rootStyle.getPropertyValue("--accent-gradient"),
+        avatarBackground: getComputedStyle(avatar).backgroundImage,
+        onAccent: rootStyle.getPropertyValue("--on-accent"),
+        primaryBackground: primaryStyle.backgroundImage,
+      };
+    });
+    expect(themeTokens).toBeDefined();
+    expect(themeTokens?.accent).toBe("#e3bf00");
+    expect(themeTokens?.accentGradient).toContain("#e3bf00");
+    expect(themeTokens?.onAccent).toBe("#17201d");
+    expect(themeTokens?.primaryBackground).toBe(themeTokens?.avatarBackground);
+    await expect
+      .poll(() =>
+        page
+          .locator(".works-actions .button.primary")
+          .evaluate((element) => getComputedStyle(element).color),
+      )
+      .toBe("rgb(23, 32, 29)");
+    await expect
+      .poll(() =>
+        page
+          .locator(".filter-tabs button.active")
+          .evaluate((element) => getComputedStyle(element).color),
+      )
+      .toBe("rgb(227, 191, 0)");
     const visibility = await page.evaluate(() => {
       const value = localStorage.getItem("author-copilot.theme-settings");
       return value === null
@@ -225,6 +286,17 @@ test("persists custom themes and local background images", async () => {
       "data-has-background",
       "false",
     );
+    await page.getByRole("button", { name: /晨曦|Dawn/u }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dawn");
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          document.documentElement.style.getPropertyValue("--accent-gradient"),
+        ),
+      )
+      .toBe("");
+    await page.getByRole("button", { name: /自定义|Custom/u }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "custom");
   } finally {
     await application.close();
     await rm(temporaryRoot, { recursive: true, force: true });

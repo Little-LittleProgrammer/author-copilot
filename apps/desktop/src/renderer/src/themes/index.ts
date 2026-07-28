@@ -27,6 +27,7 @@ export interface ThemeController extends ThemeSettings {
 const storageKey = "author-copilot.theme-settings";
 const customVariables = [
   "--accent",
+  "--accent-gradient",
   "--accent-hover",
   "--accent-soft",
   "--alert",
@@ -132,6 +133,10 @@ function applyCustomTheme(custom: CustomTheme): void {
   const root = document.documentElement.style;
   const dark = isDarkColor(custom.background);
   root.setProperty("--accent", custom.accent);
+  root.setProperty(
+    "--accent-gradient",
+    `linear-gradient(135deg, color-mix(in srgb, ${custom.accent}, white 10%) 0%, color-mix(in srgb, ${custom.accent}, black 18%) 100%)`,
+  );
   root.setProperty(
     "--accent-hover",
     `color-mix(in srgb, ${custom.accent}, ${dark ? "white" : "black"} 18%)`,

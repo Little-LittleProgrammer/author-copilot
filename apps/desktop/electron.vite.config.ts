@@ -40,6 +40,14 @@ export default defineConfig({
     resolve: {
       alias: {
         "@": resolve(import.meta.dirname, "src/renderer/src"),
+        // tw-animate-css v1.4 exports only declare the webpack-style "style"
+        // condition, which vite / tailwindcss v4 do not honour when resolving
+        // `@import` specifiers. Pin the specifier to the concrete stylesheet
+        // so the build works regardless of condition support.
+        "tw-animate-css": resolve(
+          import.meta.dirname,
+          "node_modules/tw-animate-css/dist/tw-animate.css",
+        ),
       },
     },
     build: {

@@ -11,6 +11,9 @@ export function createWindowOptions(
     show: false,
     autoHideMenuBar: true,
     backgroundColor: "#f4f5f7",
+    // Merge the native title bar into the page so the app can render its
+    // own toolbar underneath the traffic-light controls (macOS only).
+    titleBarStyle: "hiddenInset",
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
