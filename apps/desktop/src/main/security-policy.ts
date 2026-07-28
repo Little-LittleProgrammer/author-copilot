@@ -1,4 +1,4 @@
-import type { BrowserWindow, Session } from "electron";
+import type { BrowserWindow, Session, WebContents } from "electron";
 
 export const PRODUCTION_CSP = [
   "default-src 'self'",
@@ -25,16 +25,20 @@ export function installProductionCsp(session: Session): void {
   });
 }
 
+export function lockDownWebContents(webContents: WebContents): void {
+  webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+
+  webContents.on("will-navigate", (event) => {
+    event.preventDefault();
+  });
+
+  webContents.on("will-attach-webview", (event) => {
+    event.preventDefault();
+  });
+}
+
 export function lockDownWindow(window: BrowserWindow): void {
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-
-  window.webContents.on("will-navigate", (event) => {
-    event.preventDefault();
-  });
-
-  window.webContents.on("will-attach-webview", (event) => {
-    event.preventDefault();
-  });
+  lockDownWebContents(window.webContents);
 }
 
 export function denyAllPermissions(session: Session): void {

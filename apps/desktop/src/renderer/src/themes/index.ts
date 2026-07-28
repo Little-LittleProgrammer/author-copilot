@@ -179,6 +179,16 @@ export function useTheme(): ThemeController {
   const [settings, setSettings] = useState<ThemeSettings>(initialSettings);
 
   useEffect(() => {
+    const syncTheme = (event: StorageEvent): void => {
+      if (event.key === storageKey || event.key === "author-copilot.theme") {
+        setSettings(initialSettings());
+      }
+    };
+    window.addEventListener("storage", syncTheme);
+    return () => window.removeEventListener("storage", syncTheme);
+  }, []);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = settings.theme;
     if (settings.theme === "custom") applyCustomTheme(settings.custom);
     else clearCustomTheme();

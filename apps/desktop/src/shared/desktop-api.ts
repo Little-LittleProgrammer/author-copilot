@@ -19,6 +19,10 @@ import type {
   ProjectUpdateRequest,
   ProjectUpdateResponse,
   RuntimeInfo,
+  ProjectSummary,
+  TabContext,
+  TabOperationResult,
+  TabState,
   VersionCreateRequest,
   VersionCreateResponse,
 } from "@author-copilot/contracts";
@@ -61,5 +65,24 @@ export interface AuthorCopilotApi {
     readonly create: (
       request: VersionCreateRequest,
     ) => Promise<VersionCreateResponse>;
+  };
+  readonly tabs: {
+    readonly getContext: () => Promise<TabContext>;
+    readonly getState: () => Promise<TabState>;
+    readonly startSession: () => Promise<TabState>;
+    readonly openProject: (projectId: string) => Promise<TabState>;
+    readonly activate: (tabId: string) => Promise<TabState>;
+    readonly close: (tabId: string) => Promise<TabOperationResult>;
+    readonly endSession: () => Promise<TabOperationResult>;
+    readonly reportDirty: (dirty: boolean) => Promise<TabState>;
+    readonly setLocale: (locale: "en-US" | "zh-CN") => Promise<TabState>;
+    readonly requestLogout: () => Promise<TabOperationResult>;
+    readonly onStateChanged: (
+      listener: (state: TabState) => void,
+    ) => () => void;
+    readonly onLogoutRequested: (listener: () => void) => () => void;
+    readonly onProjectChanged: (
+      listener: (project: ProjectSummary) => void,
+    ) => () => void;
   };
 }

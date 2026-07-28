@@ -19,6 +19,7 @@ import {
   type ElectronApplication,
   type Page,
 } from "@playwright/test";
+import type { WebContentsView } from "electron";
 
 const inheritedEnvironment = Object.fromEntries(
   Object.entries(process.env).filter(
@@ -27,17 +28,50 @@ const inheritedEnvironment = Object.fromEntries(
 );
 const execFileAsync = promisify(execFile);
 
-async function signIn(page: Page): Promise<void> {
-  await expect(page.locator(".app-tabs")).toHaveCount(0);
-  await page.getByLabel(/邮箱|Email/u).fill("writer@example.com");
-  await page.getByLabel(/密码|Password/u).fill("writer123");
-  await page.getByTestId("login-submit").click();
-  await expect(page.getByText(/我的作品|My works/u)).toBeVisible();
+async function rendererPage(
+  application: ElectronApplication,
+  context: "center" | "project" | "shell",
+): Promise<Page> {
+  await expect
+    .poll(async () => {
+      const matches = await Promise.all(
+        application
+          .windows()
+          .map((page) =>
+            page.locator(`body[data-renderer-context="${context}"]`).count(),
+          ),
+      );
+      return matches.reduce((total, count) => total + count, 0);
+    })
+    .toBeGreaterThan(0);
+  for (const candidate of application.windows()) {
+    if (
+      (await candidate
+        .locator(`body[data-renderer-context="${context}"]`)
+        .count()) > 0
+    ) {
+      return candidate;
+    }
+  }
+  throw new Error(`Renderer context ${context} was not found`);
+}
+
+async function signIn(
+  application: ElectronApplication,
+): Promise<{ readonly center: Page; readonly shell: Page }> {
+  const shell = await application.firstWindow();
+  await expect(shell.locator(".app-tabs")).toHaveCount(0);
+  await shell.getByLabel(/邮箱|Email/u).fill("writer@example.com");
+  await shell.getByLabel(/密码|Password/u).fill("writer123");
+  await shell.getByTestId("login-submit").click();
+  const center = await rendererPage(application, "center");
+  await expect(center.getByText(/我的作品|My works/u)).toBeVisible();
   await expect(
-    page.locator(".app-tabs").getByRole("tab", {
+    shell.locator(".app-tabs").getByRole("tab", {
       name: /作家中心|Writer center/u,
     }),
   ).toHaveAttribute("aria-selected", "true");
+  return { center, shell };
 }
 
 async function launchApplication(
@@ -57,6 +91,23 @@ async function launchApplication(
   });
 }
 
+async function nativeViewState(application: ElectronApplication): Promise<{
+  readonly bounds: readonly {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }[];
+  readonly childCount: number;
+}> {
+  return application.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    const bounds =
+      window?.contentView.children.map((view) => view.getBounds()) ?? [];
+    return { bounds, childCount: bounds.length };
+  });
+}
+
 test("creates, edits, saves, and protects an externally changed novel", async () => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
   const projectTitle = "E2E 写作项目";
@@ -65,25 +116,25 @@ test("creates, edits, saves, and protects an externally changed novel", async ()
   const application = await launchApplication(temporaryRoot);
 
   try {
-    const page = await application.firstWindow();
-    await signIn(page);
-    await page.getByRole("button", { name: /新建小说|New novel/u }).click();
-    await page.getByTestId("project-name").fill(projectTitle);
-    await page.getByTestId("project-dialog-submit").click();
+    const { center, shell } = await signIn(application);
+    await center.getByRole("button", { name: /新建小说|New novel/u }).click();
+    await center.getByTestId("project-name").fill(projectTitle);
+    await center.getByTestId("project-dialog-submit").click();
 
-    const appTabs = page.locator(".app-tabs");
+    const appTabs = shell.locator(".app-tabs");
     await expect(
       appTabs.getByRole("tab", { name: projectTitle }),
     ).toHaveAttribute("aria-selected", "true");
     await expect(appTabs.getByRole("tab")).toHaveCount(2);
     await appTabs.getByRole("tab", { name: /作家中心|Writer center/u }).click();
-    await page
+    await center
       .getByRole("button", {
         name: /打开作品.*E2E 写作项目|Open work.*E2E 写作项目/u,
       })
       .click();
     await expect(appTabs.getByRole("tab")).toHaveCount(2);
 
+    const page = await rendererPage(application, "project");
     await page.getByRole("button", { name: "01-正文", exact: true }).click();
     const editor = page.getByTestId("document-editor");
     await editor.fill("# 第一场\n\n夜雨落在站台上。\n");
@@ -132,18 +183,143 @@ test("creates the screenplay structure through the desktop workflow", async () =
   const application = await launchApplication(temporaryRoot);
 
   try {
-    const page = await application.firstWindow();
-    await signIn(page);
-    await page
+    const { center } = await signIn(application);
+    await center
       .getByRole("button", { name: /新建剧本|New screenplay/u })
       .click();
-    await page.getByTestId("project-name").fill(projectTitle);
-    await page.getByTestId("project-dialog-submit").click();
+    await center.getByTestId("project-name").fill(projectTitle);
+    await center.getByTestId("project-dialog-submit").click();
+    const page = await rendererPage(application, "project");
     await page.getByRole("button", { name: "01-第一场", exact: true }).click();
     await expect(page.getByTestId("document-editor")).toHaveValue("");
     await assert.doesNotReject(
       lstat(join(temporaryRoot, projectTitle, "第一幕", "01-第一场.md")),
     );
+  } finally {
+    await application.close();
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("keeps native project views alive across switches and destroys them on close", async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
+  const projectTitle = "原生标签项目";
+  const application = await launchApplication(temporaryRoot);
+
+  try {
+    const { center, shell } = await signIn(application);
+    await expect
+      .poll(() => nativeViewState(application))
+      .toMatchObject({
+        childCount: 1,
+      });
+    await center.getByRole("button", { name: /新建小说|New novel/u }).click();
+    await center.getByTestId("project-name").fill(projectTitle);
+    await center.getByTestId("project-dialog-submit").click();
+    const project = await rendererPage(application, "project");
+    await expect
+      .poll(() => nativeViewState(application))
+      .toMatchObject({
+        childCount: 2,
+      });
+
+    await project.getByRole("button", { name: "01-正文", exact: true }).click();
+    await project.getByTestId("document-editor").fill("尚未保存的原生标签内容");
+    const projectTab = shell
+      .locator(".app-tabs")
+      .getByRole("tab", { name: projectTitle });
+    await expect(projectTab.locator(".app-tab-dirty")).toBeVisible();
+
+    await shell
+      .locator(".app-tabs")
+      .getByRole("tab", { name: /作家中心|Writer center/u })
+      .click();
+    await projectTab.click();
+    await expect(project.getByTestId("document-editor")).toHaveValue(
+      "尚未保存的原生标签内容",
+    );
+
+    await application.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.setContentSize(940, 680);
+    });
+    await expect
+      .poll(async () => (await nativeViewState(application)).bounds)
+      .toEqual([
+        { x: 0, y: 42, width: 940, height: 638 },
+        { x: 0, y: 42, width: 940, height: 638 },
+      ]);
+
+    const screenshot = await application.evaluate(
+      async ({ BrowserWindow, nativeImage }) => {
+        const window = BrowserWindow.getAllWindows()[0];
+        if (window === undefined) return [];
+        const child = window.contentView.children.find(
+          (view) => "webContents" in view && view.getVisible(),
+        );
+        if (child === undefined) return [];
+        const shellImage = await window.webContents.capturePage();
+        const childImage = await (
+          child as WebContentsView
+        ).webContents.capturePage();
+        const shellSize = shellImage.getSize(1);
+        const childSize = childImage.getSize(1);
+        const shellBitmap = Buffer.from(
+          shellImage.toBitmap({ scaleFactor: 1 }),
+        );
+        const childBitmap = childImage.toBitmap({ scaleFactor: 1 });
+        const contentSize = window.getContentSize();
+        const shellScale =
+          shellSize.width / (contentSize[0] ?? shellSize.width);
+        const shellPixelWidth = shellSize.width;
+        const shellPixelHeight = shellSize.height;
+        const childPixelWidth = childSize.width;
+        const childPixelHeight = childSize.height;
+        const tabBarPixelHeight = 42 * shellScale;
+        const rowBytes = Math.min(shellPixelWidth, childPixelWidth) * 4;
+        const rows = Math.min(
+          childPixelHeight,
+          shellPixelHeight - tabBarPixelHeight,
+        );
+        for (let row = 0; row < rows; row += 1) {
+          childBitmap.copy(
+            shellBitmap,
+            (row + tabBarPixelHeight) * shellPixelWidth * 4,
+            row * childPixelWidth * 4,
+            row * childPixelWidth * 4 + rowBytes,
+          );
+        }
+        return [
+          ...nativeImage
+            .createFromBitmap(shellBitmap, {
+              width: shellPixelWidth,
+              height: shellPixelHeight,
+              scaleFactor: 1,
+            })
+            .toPNG(),
+        ];
+      },
+    );
+    expect(screenshot.length).toBeGreaterThan(1_000);
+    await writeFile(
+      "test-results/native-tabs-window.png",
+      Buffer.from(screenshot),
+    );
+
+    await shell
+      .getByRole("button", {
+        name: new RegExp(
+          `关闭标签页: ${projectTitle}|Close tab: ${projectTitle}`,
+          "u",
+        ),
+      })
+      .click();
+    await expect(shell.locator(".app-tabs").getByRole("tab")).toHaveCount(1);
+    await expect
+      .poll(() => nativeViewState(application))
+      .toMatchObject({
+        childCount: 1,
+      });
+    await expect.poll(() => project.isClosed()).toBe(true);
   } finally {
     await application.close();
     await rm(temporaryRoot, { recursive: true, force: true });
@@ -157,11 +333,11 @@ test("fills the writing page and edits work, volume, chapter, and document names
   const application = await launchApplication(temporaryRoot);
 
   try {
-    const page = await application.firstWindow();
-    await signIn(page);
-    await page.getByRole("button", { name: /新建小说|New novel/u }).click();
-    await page.getByTestId("project-name").fill(projectTitle);
-    await page.getByTestId("project-dialog-submit").click();
+    const { center, shell } = await signIn(application);
+    await center.getByRole("button", { name: /新建小说|New novel/u }).click();
+    await center.getByTestId("project-name").fill(projectTitle);
+    await center.getByTestId("project-dialog-submit").click();
+    const page = await rendererPage(application, "project");
     await page.getByRole("button", { name: "01-正文", exact: true }).click();
 
     const editor = page.getByTestId("document-editor");
@@ -180,7 +356,7 @@ test("fills the writing page and edits work, volume, chapter, and document names
     await page.getByTestId("project-title").fill("新作品名");
     await page.getByTestId("project-info-submit").click();
     await expect(
-      page.locator(".app-tabs").getByRole("tab", { name: "新作品名" }),
+      shell.locator(".app-tabs").getByRole("tab", { name: "新作品名" }),
     ).toBeVisible();
 
     await page
@@ -284,17 +460,17 @@ test("previews a complex Markdown folder before in-place import", async () => {
   });
 
   try {
-    const page = await application.firstWindow();
-    await signIn(page);
-    await page.getByRole("button", { name: /导入作品|Import work/u }).click();
-    await page
+    const { center } = await signIn(application);
+    await center.getByRole("button", { name: /导入作品|Import work/u }).click();
+    await center
       .getByRole("button", { name: /选择文件夹|Choose folder/u })
       .click();
-    await expect(page.getByText("第一卷")).toBeVisible();
-    await expect(page.getByText("散落 笔记")).toBeVisible();
+    await expect(center.getByText("第一卷")).toBeVisible();
+    await expect(center.getByText("散落 笔记")).toBeVisible();
     await assert.rejects(lstat(metadataPath), { code: "ENOENT" });
 
-    await page.getByTestId("project-dialog-submit").click();
+    await center.getByTestId("project-dialog-submit").click();
+    const page = await rendererPage(application, "project");
     await page.getByRole("button", { name: "01-开场", exact: true }).click();
     await expect(page.getByTestId("document-editor")).toHaveValue(
       "# 已有开场\n",
@@ -322,8 +498,7 @@ test("persists custom themes and local background images", async () => {
   const application = await launchApplication(temporaryRoot);
 
   try {
-    const page = await application.firstWindow();
-    await signIn(page);
+    const { center: page } = await signIn(application);
     await page
       .getByRole("button", { name: /主题设置|Theme settings/u })
       .click();

@@ -152,6 +152,10 @@ author-copilot/
 
 渲染进程只负责界面状态和用户交互，包括作品结构树、Markdown 编辑器、AI 对话和变更审阅。它不能直接访问 Node.js、任意文件、Git、Shell 或凭证。
 
+桌面窗口采用原生多视图结构：唯一的 `BrowserWindow` renderer 只承载登录态和 42px 标签栏；作家中心及每个打开的作品分别运行在独立 `WebContentsView` 中，由主进程通过 `BrowserWindow.contentView.addChildView()` 挂载。每个作品在标签关闭前保留自己的 View，切换标签只改变可见性，因此编辑器内存状态不会因切换而重建。作品内部的正文、AI 对话和变更审阅仍属于同一个作品 renderer 的 React 状态。
+
+主进程 `TabManager` 是标签顺序、激活项、脏状态和 View 生命周期的唯一事实源。所有 renderer 加载同一个受信 URL，并根据发送方 `webContents.id` 通过类型化 IPC 获取 `shell`、`center` 或 `project` 上下文；renderer 不通过 URL 参数声明身份。关闭标签、退出登录和关闭窗口均由主进程检查脏状态，移除 View 后显式关闭对应 `webContents`。
+
 ### 4.3 Preload 与 IPC
 
 Preload 通过 `contextBridge` 暴露按业务能力划分的类型化 API。IPC 不提供通用文件系统接口或 `exec(command)`，每个调用都校验来源、项目标识、授权路径和参数。
@@ -159,6 +163,7 @@ Preload 通过 `contextBridge` 暴露按业务能力划分的类型化 API。IPC
 ### 4.4 Electron 主进程模块
 
 - **Project Service**：项目登记、模板创建、导入预览、结构映射和原子文件读写。
+- **Tab Manager**：原生标签 View 的创建、去重、布局、激活、脏状态确认和销毁。
 - **Git Service**：内置 Git 定位、仓库初始化、状态、差异、提交和 AI 任务回退点。
 - **AI Orchestrator**：上下文组装、普通提案、Agent 任务、取消和结果归一化。
 - **Knowledge Index**：全书初始化、内容切分、检索、索引状态和增量更新。

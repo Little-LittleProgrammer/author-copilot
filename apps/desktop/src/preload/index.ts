@@ -11,6 +11,11 @@ import {
   ProjectRenameEntryResponseSchema,
   ProjectUpdateResponseSchema,
   RuntimeInfoSchema,
+  IPC_EVENT_CHANNELS,
+  ProjectChangedEventSchema,
+  TabContextSchema,
+  TabOperationResultSchema,
+  TabStateSchema,
   VersionCreateResponseSchema,
   type DocumentReadRequest,
   type DocumentSaveRequest,
@@ -20,7 +25,9 @@ import {
   type ProjectGetStructureRequest,
   type ProjectImportPreviewRequest,
   type ProjectRenameEntryRequest,
+  type ProjectSummary,
   type ProjectUpdateRequest,
+  type TabState,
   type VersionCreateRequest,
 } from "@author-copilot/contracts";
 import { contextBridge, ipcRenderer } from "electron";
@@ -28,6 +35,21 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { AuthorCopilotApi } from "../shared/desktop-api.js";
 
 export type { AuthorCopilotApi } from "../shared/desktop-api.js";
+
+function subscribe<T>(
+  channel: string,
+  parse: (value: unknown) => T,
+  listener: (value: T) => void,
+): () => void {
+  const wrapped = (
+    _event: Electron.IpcRendererEvent,
+    payload: unknown,
+  ): void => {
+    listener(parse(payload));
+  };
+  ipcRenderer.on(channel, wrapped);
+  return () => ipcRenderer.removeListener(channel, wrapped);
+}
 
 const api: AuthorCopilotApi = Object.freeze({
   system: Object.freeze({
@@ -118,6 +140,96 @@ const api: AuthorCopilotApi = Object.freeze({
       );
       return VersionCreateResponseSchema.parse(response);
     },
+  }),
+  tabs: Object.freeze({
+    getContext: async () => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.tabGetContext,
+        {},
+      );
+      return TabContextSchema.parse(response);
+    },
+    getState: async () => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.tabGetState,
+        {},
+      );
+      return TabStateSchema.parse(response);
+    },
+    startSession: async () => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.tabStartSession,
+        {},
+      );
+      return TabStateSchema.parse(response);
+    },
+    openProject: async (projectId: string) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.tabOpenProject,
+        { projectId },
+      );
+      return TabStateSchema.parse(response);
+    },
+    activate: async (tabId: string) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.tabActivate,
+        { tabId },
+      );
+      return TabStateSchema.parse(response);
+    },
+    close: async (tabId: string) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.tabClose,
+        { tabId },
+      );
+      return TabOperationResultSchema.parse(response);
+    },
+    endSession: async () => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.tabEndSession,
+        {},
+      );
+      return TabOperationResultSchema.parse(response);
+    },
+    reportDirty: async (dirty: boolean) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.tabReportDirty,
+        { dirty },
+      );
+      return TabStateSchema.parse(response);
+    },
+    setLocale: async (locale: "en-US" | "zh-CN") => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.tabSetLocale,
+        { locale },
+      );
+      return TabStateSchema.parse(response);
+    },
+    requestLogout: async () => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.tabRequestLogout,
+        {},
+      );
+      return TabOperationResultSchema.parse(response);
+    },
+    onStateChanged: (listener: (state: TabState) => void) =>
+      subscribe(
+        IPC_EVENT_CHANNELS.tabStateChanged,
+        (value) => TabStateSchema.parse(value),
+        listener,
+      ),
+    onLogoutRequested: (listener: () => void) =>
+      subscribe(
+        IPC_EVENT_CHANNELS.tabLogoutRequested,
+        () => undefined,
+        listener,
+      ),
+    onProjectChanged: (listener: (project: ProjectSummary) => void) =>
+      subscribe(
+        IPC_EVENT_CHANNELS.projectChanged,
+        (value) => ProjectChangedEventSchema.parse(value),
+        listener,
+      ),
   }),
 });
 

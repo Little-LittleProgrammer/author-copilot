@@ -160,6 +160,7 @@ const messages = {
       "Organize your stories and return to writing at any time.",
     workType: "Work type",
     writerCenter: "Writer center",
+    tabLoadFailed: "This tab stopped loading. Select it to retry.",
     saveVersion: "Save version",
     versionApiUnavailable: "Version services are not available in this build.",
     versionDefaultMessage: "Save writing version",
@@ -319,6 +320,7 @@ const messages = {
     worksDescription: "管理你的故事，并随时回到上一次创作。",
     workType: "作品类型",
     writerCenter: "作家中心",
+    tabLoadFailed: "标签页加载失败，点击标签可重试。",
     saveVersion: "保存版本",
     versionApiUnavailable: "当前版本尚未接入版本服务。",
     versionDefaultMessage: "保存写作版本",
@@ -345,6 +347,16 @@ export function useI18n(): {
   t: (key: MessageKey) => string;
 } {
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
+
+  useEffect(() => {
+    const syncLocale = (event: StorageEvent): void => {
+      if (event.key === "author-copilot.locale") {
+        setLocaleState(initialLocale());
+      }
+    };
+    window.addEventListener("storage", syncLocale);
+    return () => window.removeEventListener("storage", syncLocale);
+  }, []);
 
   useEffect(() => {
     document.documentElement.lang = locale;

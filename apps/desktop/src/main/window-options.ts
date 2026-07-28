@@ -1,4 +1,18 @@
-import type { BrowserWindowConstructorOptions } from "electron";
+import type { BrowserWindowConstructorOptions, WebPreferences } from "electron";
+
+export function createSecureWebPreferences(
+  preloadPath: string,
+): WebPreferences {
+  return {
+    preload: preloadPath,
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true,
+    webSecurity: true,
+    webviewTag: false,
+    navigateOnDragDrop: false,
+  };
+}
 
 export function createWindowOptions(
   preloadPath: string,
@@ -14,14 +28,6 @@ export function createWindowOptions(
     // Merge the native title bar into the page so the app can render its
     // own toolbar underneath the traffic-light controls (macOS only).
     titleBarStyle: "hiddenInset",
-    webPreferences: {
-      preload: preloadPath,
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-      webviewTag: false,
-      navigateOnDragDrop: false,
-    },
+    webPreferences: createSecureWebPreferences(preloadPath),
   };
 }

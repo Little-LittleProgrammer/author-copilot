@@ -52,6 +52,7 @@ export interface ProjectIpcOptions {
   readonly trustedRendererUrl: string;
   readonly projectService: ProjectService;
   readonly directoryPicker: ProjectDirectoryPicker;
+  readonly onProjectChanged?: (project: ProjectSummary) => void;
 }
 
 function authorize(
@@ -153,10 +154,13 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
           request.title,
           request.template,
         );
-        return ProjectCreateResponseSchema.parse({
+        const changedProject = summary(project);
+        const response = ProjectCreateResponseSchema.parse({
           ok: true,
-          project: summary(project),
+          project: changedProject,
         });
+        options.onProjectChanged?.(changedProject);
+        return response;
       } catch (error) {
         return ProjectCreateResponseSchema.parse(
           projectOperationFailure(error),
@@ -252,10 +256,13 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
           request.projectId,
           request.title,
         );
-        return ProjectUpdateResponseSchema.parse({
+        const changedProject = summary(project);
+        const response = ProjectUpdateResponseSchema.parse({
           ok: true,
-          project: summary(project),
+          project: changedProject,
         });
+        options.onProjectChanged?.(changedProject);
+        return response;
       } catch (error) {
         return ProjectUpdateResponseSchema.parse(
           projectOperationFailure(error),
@@ -311,10 +318,13 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
           return ProjectConfirmImportResponseSchema.parse(cancelledOperation());
         }
         previews.delete(request.previewToken);
-        return ProjectConfirmImportResponseSchema.parse({
+        const changedProject = summary(project);
+        const response = ProjectConfirmImportResponseSchema.parse({
           ok: true,
-          project: summary(project),
+          project: changedProject,
         });
+        options.onProjectChanged?.(changedProject);
+        return response;
       } catch (error) {
         return ProjectConfirmImportResponseSchema.parse(
           projectOperationFailure(error),

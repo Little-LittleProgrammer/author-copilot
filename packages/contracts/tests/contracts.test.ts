@@ -10,6 +10,8 @@ import {
   IpcChannelSchema,
   KnowledgeIndexStatusSchema,
   RuntimeInfoSchema,
+  TabContextSchema,
+  TabStateSchema,
   TaskCancelRequestSchema,
   TaskProgressEventSchema,
 } from "../src/index.js";
@@ -18,11 +20,45 @@ const taskId = "20000000-0000-4000-8000-000000000001";
 
 describe("IPC contracts", () => {
   it("keeps every declared channel in the validated whitelist", () => {
-    expect(IPC_CHANNEL_NAMES).toHaveLength(16);
+    expect(IPC_CHANNEL_NAMES).toHaveLength(29);
     for (const channel of IPC_CHANNEL_NAMES) {
       expect(IpcChannelSchema.parse(channel)).toBe(channel);
     }
     expect(IpcChannelSchema.safeParse("fs:read-any-file").success).toBe(false);
+  });
+
+  it("validates native tab contexts and state", () => {
+    const project = {
+      projectId: "10000000-0000-4000-8000-000000000001",
+      title: "Novel",
+      template: "novel",
+      rootDisplayName: "Novel",
+    } as const;
+    expect(TabContextSchema.parse({ kind: "shell" })).toEqual({
+      kind: "shell",
+    });
+    expect(
+      TabContextSchema.parse({
+        kind: "project",
+        tabId: project.projectId,
+        project,
+      }),
+    ).toMatchObject({ kind: "project", project });
+    expect(
+      TabStateSchema.safeParse({
+        activeTabId: project.projectId,
+        tabs: [
+          {
+            id: project.projectId,
+            kind: "project",
+            title: project.title,
+            dirty: false,
+            failed: false,
+            extra: true,
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it("binds invoke and event channels to schemas", () => {

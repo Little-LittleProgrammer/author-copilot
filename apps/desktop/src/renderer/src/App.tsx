@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
-import { BookOpen, Grid2X2, X } from "lucide-react";
+import { BookOpen, Grid2X2, TriangleAlert, X } from "lucide-react";
 
-import type { RuntimeInfo } from "@author-copilot/contracts";
+import type {
+  ProjectSummary as ProjectSummaryContract,
+  RuntimeInfo,
+  TabContext,
+  TabState,
+} from "@author-copilot/contracts";
 
 import { LoginPage } from "./features/auth/LoginPage.js";
 import { WriterCenter } from "./features/center/WriterCenter.js";
@@ -13,58 +18,181 @@ import { useI18n } from "./i18n/index.js";
 import { ThemeDialog } from "./themes/ThemeDialog.js";
 import { useTheme } from "./themes/index.js";
 
-const centerTabId = "writer-center";
 const sessionKey = "author-copilot.session";
+const emptyTabState: TabState = { activeTabId: null, tabs: [] };
 
 function initialAccount(): string | undefined {
   return localStorage.getItem(sessionKey) ?? undefined;
 }
 
-export function App(): JSX.Element {
-  const { locale, setLocale, t } = useI18n();
-  const themeController = useTheme();
-  const [themeDialogOpen, setThemeDialogOpen] = useState(false);
+function mapProject(project: ProjectSummaryContract): ProjectSummary {
+  return {
+    id: project.projectId,
+    name: project.title,
+    rootDisplayName: project.rootDisplayName,
+    type: project.template,
+  };
+}
+
+function ShellApp(): JSX.Element {
+  const { locale, t } = useI18n();
+  useTheme();
   const [account, setAccount] = useState<string | undefined>(initialAccount);
   const [runtime, setRuntime] = useState<RuntimeInfo>();
-  const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
-  const [projectsLoading, setProjectsLoading] = useState(
-    () => getProjectApi() !== undefined,
-  );
-  const [projectsError, setProjectsError] = useState<string>();
-  const [projectDialog, setProjectDialog] = useState<
-    ProjectType | "import" | null
-  >(null);
-  const [openProjects, setOpenProjects] = useState<readonly ProjectSummary[]>(
-    [],
-  );
-  const [activeTabId, setActiveTabId] = useState(centerTabId);
-  const [dirtyProjectIds, setDirtyProjectIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const [tabState, setTabState] = useState<TabState>(emptyTabState);
+
+  const logout = useCallback(async () => {
+    const result = await window.authorCopilot.tabs.endSession();
+    if (result.status !== "completed") return;
+    localStorage.removeItem(sessionKey);
+    setAccount(undefined);
+    setTabState(emptyTabState);
+  }, []);
 
   useEffect(() => {
     void window.authorCopilot.system
       .getRuntimeInfo()
       .then(setRuntime)
       .catch(() => undefined);
+    return window.authorCopilot.tabs.onStateChanged(setTabState);
+  }, []);
+
+  useEffect(
+    () => window.authorCopilot.tabs.onLogoutRequested(() => void logout()),
+    [logout],
+  );
+
+  useEffect(() => {
+    void window.authorCopilot.tabs.setLocale(locale).catch(() => undefined);
+  }, [locale]);
+
+  useEffect(() => {
+    if (account === undefined) return;
+    void window.authorCopilot.tabs
+      .startSession()
+      .then(setTabState)
+      .catch(() => undefined);
+  }, [account]);
+
+  const login = useCallback((nextAccount: string, remember: boolean) => {
+    if (remember) localStorage.setItem(sessionKey, nextAccount);
+    else localStorage.removeItem(sessionKey);
+    setAccount(nextAccount);
+  }, []);
+
+  const authenticated = account !== undefined;
+
+  return (
+    <div
+      className={`app-shell ${authenticated ? "app-view-tabs" : "app-view-login"} platform-${runtime?.platform ?? "unknown"}`}
+      data-testid="shell-app"
+    >
+      {!authenticated ? (
+        <LoginPage onLogin={login} t={t} />
+      ) : (
+        <>
+          <nav className="app-tabs" role="tablist" aria-label={t("openTabs")}>
+            {tabState.tabs.map((tab) => {
+              const active = tabState.activeTabId === tab.id;
+              const center = tab.kind === "center";
+              return center ? (
+                <button
+                  key={tab.id}
+                  className={`app-tab-item center-app-tab${active ? " active" : ""}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  title={tab.failed ? t("tabLoadFailed") : undefined}
+                  onClick={() =>
+                    void window.authorCopilot.tabs.activate(tab.id)
+                  }
+                >
+                  <Grid2X2 size={14} aria-hidden="true" />
+                  <span>{t("writerCenter")}</span>
+                </button>
+              ) : (
+                <div
+                  key={tab.id}
+                  className={`app-tab-item${active ? " active" : ""}`}
+                >
+                  <button
+                    className="app-tab-main"
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() =>
+                      void window.authorCopilot.tabs.activate(tab.id)
+                    }
+                  >
+                    <BookOpen size={14} aria-hidden="true" />
+                    <span>{tab.title}</span>
+                    {tab.failed ? (
+                      <TriangleAlert
+                        size={13}
+                        aria-label={t("tabLoadFailed")}
+                      />
+                    ) : tab.dirty ? (
+                      <i className="app-tab-dirty" aria-label={t("unsaved")} />
+                    ) : null}
+                  </button>
+                  <button
+                    className="app-tab-close"
+                    type="button"
+                    aria-label={`${t("closeTab")}: ${tab.title}`}
+                    title={`${t("closeTab")}: ${tab.title}`}
+                    onClick={() => void window.authorCopilot.tabs.close(tab.id)}
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              );
+            })}
+          </nav>
+          <div className="native-tab-host" aria-hidden="true" />
+        </>
+      )}
+    </div>
+  );
+}
+
+function WriterCenterApp(): JSX.Element {
+  const { locale, setLocale, t } = useI18n();
+  const themeController = useTheme();
+  const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
+  const [loading, setLoading] = useState(() => getProjectApi() !== undefined);
+  const [error, setError] = useState<string>();
+  const [projectDialog, setProjectDialog] = useState<
+    ProjectType | "import" | null
+  >(null);
+  const [themeDialogOpen, setThemeDialogOpen] = useState(false);
+  const account = initialAccount() ?? "";
+
+  useEffect(() => {
     const api = getProjectApi();
     if (api === undefined) return;
     void api
       .list()
       .then(setProjects)
       .catch((reason: unknown) =>
-        setProjectsError(errorMessage(reason, t("errorGeneric"))),
+        setError(errorMessage(reason, t("errorGeneric"))),
       )
-      .finally(() => setProjectsLoading(false));
+      .finally(() => setLoading(false));
   }, [t]);
 
+  useEffect(
+    () =>
+      window.authorCopilot.tabs.onProjectChanged((project) => {
+        const mapped = mapProject(project);
+        setProjects((current) => [
+          ...current.filter(({ id }) => id !== mapped.id),
+          mapped,
+        ]);
+      }),
+    [],
+  );
+
   const openProject = useCallback((project: ProjectSummary) => {
-    setOpenProjects((current) =>
-      current.some(({ id }) => id === project.id)
-        ? current
-        : [...current, project],
-    );
-    setActiveTabId(project.id);
+    void window.authorCopilot.tabs.openProject(project.id);
   }, []);
 
   const completeProject = useCallback(
@@ -78,174 +206,25 @@ export function App(): JSX.Element {
     [openProject],
   );
 
-  const updateProject = useCallback((project: ProjectSummary) => {
-    setProjects((current) =>
-      current.map((candidate) =>
-        candidate.id === project.id ? project : candidate,
-      ),
-    );
-    setOpenProjects((current) =>
-      current.map((candidate) =>
-        candidate.id === project.id ? project : candidate,
-      ),
-    );
-  }, []);
-
-  const updateDirtyState = useCallback((projectId: string, dirty: boolean) => {
-    setDirtyProjectIds((current) => {
-      const next = new Set(current);
-      if (dirty) next.add(projectId);
-      else next.delete(projectId);
-      return next;
-    });
-  }, []);
-
-  const closeProject = useCallback(
-    (projectId: string) => {
-      if (
-        dirtyProjectIds.has(projectId) &&
-        !window.confirm(t("closeDirtyTabPrompt"))
-      )
-        return;
-
-      const closingIndex = openProjects.findIndex(({ id }) => id === projectId);
-      const remaining = openProjects.filter(({ id }) => id !== projectId);
-      setOpenProjects(remaining);
-      setDirtyProjectIds((current) => {
-        const next = new Set(current);
-        next.delete(projectId);
-        return next;
-      });
-      if (activeTabId === projectId) {
-        setActiveTabId(
-          remaining[Math.max(0, closingIndex - 1)]?.id ?? centerTabId,
-        );
-      }
-    },
-    [activeTabId, dirtyProjectIds, openProjects, t],
-  );
-
-  const logout = useCallback(() => {
-    if (dirtyProjectIds.size > 0 && !window.confirm(t("logoutDirtyTabsPrompt")))
-      return;
-    localStorage.removeItem(sessionKey);
-    setAccount(undefined);
-    setOpenProjects([]);
-    setDirtyProjectIds(new Set());
-    setActiveTabId(centerTabId);
-  }, [dirtyProjectIds.size, t]);
-
-  const login = useCallback((nextAccount: string, remember: boolean) => {
-    if (remember) localStorage.setItem(sessionKey, nextAccount);
-    else localStorage.removeItem(sessionKey);
-    setAccount(nextAccount);
-    setActiveTabId(centerTabId);
-  }, []);
-
-  const authenticated = account !== undefined;
-
   return (
-    <div
-      className={`app-shell ${authenticated ? "app-view-tabs" : "app-view-login"} platform-${runtime?.platform ?? "unknown"}`}
-    >
-      {!authenticated ? (
-        <LoginPage onLogin={login} t={t} />
-      ) : (
-        <>
-          <nav className="app-tabs" role="tablist" aria-label={t("openTabs")}>
-            <button
-              className={`app-tab-item center-app-tab${
-                activeTabId === centerTabId ? " active" : ""
-              }`}
-              type="button"
-              role="tab"
-              aria-controls="panel-writer-center"
-              aria-selected={activeTabId === centerTabId}
-              onClick={() => setActiveTabId(centerTabId)}
-            >
-              <Grid2X2 size={14} aria-hidden="true" />
-              <span>{t("writerCenter")}</span>
-            </button>
-            {openProjects.map((project) => (
-              <div
-                key={project.id}
-                className={`app-tab-item${
-                  activeTabId === project.id ? " active" : ""
-                }`}
-              >
-                <button
-                  className="app-tab-main"
-                  type="button"
-                  role="tab"
-                  aria-controls={`panel-${project.id}`}
-                  aria-selected={activeTabId === project.id}
-                  onClick={() => setActiveTabId(project.id)}
-                >
-                  <BookOpen size={14} aria-hidden="true" />
-                  <span>{project.name}</span>
-                  {dirtyProjectIds.has(project.id) ? (
-                    <i className="app-tab-dirty" aria-label={t("unsaved")} />
-                  ) : null}
-                </button>
-                <button
-                  className="app-tab-close"
-                  type="button"
-                  aria-label={`${t("closeTab")}: ${project.name}`}
-                  title={`${t("closeTab")}: ${project.name}`}
-                  onClick={() => closeProject(project.id)}
-                >
-                  <X size={13} />
-                </button>
-              </div>
-            ))}
-          </nav>
-
-          <div className="app-tab-content">
-            <section
-              id="panel-writer-center"
-              className="app-tab-panel"
-              role="tabpanel"
-              hidden={activeTabId !== centerTabId}
-            >
-              <WriterCenter
-                account={account}
-                error={projectsError}
-                locale={locale}
-                loading={projectsLoading}
-                onCreate={setProjectDialog}
-                onImport={() => setProjectDialog("import")}
-                onLocaleChange={setLocale}
-                onLogout={logout}
-                onOpenProject={openProject}
-                onOpenTheme={() => setThemeDialogOpen(true)}
-                projects={projects}
-                t={t}
-              />
-            </section>
-            {openProjects.map((project) => (
-              <section
-                key={project.id}
-                id={`panel-${project.id}`}
-                className="app-tab-panel"
-                role="tabpanel"
-                hidden={activeTabId !== project.id}
-              >
-                <ProjectEditorTab
-                  onDirtyChange={updateDirtyState}
-                  onProjectUpdate={updateProject}
-                  project={project}
-                  runtime={runtime}
-                  t={t}
-                />
-              </section>
-            ))}
-          </div>
-        </>
-      )}
-
+    <div className="native-tab-surface" data-testid="writer-center-app">
+      <WriterCenter
+        account={account}
+        error={error}
+        locale={locale}
+        loading={loading}
+        onCreate={setProjectDialog}
+        onImport={() => setProjectDialog("import")}
+        onLocaleChange={setLocale}
+        onLogout={() => void window.authorCopilot.tabs.requestLogout()}
+        onOpenProject={openProject}
+        onOpenTheme={() => setThemeDialogOpen(true)}
+        projects={projects}
+        t={t}
+      />
       <ProjectDialog
         key={`project-${projectDialog ?? "closed"}`}
-        kind={authenticated ? projectDialog : null}
+        kind={projectDialog}
         onClose={() => setProjectDialog(null)}
         onComplete={completeProject}
         t={t}
@@ -258,4 +237,51 @@ export function App(): JSX.Element {
       />
     </div>
   );
+}
+
+function ProjectApp({
+  context,
+}: {
+  readonly context: Extract<TabContext, { kind: "project" }>;
+}): JSX.Element {
+  const { t } = useI18n();
+  useTheme();
+  const [project, setProject] = useState(() => mapProject(context.project));
+  const [runtime, setRuntime] = useState<RuntimeInfo>();
+
+  useEffect(() => {
+    void window.authorCopilot.system
+      .getRuntimeInfo()
+      .then(setRuntime)
+      .catch(() => undefined);
+    return window.authorCopilot.tabs.onProjectChanged((changed) => {
+      if (changed.projectId === context.project.projectId) {
+        setProject(mapProject(changed));
+      }
+    });
+  }, [context.project.projectId]);
+
+  return (
+    <div className="native-tab-surface" data-testid="project-app">
+      <ProjectEditorTab
+        onDirtyChange={(_projectId, dirty) =>
+          void window.authorCopilot.tabs.reportDirty(dirty)
+        }
+        onProjectUpdate={setProject}
+        project={project}
+        runtime={runtime}
+        t={t}
+      />
+    </div>
+  );
+}
+
+export function App({
+  context,
+}: {
+  readonly context: TabContext;
+}): JSX.Element {
+  if (context.kind === "shell") return <ShellApp />;
+  if (context.kind === "center") return <WriterCenterApp />;
+  return <ProjectApp context={context} />;
 }
