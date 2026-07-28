@@ -227,7 +227,11 @@ export function useTheme(): ThemeController {
     setSettings((current) => ({ ...current, backgroundImage }));
   }, []);
   const removeBackgroundImage = useCallback(() => {
-    setSettings(({ backgroundImage: _backgroundImage, ...current }) => current);
+    setSettings((current) => {
+      const next = { ...current };
+      delete next.backgroundImage;
+      return next;
+    });
   }, []);
   const setBackgroundVisibility = useCallback(
     (backgroundVisibility: number) => {

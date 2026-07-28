@@ -14,7 +14,8 @@ import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { GitService, GitServiceError } from "../src/main/git/index.js";
+import { GitService } from "../src/main/git/index.js";
+import type { GitServiceError } from "../src/main/git/index.js";
 import { resolveGitExecutable } from "../src/main/git-runtime.js";
 
 const execFileAsync = promisify(execFile);
@@ -59,7 +60,8 @@ describe("GitService", () => {
     const result = await service.createVersion(projectId, message);
 
     expect(result.created).toBe(true);
-    expect(result.version?.changedFiles).toBe(2);
+    if (!result.created) throw new Error("Expected a created version.");
+    expect(result.version.changedFiles).toBe(2);
     const log = await execFileAsync(
       "git",
       ["-C", projectRoot, "log", "-1", "--format=%s%n%an%n%ae"],

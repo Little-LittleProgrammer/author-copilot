@@ -1,11 +1,10 @@
 {
   "extends": "@author-copilot/config-typescript/react.json",
   "compilerOptions": {
-    "baseUrl": ".",
     "composite": true,
     "lib": ["DOM", "DOM.Iterable", "ES2024"],
     "paths": {
-      "@/*": ["src/renderer/src/*"]
+      "@/*": ["./src/renderer/src/*"]
     },
     "types": ["vite/client"]
   },

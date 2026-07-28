@@ -19,7 +19,7 @@
     "smoke": "pnpm build && node ./scripts/electron-smoke.ts",
     "test": "vitest run",
     "test:e2e": "pnpm build && playwright test --config playwright.config.ts",
-    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit"
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.e2e.json --noEmit && tsc -p tsconfig.web.json --noEmit"
   },
   "dependencies": {
     "@author-copilot/contracts": "workspace:*",

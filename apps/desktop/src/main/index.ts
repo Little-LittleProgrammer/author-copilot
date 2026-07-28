@@ -60,12 +60,15 @@ app.whenReady().then(async () => {
     registry: new RegistryStore(app.getPath("userData")),
     publishEvent: domainEvents.publish,
   });
+  const developmentGitExecutable = process.env.AUTHOR_COPILOT_GIT_EXECUTABLE;
   const gitService = new GitService({
     gitExecutable: resolveGitExecutable({
       isPackaged: app.isPackaged,
       platform: process.platform,
       resourcesPath: process.resourcesPath,
-      developmentOverride: process.env.AUTHOR_COPILOT_GIT_EXECUTABLE,
+      ...(developmentGitExecutable === undefined
+        ? {}
+        : { developmentOverride: developmentGitExecutable }),
     }),
     hooksDirectory: join(app.getPath("userData"), "git-hooks-disabled"),
     resolveProjectRoot: (projectId) => projectService.getProjectRoot(projectId),
