@@ -5,7 +5,7 @@ import { app, BrowserWindow, session } from "electron";
 
 import { DesktopDomainEvents } from "./domain-events.js";
 import { GitService } from "./git/index.js";
-import { resolveGitExecutable } from "./git-runtime.js";
+import { resolveGitRuntime } from "./git-runtime.js";
 import { registerIpcHandlers } from "./ipc.js";
 import {
   createFixedProjectDirectoryPicker,
@@ -61,17 +61,20 @@ app.whenReady().then(async () => {
     publishEvent: domainEvents.publish,
   });
   const developmentGitExecutable = process.env.AUTHOR_COPILOT_GIT_EXECUTABLE;
+  const gitRuntime = resolveGitRuntime({
+    arch: process.arch,
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    resourcesPath: process.resourcesPath,
+    ...(developmentGitExecutable === undefined
+      ? {}
+      : { developmentOverride: developmentGitExecutable }),
+  });
   const gitService = new GitService({
-    gitExecutable: resolveGitExecutable({
-      isPackaged: app.isPackaged,
-      platform: process.platform,
-      resourcesPath: process.resourcesPath,
-      ...(developmentGitExecutable === undefined
-        ? {}
-        : { developmentOverride: developmentGitExecutable }),
-    }),
+    gitExecutable: gitRuntime.executable,
     hooksDirectory: join(app.getPath("userData"), "git-hooks-disabled"),
     resolveProjectRoot: (projectId) => projectService.getProjectRoot(projectId),
+    runtimeEnvironment: gitRuntime.environment,
   });
 
   denyAllPermissions(session.defaultSession);

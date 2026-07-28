@@ -63,6 +63,22 @@ jobs:
         id: package
         run: pnpm --filter @author-copilot/desktop package:${{ matrix.target }}:${{ matrix.arch }}
 
+      - name: Qualify bundled Git runtime
+        run: pnpm --filter @author-copilot/desktop runtime:verify
+
+      - name: Assert macOS package contains Git runtime
+        if: matrix.os == 'macos'
+        run: test -x "$(dirname '${{ matrix.executable }}')/../Resources/git/bin/git"
+
+      - name: Assert Windows package contains Git runtime
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          $runtime = Join-Path (Split-Path '${{ matrix.executable }}') 'resources\git\cmd\git.exe'
+          if (-not (Test-Path -PathType Leaf $runtime)) {
+            throw "Packaged Git runtime is missing: $runtime"
+          }
+
       - name: Smoke-test packaged application
         if: matrix.os != 'windows' || matrix.arch != 'arm64'
         run: node apps/desktop/scripts/electron-smoke.ts --executable "${{ matrix.executable }}"

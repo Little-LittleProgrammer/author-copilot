@@ -11,11 +11,17 @@
     "clean": "rm -rf out release coverage",
     "dev": "electron-vite dev",
     "lint": "eslint --config eslint.config.ts .",
-    "package": "pnpm build && electron-builder",
-    "package:mac:arm64": "pnpm build && electron-builder --mac --arm64",
-    "package:mac:x64": "pnpm build && electron-builder --mac --x64",
-    "package:win:arm64": "pnpm build && electron-builder --win --arm64",
-    "package:win:x64": "pnpm build && electron-builder --win --x64",
+    "package": "pnpm runtime:fetch && pnpm build && electron-builder",
+    "package:mac:arm64": "pnpm runtime:fetch:mac:arm64 && pnpm build && electron-builder --mac --arm64",
+    "package:mac:x64": "pnpm runtime:fetch:mac:x64 && pnpm build && electron-builder --mac --x64",
+    "package:win:arm64": "pnpm runtime:fetch:win:arm64 && pnpm build && electron-builder --win --arm64",
+    "package:win:x64": "pnpm runtime:fetch:win:x64 && pnpm build && electron-builder --win --x64",
+    "runtime:fetch": "node ../../tooling/scripts/fetch-git-runtime.ts",
+    "runtime:fetch:mac:arm64": "node ../../tooling/scripts/fetch-git-runtime.ts --platform=darwin --arch=arm64",
+    "runtime:fetch:mac:x64": "node ../../tooling/scripts/fetch-git-runtime.ts --platform=darwin --arch=x64",
+    "runtime:fetch:win:arm64": "node ../../tooling/scripts/fetch-git-runtime.ts --platform=win32 --arch=arm64",
+    "runtime:fetch:win:x64": "node ../../tooling/scripts/fetch-git-runtime.ts --platform=win32 --arch=x64",
+    "runtime:verify": "node ../../tooling/scripts/verify-git-runtime.ts",
     "smoke": "pnpm build && node ./scripts/electron-smoke.ts",
     "test": "vitest run",
     "test:e2e": "pnpm build && playwright test --config playwright.config.ts",
@@ -65,6 +71,15 @@
     "files": [
       "out/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/git",
+        "to": "git",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "mac": {
       "category": "public.app-category.productivity",

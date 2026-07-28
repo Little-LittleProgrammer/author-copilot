@@ -44,3 +44,19 @@ HOST=127.0.0.1 PORT=9191 pnpm --filter @author-copilot/api dev
 
 The M1 health endpoint is available at `http://127.0.0.1:9191/health`.
 MongoDB and Redis are intentionally deferred to M7.
+
+## Bundled Git runtime
+
+The desktop package commands prepare the matching Git runtime automatically.
+For local runtime work, use:
+
+```bash
+pnpm git-runtime:fetch
+pnpm git-runtime:verify
+```
+
+The source URLs and SHA-256 values are fixed in
+`tooling/git-runtime-manifest.json`. Windows targets use the official Git for
+Windows MinGit archives. macOS targets build the official kernel.org Git source
+on the matching architecture with a macOS 12.0 deployment target. Generated
+runtime files live under `apps/desktop/resources/git` and are not committed.

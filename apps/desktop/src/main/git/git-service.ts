@@ -28,6 +28,7 @@ export interface GitServiceOptions {
   readonly gitExecutable: string;
   readonly hooksDirectory: string;
   readonly resolveProjectRoot: (projectId: string) => Promise<string>;
+  readonly runtimeEnvironment?: Readonly<Record<string, string>>;
   readonly timeoutMs?: number;
   readonly maxOutputBytes?: number;
 }
@@ -46,11 +47,15 @@ function outputLines(value: string): readonly string[] {
   return value.split("\0").filter((entry) => entry.length > 0);
 }
 
-function isolatedGitEnvironment(globalConfigPath: string): NodeJS.ProcessEnv {
+function isolatedGitEnvironment(
+  globalConfigPath: string,
+  runtimeEnvironment: Readonly<Record<string, string>> = {},
+): NodeJS.ProcessEnv {
   return {
     ...Object.fromEntries(
       Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")),
     ),
+    ...runtimeEnvironment,
     GIT_ATTR_NOSYSTEM: "1",
     GIT_CONFIG_GLOBAL: globalConfigPath,
     GIT_CONFIG_NOSYSTEM: "1",
@@ -234,7 +239,10 @@ export class GitService {
         ],
         {
           cwd: rootPath,
-          env: isolatedGitEnvironment(this.globalConfigPath),
+          env: isolatedGitEnvironment(
+            this.globalConfigPath,
+            this.options.runtimeEnvironment,
+          ),
           shell: false,
           stdio: ["ignore", "pipe", "pipe"],
           windowsHide: true,

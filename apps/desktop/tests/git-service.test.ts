@@ -16,7 +16,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { GitService } from "../src/main/git/index.js";
 import type { GitServiceError } from "../src/main/git/index.js";
-import { resolveGitExecutable } from "../src/main/git-runtime.js";
+import { resolveGitRuntime } from "../src/main/git-runtime.js";
 
 const execFileAsync = promisify(execFile);
 const projectId = "10000000-0000-4000-8000-000000000001";
@@ -135,23 +135,48 @@ describe("GitService", () => {
   });
 });
 
-describe("resolveGitExecutable", () => {
+describe("resolveGitRuntime", () => {
   it("uses an override only for development builds", () => {
     expect(
-      resolveGitExecutable({
+      resolveGitRuntime({
+        arch: "arm64",
         developmentOverride: "/opt/test/git",
         isPackaged: false,
         platform: "darwin",
         resourcesPath: "/Applications/Author Copilot.app/Contents/Resources",
       }),
-    ).toBe("/opt/test/git");
+    ).toEqual({ executable: "/opt/test/git", environment: {} });
     expect(
-      resolveGitExecutable({
+      resolveGitRuntime({
+        arch: "arm64",
         developmentOverride: "/tmp/untrusted/git",
         isPackaged: true,
         platform: "win32",
         resourcesPath: "C:\\AuthorCopilot\\resources",
-      }),
+      }).executable,
     ).toBe("C:\\AuthorCopilot\\resources/git/cmd/git.exe");
+  });
+
+  it("resolves packaged runtime support paths for each platform", () => {
+    const mac = resolveGitRuntime({
+      arch: "x64",
+      isPackaged: true,
+      platform: "darwin",
+      resourcesPath: "/app/resources",
+    });
+    expect(mac.environment).toEqual({
+      GIT_EXEC_PATH: "/app/resources/git/libexec/git-core",
+      GIT_SSL_CAINFO: "/app/resources/git/etc/ssl/certs/ca-bundle.crt",
+      GIT_TEMPLATE_DIR: "/app/resources/git/share/git-core/templates",
+    });
+    const windows = resolveGitRuntime({
+      arch: "arm64",
+      isPackaged: true,
+      platform: "win32",
+      resourcesPath: "C:\\app\\resources",
+    });
+    expect(windows.environment.GIT_EXEC_PATH).toBe(
+      "C:\\app\\resources/git/clangarm64/libexec/git-core",
+    );
   });
 });
