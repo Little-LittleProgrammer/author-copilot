@@ -18,6 +18,80 @@ function isInside(rootPath: string, candidatePath: string): boolean {
   );
 }
 
+export function validateProjectEntryName(name: string): string {
+  const normalized = name.trim();
+  if (
+    normalized.length === 0 ||
+    normalized === "." ||
+    normalized === ".." ||
+    normalized.length > 252 ||
+    /[<>:"/\\|?*\0]/u.test(normalized) ||
+    /[. ]$/u.test(normalized)
+  ) {
+    throw new InvalidProjectPathError(
+      "The name cannot be used for a project entry.",
+    );
+  }
+  return normalized;
+}
+
+export async function authorizeExistingEntry(
+  rootPath: string,
+  relativePath: string,
+): Promise<{ readonly absolutePath: string; readonly isDocument: boolean }> {
+  if (
+    relativePath.length === 0 ||
+    relativePath.includes("\0") ||
+    isAbsolute(relativePath)
+  ) {
+    throw new InvalidProjectPathError("A relative project path is required.");
+  }
+
+  const portableSegments = relativePath.replaceAll("\\", "/").split("/");
+  if (
+    portableSegments.some(
+      (segment) => segment === "" || segment === "." || segment === "..",
+    ) ||
+    portableSegments.some((segment) => segment.toLowerCase() === ".git") ||
+    portableSegments.at(-1)?.toLowerCase() ===
+      PROJECT_METADATA_FILE_NAME.toLowerCase()
+  ) {
+    throw new InvalidProjectPathError("The project entry path is not allowed.");
+  }
+
+  const canonicalRoot = await realpath(rootPath);
+  const candidatePath = resolve(canonicalRoot, ...portableSegments);
+  if (!isInside(canonicalRoot, candidatePath)) {
+    throw new InvalidProjectPathError(
+      "The entry path escapes the project root.",
+    );
+  }
+
+  let currentPath = canonicalRoot;
+  for (const segment of portableSegments) {
+    currentPath = resolve(currentPath, segment);
+    const entryStats = await lstat(currentPath);
+    if (entryStats.isSymbolicLink()) {
+      throw new SymbolicLinkNotAllowedError(
+        "Symbolic links are not allowed in project entry paths.",
+      );
+    }
+  }
+
+  const entryStats = await lstat(candidatePath);
+  const isDocument = entryStats.isFile();
+  if (
+    (!entryStats.isDirectory() && !isDocument) ||
+    (isDocument && !portableSegments.at(-1)?.toLowerCase().endsWith(".md"))
+  ) {
+    throw new InvalidProjectPathError(
+      "Only project folders and writing documents may be renamed.",
+    );
+  }
+
+  return { absolutePath: candidatePath, isDocument };
+}
+
 export function validateDocumentRelativePath(relativePath: string): string {
   if (
     relativePath.length === 0 ||

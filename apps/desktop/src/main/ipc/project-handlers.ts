@@ -11,12 +11,18 @@ import {
   ProjectConfirmImportResponseSchema,
   ProjectCreateRequestSchema,
   ProjectCreateResponseSchema,
+  ProjectDeleteEntryRequestSchema,
+  ProjectDeleteEntryResponseSchema,
   ProjectGetStructureRequestSchema,
   ProjectGetStructureResponseSchema,
   ProjectImportPreviewRequestSchema,
   ProjectImportPreviewResponseSchema,
   ProjectListRequestSchema,
   ProjectListResponseSchema,
+  ProjectRenameEntryRequestSchema,
+  ProjectRenameEntryResponseSchema,
+  ProjectUpdateRequestSchema,
+  ProjectUpdateResponseSchema,
   type ProjectImportRecognizedNode,
   type ProjectStructureNode as ProjectStructureNodeDto,
   type ProjectSummary,
@@ -204,6 +210,61 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
   );
 
   ipcMain.handle(
+    IPC_INVOKE_CHANNELS.projectDeleteEntry,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.projectDeleteEntry,
+        args,
+        options.trustedRendererUrl,
+      );
+      try {
+        const request = ProjectDeleteEntryRequestSchema.parse(args[0]);
+        await options.projectService.deleteEntry(
+          request.projectId,
+          request.relativePath,
+        );
+        return ProjectDeleteEntryResponseSchema.parse({
+          ok: true,
+          projectId: request.projectId,
+          relativePath: request.relativePath,
+        });
+      } catch (error) {
+        return ProjectDeleteEntryResponseSchema.parse(
+          projectOperationFailure(error),
+        );
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.projectUpdate,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.projectUpdate,
+        args,
+        options.trustedRendererUrl,
+      );
+      try {
+        const request = ProjectUpdateRequestSchema.parse(args[0]);
+        const project = await options.projectService.updateProjectTitle(
+          request.projectId,
+          request.title,
+        );
+        return ProjectUpdateResponseSchema.parse({
+          ok: true,
+          project: summary(project),
+        });
+      } catch (error) {
+        return ProjectUpdateResponseSchema.parse(
+          projectOperationFailure(error),
+        );
+      }
+    },
+  );
+
+  ipcMain.handle(
     IPC_INVOKE_CHANNELS.projectConfirmImport,
     async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
       authorize(
@@ -344,6 +405,36 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
         });
       } catch (error) {
         return DocumentReadResponseSchema.parse(projectOperationFailure(error));
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.projectRenameEntry,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.projectRenameEntry,
+        args,
+        options.trustedRendererUrl,
+      );
+      try {
+        const request = ProjectRenameEntryRequestSchema.parse(args[0]);
+        const relativePath = await options.projectService.renameEntry(
+          request.projectId,
+          request.relativePath,
+          request.name,
+        );
+        return ProjectRenameEntryResponseSchema.parse({
+          ok: true,
+          projectId: request.projectId,
+          previousRelativePath: request.relativePath,
+          relativePath,
+        });
+      } catch (error) {
+        return ProjectRenameEntryResponseSchema.parse(
+          projectOperationFailure(error),
+        );
       }
     },
   );

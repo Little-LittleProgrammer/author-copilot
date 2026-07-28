@@ -3,13 +3,16 @@ import {
   lstat,
   mkdir,
   readFile,
+  readdir,
   realpath,
   rename,
   rm,
+  rmdir,
   stat,
+  unlink,
   writeFile,
 } from "node:fs/promises";
-import { basename, isAbsolute, join, relative, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 
 import {
   CURRENT_PROJECT_SCHEMA_VERSION,
@@ -27,7 +30,11 @@ import {
   SymbolicLinkNotAllowedError,
 } from "./errors.js";
 import { atomicWriteFile } from "./file-utils.js";
-import { authorizeExistingDocument } from "./path-policy.js";
+import {
+  authorizeExistingDocument,
+  authorizeExistingEntry,
+  validateProjectEntryName,
+} from "./path-policy.js";
 import { createRegisteredProject, newProjectId } from "./registry-store.js";
 import type { RegistryStore } from "./registry-store.js";
 import { buildProjectStructure } from "./structure.js";
@@ -35,8 +42,10 @@ import type {
   ConfirmImportOptions,
   ImportPreview,
   ProjectEventPublisher,
+  ProjectDocument,
   ProjectMetadata,
   ProjectStructure,
+  ProjectStructureNode,
   ProjectTemplate,
   ReadDocumentResult,
   RegisteredProject,
@@ -102,6 +111,90 @@ function createMetadata(
   };
 }
 
+function containsStructurePath(
+  nodes: readonly (ProjectStructureNode | ProjectDocument)[],
+  relativePath: string,
+): boolean {
+  return nodes.some(
+    (node) =>
+      node.relativePath === relativePath ||
+      (node.kind !== "document" &&
+        containsStructurePath(node.children, relativePath)),
+  );
+}
+
+async function removeWritingEntry(entryPath: string): Promise<void> {
+  const entryStats = await lstat(entryPath);
+  if (entryStats.isSymbolicLink()) {
+    throw new SymbolicLinkNotAllowedError(
+      "Symbolic links are not allowed in deleted project entries.",
+    );
+  }
+  if (entryStats.isFile()) {
+    if (!entryPath.toLowerCase().endsWith(".md")) {
+      throw new InvalidProjectPathError(
+        "Folders containing non-writing files cannot be deleted.",
+      );
+    }
+    await unlink(entryPath);
+    return;
+  }
+  if (!entryStats.isDirectory()) {
+    throw new InvalidProjectPathError(
+      "Only writing documents and folders may be deleted.",
+    );
+  }
+
+  const entries = await readdir(entryPath, { withFileTypes: true });
+  for (const entry of entries) {
+    if (
+      entry.name.toLowerCase() === ".git" ||
+      entry.name.toLowerCase() === PROJECT_METADATA_FILE_NAME.toLowerCase()
+    ) {
+      throw new InvalidProjectPathError(
+        "Folders containing project metadata cannot be deleted.",
+      );
+    }
+    await removeWritingEntry(join(entryPath, entry.name));
+  }
+  await rmdir(entryPath);
+}
+
+async function validateWritingEntryTree(entryPath: string): Promise<void> {
+  const entryStats = await lstat(entryPath);
+  if (entryStats.isSymbolicLink()) {
+    throw new SymbolicLinkNotAllowedError(
+      "Symbolic links are not allowed in deleted project entries.",
+    );
+  }
+  if (entryStats.isFile()) {
+    if (!entryPath.toLowerCase().endsWith(".md")) {
+      throw new InvalidProjectPathError(
+        "Folders containing non-writing files cannot be deleted.",
+      );
+    }
+    return;
+  }
+  if (!entryStats.isDirectory()) {
+    throw new InvalidProjectPathError(
+      "Only writing documents and folders may be deleted.",
+    );
+  }
+
+  const entries = await readdir(entryPath, { withFileTypes: true });
+  for (const entry of entries) {
+    if (
+      entry.name.toLowerCase() === ".git" ||
+      entry.name.toLowerCase() === PROJECT_METADATA_FILE_NAME.toLowerCase()
+    ) {
+      throw new InvalidProjectPathError(
+        "Folders containing project metadata cannot be deleted.",
+      );
+    }
+    await validateWritingEntryTree(join(entryPath, entry.name));
+  }
+}
+
 async function writeMetadata(
   rootPath: string,
   metadata: ProjectMetadata,
@@ -156,6 +249,7 @@ export class ProjectService {
   private readonly registry: RegistryStore;
   private readonly publishEvent: ProjectEventPublisher | undefined;
   private readonly documentQueues = new Map<string, Promise<void>>();
+  private readonly projectQueues = new Map<string, Promise<void>>();
 
   constructor(options: ProjectServiceOptions) {
     this.registry = options.registry;
@@ -333,6 +427,63 @@ export class ProjectService {
     );
   }
 
+  async updateProjectTitle(
+    projectId: string,
+    title: string,
+  ): Promise<RegisteredProject> {
+    return this.withProjectLock(projectId, async () => {
+      const project = await this.requireProject(projectId);
+      const normalizedTitle = title.trim();
+      if (normalizedTitle.length === 0 || normalizedTitle.length > 200) {
+        throw new ProjectServiceError("The project title is invalid.");
+      }
+      const metadata = { ...project.metadata, title: normalizedTitle };
+      await writeMetadata(project.rootPath, metadata);
+      await this.registry.updateMetadata(projectId, metadata);
+      return { ...project, metadata };
+    });
+  }
+
+  async renameEntry(
+    projectId: string,
+    relativePath: string,
+    name: string,
+  ): Promise<string> {
+    return this.withProjectLock(projectId, async () => {
+      const project = await this.requireProject(projectId);
+      await this.assertKnownEntry(project, relativePath);
+      const source = await authorizeExistingEntry(
+        project.rootPath,
+        relativePath,
+      );
+      const requestedName = source.isDocument
+        ? name.replace(/\.md$/iu, "")
+        : name;
+      const safeName = validateProjectEntryName(requestedName);
+      const targetName = source.isDocument ? `${safeName}.md` : safeName;
+      const targetPath = join(dirname(source.absolutePath), targetName);
+      if (targetPath === source.absolutePath) {
+        return relativePath.replaceAll("\\", "/");
+      }
+      await assertPathDoesNotExist(targetPath);
+      await rename(source.absolutePath, targetPath);
+      return relative(project.rootPath, targetPath).split(sep).join("/");
+    });
+  }
+
+  async deleteEntry(projectId: string, relativePath: string): Promise<void> {
+    await this.withProjectLock(projectId, async () => {
+      const project = await this.requireProject(projectId);
+      await this.assertKnownEntry(project, relativePath);
+      const source = await authorizeExistingEntry(
+        project.rootPath,
+        relativePath,
+      );
+      await validateWritingEntryTree(source.absolutePath);
+      await removeWritingEntry(source.absolutePath);
+    });
+  }
+
   async readDocument(
     projectId: string,
     relativePath: string,
@@ -455,6 +606,26 @@ export class ProjectService {
     return project;
   }
 
+  private async assertKnownEntry(
+    project: RegisteredProject,
+    relativePath: string,
+  ): Promise<void> {
+    const normalizedPath = relativePath.replaceAll("\\", "/");
+    const structure = await buildProjectStructure(
+      project.projectId,
+      project.rootPath,
+      project.metadata.template,
+    );
+    if (
+      !containsStructurePath(structure.nodes, normalizedPath) &&
+      !containsStructurePath(structure.unclassified, normalizedPath)
+    ) {
+      throw new InvalidProjectPathError(
+        "Only entries in the recognized project structure may be changed.",
+      );
+    }
+  }
+
   private publishDocumentSaved(
     event: Parameters<ProjectEventPublisher>[0],
   ): void {
@@ -482,6 +653,28 @@ export class ProjectService {
       release();
       if (this.documentQueues.get(key) === queued) {
         this.documentQueues.delete(key);
+      }
+    }
+  }
+
+  private async withProjectLock<T>(
+    projectId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const predecessor = this.projectQueues.get(projectId) ?? Promise.resolve();
+    let release = (): void => undefined;
+    const current = new Promise<void>((resolveLock) => {
+      release = resolveLock;
+    });
+    const queued = predecessor.then(() => current);
+    this.projectQueues.set(projectId, queued);
+    await predecessor;
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (this.projectQueues.get(projectId) === queued) {
+        this.projectQueues.delete(projectId);
       }
     }
   }

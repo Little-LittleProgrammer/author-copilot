@@ -124,6 +124,30 @@ export class RegistryStore {
     });
   }
 
+  async updateMetadata(
+    projectId: string,
+    metadata: RegisteredProject["metadata"],
+  ): Promise<void> {
+    await this.mutate((registry) => {
+      const project = registry.projects[projectId];
+      if (project === undefined) {
+        throw new ProjectServiceError(
+          `Project ${projectId} is not registered.`,
+        );
+      }
+      const parsedMetadata = parseProjectMetadata(metadata);
+      if (parsedMetadata.projectId !== projectId) {
+        throw new ProjectServiceError(
+          "The registry project ID does not match project metadata.",
+        );
+      }
+      registry.projects[projectId] = {
+        ...project,
+        metadata: parsedMetadata,
+      };
+    });
+  }
+
   private async readRegistry(): Promise<RegistryFile> {
     try {
       return parseRegistry(

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 
 import type { RuntimeInfo } from "@author-copilot/contracts";
 
@@ -17,13 +17,39 @@ import { EditorWorkspace, type WorkspaceTab } from "./EditorWorkspace.js";
 
 interface ProjectEditorTabProps {
   readonly onDirtyChange: (projectId: string, dirty: boolean) => void;
+  readonly onProjectUpdate: (project: ProjectSummary) => void;
   readonly project: ProjectSummary;
   readonly runtime: RuntimeInfo | undefined;
   readonly t: (key: MessageKey) => string;
 }
 
+function loadAiContext(projectId: string): ReadonlySet<string> {
+  try {
+    const value: unknown = JSON.parse(
+      localStorage.getItem(`author-copilot.ai-context.${projectId}`) ?? "[]",
+    );
+    return new Set(
+      Array.isArray(value)
+        ? value.filter((path): path is string => typeof path === "string")
+        : [],
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function flattenStructure(
+  nodes: readonly StructureNode[],
+): readonly StructureNode[] {
+  return nodes.flatMap((node) => [
+    node,
+    ...flattenStructure(node.children ?? []),
+  ]);
+}
+
 export function ProjectEditorTab({
   onDirtyChange,
+  onProjectUpdate,
   project,
   runtime,
   t,
@@ -37,21 +63,40 @@ export function ProjectEditorTab({
   const [versionDialogOpen, setVersionDialogOpen] = useState(false);
   const [error, setError] = useState<string>();
   const [tab, setTab] = useState<WorkspaceTab>("content");
+  const [aiContextPaths, setAiContextPaths] = useState<ReadonlySet<string>>(
+    () => loadAiContext(project.id),
+  );
   const dirty = document !== undefined && content !== document.content;
+  const aiContextNodes = useMemo(() => {
+    const nodeByPath = new Map(
+      flattenStructure(structure).map((node) => [node.path, node]),
+    );
+    return [...aiContextPaths]
+      .map((path) => nodeByPath.get(path))
+      .filter((node): node is StructureNode => node !== undefined);
+  }, [aiContextPaths, structure]);
 
   useEffect(() => {
     onDirtyChange(project.id, dirty);
   }, [dirty, onDirtyChange, project.id]);
 
   useEffect(() => {
+    localStorage.setItem(
+      `author-copilot.ai-context.${project.id}`,
+      JSON.stringify([...aiContextPaths]),
+    );
+  }, [aiContextPaths, project.id]);
+
+  const refreshStructure = useCallback(async (): Promise<void> => {
     const api = getProjectApi();
-    if (api === undefined) {
-      setLoading(false);
-      return;
-    }
+    if (api === undefined) return;
+    setStructure(await api.getStructure({ projectId: project.id }));
+  }, [project.id]);
+
+  useEffect(() => {
+    const api = getProjectApi();
+    if (api === undefined) return;
     let current = true;
-    setLoading(true);
-    setError(undefined);
     void api
       .getStructure({ projectId: project.id })
       .then((nodes) => {
@@ -71,7 +116,7 @@ export function ProjectEditorTab({
   const selectDocument = useCallback(
     (node: StructureNode) => {
       const api = getProjectApi();
-      if (api === undefined || node.path === undefined) return;
+      if (api === undefined || node.kind !== "document") return;
       if (dirty && !window.confirm(t("discardPrompt"))) return;
       setLoading(true);
       setError(undefined);
@@ -124,8 +169,124 @@ export function ProjectEditorTab({
       kind: "document",
       name: document.path,
       path: document.path,
+      role: "scene",
     });
   }, [document, selectDocument]);
+
+  const updateProject = useCallback(
+    async (title: string): Promise<void> => {
+      const api = getProjectApi();
+      if (api === undefined) throw new Error(t("projectApiUnavailable"));
+      onProjectUpdate(await api.update({ projectId: project.id, title }));
+    },
+    [onProjectUpdate, project.id, t],
+  );
+
+  const renameEntry = useCallback(
+    async (node: StructureNode, name: string): Promise<void> => {
+      const api = getProjectApi();
+      if (api === undefined) {
+        setError(t("projectApiUnavailable"));
+        return;
+      }
+      if (dirty) {
+        setError(t("renameSaveFirst"));
+        return;
+      }
+      setLoading(true);
+      setError(undefined);
+      try {
+        const renamed = await api.renameEntry({
+          name,
+          path: node.path,
+          projectId: project.id,
+        });
+        setDocument((current) => {
+          if (current === undefined) return current;
+          if (current.path === renamed.previousPath) {
+            return { ...current, path: renamed.path };
+          }
+          const prefix = `${renamed.previousPath}/`;
+          if (!current.path.startsWith(prefix)) return current;
+          return {
+            ...current,
+            path: `${renamed.path}/${current.path.slice(prefix.length)}`,
+          };
+        });
+        setAiContextPaths(
+          (current) =>
+            new Set(
+              [...current].map((path) => {
+                if (path === renamed.previousPath) return renamed.path;
+                const prefix = `${renamed.previousPath}/`;
+                return path.startsWith(prefix)
+                  ? `${renamed.path}/${path.slice(prefix.length)}`
+                  : path;
+              }),
+            ),
+        );
+        await refreshStructure();
+      } catch (reason) {
+        setError(errorMessage(reason, t("errorGeneric")));
+        throw reason;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [dirty, project.id, refreshStructure, t],
+  );
+
+  const deleteEntry = useCallback(
+    async (node: StructureNode): Promise<void> => {
+      const api = getProjectApi();
+      if (api === undefined) {
+        setError(t("projectApiUnavailable"));
+        return;
+      }
+      if (dirty) {
+        setError(t("renameSaveFirst"));
+        return;
+      }
+      if (!window.confirm(`${t("deleteConfirm")} “${node.name}”?`)) return;
+      setLoading(true);
+      setError(undefined);
+      try {
+        await api.deleteEntry({ path: node.path, projectId: project.id });
+        const deletedPrefix = `${node.path}/`;
+        if (
+          document !== undefined &&
+          (document.path === node.path ||
+            document.path.startsWith(deletedPrefix))
+        ) {
+          setDocument(undefined);
+          setContent("");
+        }
+        setAiContextPaths(
+          (current) =>
+            new Set(
+              [...current].filter(
+                (path) => path !== node.path && !path.startsWith(deletedPrefix),
+              ),
+            ),
+        );
+        await refreshStructure();
+      } catch (reason) {
+        setError(errorMessage(reason, t("errorGeneric")));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [dirty, document, project.id, refreshStructure, t],
+  );
+
+  const toggleAiContext = useCallback((node: StructureNode): void => {
+    setAiContextPaths((current) => {
+      const next = new Set(current);
+      if (next.has(node.path)) next.delete(node.path);
+      else next.add(node.path);
+      return next;
+    });
+  }, []);
 
   const completeVersion = useCallback(
     (result: VersionResult) => {
@@ -145,13 +306,20 @@ export function ProjectEditorTab({
         <ProjectSidebar
           activeDocumentPath={document?.path}
           activeProject={project}
+          aiContextPaths={aiContextPaths}
+          canMutateStructure={!dirty && !loading}
           loading={loading}
+          onDeleteEntry={deleteEntry}
+          onRenameEntry={renameEntry}
           onSelectDocument={selectDocument}
+          onToggleAiContext={toggleAiContext}
+          onUpdateProject={updateProject}
           structure={structure}
           t={t}
         />
         <EditorWorkspace
           activeProject={project}
+          aiContext={aiContextNodes}
           content={content}
           document={document}
           dirty={dirty}
@@ -172,7 +340,7 @@ export function ProjectEditorTab({
         />
       </div>
       <footer className="statusbar">
-        <span>{project.rootDisplayName}</span>
+        <span>{project.name}</span>
         <span>
           {runtime === undefined
             ? ""

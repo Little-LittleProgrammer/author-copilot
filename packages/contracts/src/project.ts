@@ -96,6 +96,23 @@ export const ProjectCreateResponseSchema = z.discriminatedUnion("ok", [
 
 export type ProjectCreateResponse = z.infer<typeof ProjectCreateResponseSchema>;
 
+export const ProjectUpdateRequestSchema = z.strictObject({
+  projectId: z.uuid(),
+  title: ProjectTitleSchema,
+});
+
+export type ProjectUpdateRequest = z.infer<typeof ProjectUpdateRequestSchema>;
+
+export const ProjectUpdateResponseSchema = z.discriminatedUnion("ok", [
+  z.strictObject({
+    ok: z.literal(true),
+    project: ProjectSummarySchema,
+  }),
+  ProjectOperationFailureSchema,
+]);
+
+export type ProjectUpdateResponse = z.infer<typeof ProjectUpdateResponseSchema>;
+
 export const ProjectImportPreviewRequestSchema = z.strictObject({
   template: ProjectTemplateSchema,
 });
@@ -250,6 +267,52 @@ export const ProjectGetStructureResponseSchema = z.discriminatedUnion("ok", [
 
 export type ProjectGetStructureResponse = z.infer<
   typeof ProjectGetStructureResponseSchema
+>;
+
+export const ProjectRenameEntryRequestSchema = z.strictObject({
+  projectId: z.uuid(),
+  relativePath: RelativeProjectPathSchema,
+  name: DisplayNameSchema,
+});
+
+export type ProjectRenameEntryRequest = z.infer<
+  typeof ProjectRenameEntryRequestSchema
+>;
+
+export const ProjectRenameEntryResponseSchema = z.discriminatedUnion("ok", [
+  z.strictObject({
+    ok: z.literal(true),
+    projectId: z.uuid(),
+    previousRelativePath: RelativeProjectPathSchema,
+    relativePath: RelativeProjectPathSchema,
+  }),
+  ProjectOperationFailureSchema,
+]);
+
+export type ProjectRenameEntryResponse = z.infer<
+  typeof ProjectRenameEntryResponseSchema
+>;
+
+export const ProjectDeleteEntryRequestSchema = z.strictObject({
+  projectId: z.uuid(),
+  relativePath: RelativeProjectPathSchema,
+});
+
+export type ProjectDeleteEntryRequest = z.infer<
+  typeof ProjectDeleteEntryRequestSchema
+>;
+
+export const ProjectDeleteEntryResponseSchema = z.discriminatedUnion("ok", [
+  z.strictObject({
+    ok: z.literal(true),
+    projectId: z.uuid(),
+    relativePath: RelativeProjectPathSchema,
+  }),
+  ProjectOperationFailureSchema,
+]);
+
+export type ProjectDeleteEntryResponse = z.infer<
+  typeof ProjectDeleteEntryResponseSchema
 >;
 
 export const DocumentReadRequestSchema = z.strictObject({

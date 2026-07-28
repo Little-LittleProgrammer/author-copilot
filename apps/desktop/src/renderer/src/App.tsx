@@ -78,6 +78,19 @@ export function App(): JSX.Element {
     [openProject],
   );
 
+  const updateProject = useCallback((project: ProjectSummary) => {
+    setProjects((current) =>
+      current.map((candidate) =>
+        candidate.id === project.id ? project : candidate,
+      ),
+    );
+    setOpenProjects((current) =>
+      current.map((candidate) =>
+        candidate.id === project.id ? project : candidate,
+      ),
+    );
+  }, []);
+
   const updateDirtyState = useCallback((projectId: string, dirty: boolean) => {
     setDirtyProjectIds((current) => {
       const next = new Set(current);
@@ -219,6 +232,7 @@ export function App(): JSX.Element {
               >
                 <ProjectEditorTab
                   onDirtyChange={updateDirtyState}
+                  onProjectUpdate={updateProject}
                   project={project}
                   runtime={runtime}
                   t={t}

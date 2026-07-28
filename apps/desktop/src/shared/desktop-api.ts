@@ -7,11 +7,17 @@ import type {
   ProjectConfirmImportResponse,
   ProjectCreateRequest,
   ProjectCreateResponse,
+  ProjectDeleteEntryRequest,
+  ProjectDeleteEntryResponse,
   ProjectGetStructureRequest,
   ProjectGetStructureResponse,
   ProjectImportPreviewRequest,
   ProjectImportPreviewResponse,
   ProjectListResponse,
+  ProjectRenameEntryRequest,
+  ProjectRenameEntryResponse,
+  ProjectUpdateRequest,
+  ProjectUpdateResponse,
   RuntimeInfo,
   VersionCreateRequest,
   VersionCreateResponse,
@@ -25,6 +31,12 @@ export interface AuthorCopilotApi {
     readonly create: (
       request: ProjectCreateRequest,
     ) => Promise<ProjectCreateResponse>;
+    readonly deleteEntry: (
+      request: ProjectDeleteEntryRequest,
+    ) => Promise<ProjectDeleteEntryResponse>;
+    readonly update: (
+      request: ProjectUpdateRequest,
+    ) => Promise<ProjectUpdateResponse>;
     readonly previewImport: (
       request: ProjectImportPreviewRequest,
     ) => Promise<ProjectImportPreviewResponse>;
@@ -35,6 +47,9 @@ export interface AuthorCopilotApi {
     readonly getStructure: (
       request: ProjectGetStructureRequest,
     ) => Promise<ProjectGetStructureResponse>;
+    readonly renameEntry: (
+      request: ProjectRenameEntryRequest,
+    ) => Promise<ProjectRenameEntryResponse>;
     readonly readDocument: (
       request: DocumentReadRequest,
     ) => Promise<DocumentReadResponse>;

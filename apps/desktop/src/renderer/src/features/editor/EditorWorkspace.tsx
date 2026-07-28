@@ -1,13 +1,19 @@
 import type { JSX } from "react";
+import { Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button.js";
 import type { MessageKey } from "../../i18n/index.js";
-import type { DocumentSnapshot, ProjectSummary } from "../project/types.js";
+import type {
+  DocumentSnapshot,
+  ProjectSummary,
+  StructureNode,
+} from "../project/types.js";
 
 export type WorkspaceTab = "assistant" | "content" | "review";
 
 interface EditorWorkspaceProps {
   readonly activeProject: ProjectSummary | undefined;
+  readonly aiContext: readonly StructureNode[];
   readonly content: string;
   readonly document: DocumentSnapshot | undefined;
   readonly dirty: boolean;
@@ -28,6 +34,7 @@ interface EditorWorkspaceProps {
 export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
   const {
     activeProject,
+    aiContext,
     content,
     document,
     dirty,
@@ -49,12 +56,23 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
     { id: "assistant", label: "aiChat" },
     { id: "review", label: "changeReview" },
   ];
+  const roleLabels: Readonly<Record<StructureNode["role"], MessageKey>> = {
+    act: "structureRoleAct",
+    chapter: "structureRoleChapter",
+    scene: "structureRoleDocument",
+    unclassified: "structureRoleDocument",
+    volume: "structureRoleVolume",
+  };
+  const documentName = document?.path
+    .split(/[\\/]/)
+    .at(-1)
+    ?.replace(/\.md$/iu, "");
   return (
     <main className="editor-pane">
       <header className="editor-header">
         <div className="document-title">
           <span className="eyebrow">{activeProject?.name ?? t("editor")}</span>
-          <h2>{document?.path.split(/[\\/]/).at(-1) ?? t("documentEmpty")}</h2>
+          <h2>{documentName ?? t("documentEmpty")}</h2>
         </div>
         <div className="editor-status" aria-live="polite">
           {versionNotice !== undefined ? (
@@ -138,15 +156,35 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
               onChange={(event) => onChange(event.target.value)}
             />
           )
+        ) : tab === "assistant" ? (
+          <div className="assistant-placeholder">
+            <Sparkles size={24} aria-hidden="true" />
+            <h3>{t("aiChat")}</h3>
+            <p>{t("aiUnavailable")}</p>
+            <section className="ai-context-section" aria-label={t("aiContext")}>
+              <div className="ai-context-heading">
+                <strong>{t("aiContext")}</strong>
+                <span>{aiContext.length}</span>
+              </div>
+              {aiContext.length === 0 ? (
+                <p>{t("aiContextEmpty")}</p>
+              ) : (
+                <ul className="ai-context-list">
+                  {aiContext.map((node) => (
+                    <li key={node.path}>
+                      <span>{node.name}</span>
+                      <small>{t(roleLabels[node.role])}</small>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
         ) : (
           <div className="disabled-feature">
             <span className="eyebrow">MVP</span>
-            <h3>{tab === "assistant" ? t("aiChat") : t("changeReview")}</h3>
-            <p>
-              {tab === "assistant"
-                ? t("aiUnavailable")
-                : t("changesUnavailable")}
-            </p>
+            <h3>{t("changeReview")}</h3>
+            <p>{t("changesUnavailable")}</p>
           </div>
         )}
       </section>

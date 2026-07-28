@@ -10,12 +10,18 @@ import {
   ProjectConfirmImportResponseSchema,
   ProjectCreateRequestSchema,
   ProjectCreateResponseSchema,
+  ProjectDeleteEntryRequestSchema,
+  ProjectDeleteEntryResponseSchema,
   ProjectGetStructureRequestSchema,
   ProjectGetStructureResponseSchema,
   ProjectImportPreviewRequestSchema,
   ProjectImportPreviewResponseSchema,
   ProjectListRequestSchema,
   ProjectListResponseSchema,
+  ProjectRenameEntryRequestSchema,
+  ProjectRenameEntryResponseSchema,
+  ProjectUpdateRequestSchema,
+  ProjectUpdateResponseSchema,
 } from "./project.js";
 import { RuntimeInfoRequestSchema, RuntimeInfoSchema } from "./runtime.js";
 import {
@@ -32,10 +38,13 @@ import {
 export const IPC_INVOKE_CHANNELS = {
   runtimeGetInfo: "app:get-runtime-info",
   projectCreate: "project:create",
+  projectDeleteEntry: "project:delete-entry",
+  projectUpdate: "project:update",
   projectPreviewImport: "project:preview-import",
   projectConfirmImport: "project:confirm-import",
   projectList: "project:list",
   projectGetStructure: "project:get-structure",
+  projectRenameEntry: "project:rename-entry",
   documentRead: "document:read",
   documentSave: "document:save",
   versionCreate: "version:create",
@@ -51,10 +60,13 @@ export const IPC_EVENT_CHANNELS = {
 export const IPC_INVOKE_CHANNEL_NAMES = [
   IPC_INVOKE_CHANNELS.runtimeGetInfo,
   IPC_INVOKE_CHANNELS.projectCreate,
+  IPC_INVOKE_CHANNELS.projectDeleteEntry,
+  IPC_INVOKE_CHANNELS.projectUpdate,
   IPC_INVOKE_CHANNELS.projectPreviewImport,
   IPC_INVOKE_CHANNELS.projectConfirmImport,
   IPC_INVOKE_CHANNELS.projectList,
   IPC_INVOKE_CHANNELS.projectGetStructure,
+  IPC_INVOKE_CHANNELS.projectRenameEntry,
   IPC_INVOKE_CHANNELS.documentRead,
   IPC_INVOKE_CHANNELS.documentSave,
   IPC_INVOKE_CHANNELS.versionCreate,
@@ -97,6 +109,14 @@ export const IPC_INVOKE_CONTRACTS = {
     request: ProjectCreateRequestSchema,
     response: ProjectCreateResponseSchema,
   },
+  [IPC_INVOKE_CHANNELS.projectDeleteEntry]: {
+    request: ProjectDeleteEntryRequestSchema,
+    response: ProjectDeleteEntryResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.projectUpdate]: {
+    request: ProjectUpdateRequestSchema,
+    response: ProjectUpdateResponseSchema,
+  },
   [IPC_INVOKE_CHANNELS.projectPreviewImport]: {
     request: ProjectImportPreviewRequestSchema,
     response: ProjectImportPreviewResponseSchema,
@@ -112,6 +132,10 @@ export const IPC_INVOKE_CONTRACTS = {
   [IPC_INVOKE_CHANNELS.projectGetStructure]: {
     request: ProjectGetStructureRequestSchema,
     response: ProjectGetStructureResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.projectRenameEntry]: {
+    request: ProjectRenameEntryRequestSchema,
+    response: ProjectRenameEntryResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.documentRead]: {
     request: DocumentReadRequestSchema,

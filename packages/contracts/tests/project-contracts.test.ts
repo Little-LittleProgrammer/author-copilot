@@ -8,10 +8,13 @@ import {
   IPC_INVOKE_CHANNELS,
   ProjectConfirmImportRequestSchema,
   ProjectCreateRequestSchema,
+  ProjectDeleteEntryRequestSchema,
   ProjectImportPreviewResponseSchema,
   ProjectOperationErrorCodeSchema,
   ProjectOperationErrorSchema,
+  ProjectRenameEntryRequestSchema,
   ProjectStructureNodeSchema,
+  ProjectUpdateRequestSchema,
   RelativeProjectPathSchema,
 } from "../src/index.js";
 
@@ -173,6 +176,36 @@ describe("project contracts", () => {
         absolutePath: "/tmp/第一幕/01-开场.md",
       }).success,
     ).toBe(false);
+  });
+
+  it("validates project and structure rename mutations", () => {
+    expect(
+      ProjectUpdateRequestSchema.parse({ projectId, title: "长夜新编" }),
+    ).toEqual({ projectId, title: "长夜新编" });
+    expect(
+      ProjectRenameEntryRequestSchema.parse({
+        projectId,
+        relativePath: "第一卷/第一章",
+        name: "雨夜",
+      }),
+    ).toEqual({
+      projectId,
+      relativePath: "第一卷/第一章",
+      name: "雨夜",
+    });
+    expect(
+      ProjectRenameEntryRequestSchema.safeParse({
+        projectId,
+        relativePath: "../第一章",
+        name: "雨夜",
+      }).success,
+    ).toBe(false);
+    expect(
+      ProjectDeleteEntryRequestSchema.parse({
+        projectId,
+        relativePath: "第一卷/第一章",
+      }),
+    ).toEqual({ projectId, relativePath: "第一卷/第一章" });
   });
 
   it("defines the complete structured project error vocabulary", () => {

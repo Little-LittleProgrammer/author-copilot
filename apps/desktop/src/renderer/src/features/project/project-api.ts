@@ -5,13 +5,19 @@ import type {
   ProjectConfirmImportResponse,
   ProjectCreateRequest,
   ProjectCreateResponse,
+  ProjectDeleteEntryRequest,
+  ProjectDeleteEntryResponse,
   ProjectGetStructureResponse,
   ProjectImportPreviewRequest,
   ProjectImportRecognizedNode,
   ProjectImportPreviewResponse,
   ProjectListResponse,
   ProjectOperationFailure,
+  ProjectRenameEntryRequest,
+  ProjectRenameEntryResponse,
   ProjectStructureNode,
+  ProjectUpdateRequest,
+  ProjectUpdateResponse,
 } from "@author-copilot/contracts";
 
 import {
@@ -30,6 +36,12 @@ interface ProjectWindowApi {
     readonly create: (
       input: ProjectCreateRequest,
     ) => Promise<ProjectCreateResponse>;
+    readonly deleteEntry: (
+      input: ProjectDeleteEntryRequest,
+    ) => Promise<ProjectDeleteEntryResponse>;
+    readonly update: (
+      input: ProjectUpdateRequest,
+    ) => Promise<ProjectUpdateResponse>;
     readonly getStructure: (input: {
       readonly projectId: string;
     }) => Promise<ProjectGetStructureResponse>;
@@ -41,6 +53,9 @@ interface ProjectWindowApi {
       readonly projectId: string;
       readonly relativePath: string;
     }) => Promise<DocumentReadResponse>;
+    readonly renameEntry: (
+      input: ProjectRenameEntryRequest,
+    ) => Promise<ProjectRenameEntryResponse>;
     readonly saveDocument: (input: {
       readonly content: string;
       readonly expectedHash: string;
@@ -64,6 +79,18 @@ export function getProjectApi(): ProjectBridge | undefined {
         title: input.name,
         template: input.type,
       });
+      return mapProject(unwrap(response).project);
+    },
+    async deleteEntry(input) {
+      unwrap(
+        await raw.deleteEntry({
+          projectId: input.projectId,
+          relativePath: input.path,
+        }),
+      );
+    },
+    async update(input) {
+      const response = await raw.update(input);
       return mapProject(unwrap(response).project);
     },
     async getStructure(input) {
@@ -91,6 +118,19 @@ export function getProjectApi(): ProjectBridge | undefined {
         content: response.content,
         path: response.relativePath,
         version: response.contentHash,
+      };
+    },
+    async renameEntry(input) {
+      const response = unwrap(
+        await raw.renameEntry({
+          name: input.name,
+          projectId: input.projectId,
+          relativePath: input.path,
+        }),
+      );
+      return {
+        path: response.relativePath,
+        previousPath: response.previousRelativePath,
       };
     },
     async saveDocument(input) {
@@ -141,7 +181,8 @@ function mapStructureNode(node: ProjectStructureNode): StructureNode {
     id: node.relativePath,
     kind: node.kind === "document" ? "document" : "group",
     name: node.displayName,
-    ...(node.kind === "document" ? { path: node.relativePath } : {}),
+    role: node.role,
+    path: node.relativePath,
   };
 }
 

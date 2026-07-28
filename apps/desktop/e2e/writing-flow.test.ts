@@ -84,7 +84,7 @@ test("creates, edits, saves, and protects an externally changed novel", async ()
       .click();
     await expect(appTabs.getByRole("tab")).toHaveCount(2);
 
-    await page.getByRole("button", { name: "01-正文" }).click();
+    await page.getByRole("button", { name: "01-正文", exact: true }).click();
     const editor = page.getByTestId("document-editor");
     await editor.fill("# 第一场\n\n夜雨落在站台上。\n");
     await page.getByTestId("save-document").click();
@@ -139,11 +139,129 @@ test("creates the screenplay structure through the desktop workflow", async () =
       .click();
     await page.getByTestId("project-name").fill(projectTitle);
     await page.getByTestId("project-dialog-submit").click();
-    await page.getByRole("button", { name: "01-第一场" }).click();
+    await page.getByRole("button", { name: "01-第一场", exact: true }).click();
     await expect(page.getByTestId("document-editor")).toHaveValue("");
     await assert.doesNotReject(
       lstat(join(temporaryRoot, projectTitle, "第一幕", "01-第一场.md")),
     );
+  } finally {
+    await application.close();
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("fills the writing page and edits work, volume, chapter, and document names", async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
+  const projectTitle = "待修改作品";
+  const projectRoot = join(temporaryRoot, projectTitle);
+  const application = await launchApplication(temporaryRoot);
+
+  try {
+    const page = await application.firstWindow();
+    await signIn(page);
+    await page.getByRole("button", { name: /新建小说|New novel/u }).click();
+    await page.getByTestId("project-name").fill(projectTitle);
+    await page.getByTestId("project-dialog-submit").click();
+    await page.getByRole("button", { name: "01-正文", exact: true }).click();
+
+    const editor = page.getByTestId("document-editor");
+    const editorBox = await editor.boundingBox();
+    const pageBox = await page.locator("body").boundingBox();
+    expect(editorBox).not.toBeNull();
+    expect(pageBox).not.toBeNull();
+    expect(editorBox?.height ?? 0).toBeGreaterThan(
+      (pageBox?.height ?? 0) * 0.6,
+    );
+    await expect(page.locator("body")).not.toContainText(/Markdown|\.md/u);
+
+    await page
+      .getByRole("button", { name: /修改作品信息|Edit work information/u })
+      .click();
+    await page.getByTestId("project-title").fill("新作品名");
+    await page.getByTestId("project-info-submit").click();
+    await expect(
+      page.locator(".app-tabs").getByRole("tab", { name: "新作品名" }),
+    ).toBeVisible();
+
+    await page
+      .getByRole("button", { name: /重命名.*01-正文|Rename.*01-正文/u })
+      .click();
+    await page
+      .getByRole("textbox", { name: /重命名|Rename/u, exact: true })
+      .fill("开场");
+    await page
+      .getByRole("button", { name: /确认重命名|Confirm rename/u })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "开场", exact: true }),
+    ).toBeVisible();
+
+    await page
+      .getByRole("button", { name: /重命名.*第一章|Rename.*第一章/u })
+      .click();
+    await page
+      .getByRole("textbox", { name: /重命名|Rename/u, exact: true })
+      .fill("序章");
+    await page
+      .getByRole("button", { name: /确认重命名|Confirm rename/u })
+      .click();
+    await page
+      .getByRole("button", { name: /重命名.*第一卷|Rename.*第一卷/u })
+      .click();
+    await page
+      .getByRole("textbox", { name: /重命名|Rename/u, exact: true })
+      .fill("上卷");
+    await page
+      .getByRole("button", { name: /确认重命名|Confirm rename/u })
+      .click();
+
+    await expect(page.locator(".document-title h2")).toHaveText("开场");
+    await expect(
+      page.getByRole("button", { name: "上卷", exact: true }),
+    ).toBeVisible();
+    await assert.doesNotReject(
+      lstat(join(projectRoot, "上卷", "序章", "开场.md")),
+    );
+
+    await page
+      .getByRole("button", { name: "开场", exact: true })
+      .click({ button: "right" });
+    await expect(
+      page.getByRole("menuitem", { name: /编辑名称|Edit name/u }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: /删除|Delete/u }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: "test-results/structure-context-menu.png",
+      fullPage: true,
+    });
+    await page
+      .getByRole("menuitem", { name: /添加到 AI 上下文|Add to AI context/u })
+      .click();
+    await expect(
+      page.getByLabel(/已加入 AI 上下文|Included in AI context/u),
+    ).toBeVisible();
+    await page.getByRole("tab", { name: /AI 对话|AI chat/u }).click();
+    await expect(
+      page.getByRole("region", { name: /AI 上下文|AI context/u }),
+    ).toContainText("开场");
+    await page.getByRole("tab", { name: /正文|Content/u }).click();
+
+    await page.screenshot({
+      path: "test-results/editable-writing-workspace.png",
+      fullPage: true,
+    });
+
+    page.once("dialog", (dialog) => dialog.accept());
+    await page
+      .getByRole("button", { name: "序章", exact: true })
+      .click({ button: "right" });
+    await page.getByRole("menuitem", { name: /删除|Delete/u }).click();
+    await expect(page.getByTestId("document-editor")).toHaveCount(0);
+    await assert.rejects(lstat(join(projectRoot, "上卷", "序章")), {
+      code: "ENOENT",
+    });
   } finally {
     await application.close();
     await rm(temporaryRoot, { recursive: true, force: true });
@@ -168,9 +286,7 @@ test("previews a complex Markdown folder before in-place import", async () => {
   try {
     const page = await application.firstWindow();
     await signIn(page);
-    await page
-      .getByRole("button", { name: /导入 Markdown|Import Markdown/u })
-      .click();
+    await page.getByRole("button", { name: /导入作品|Import work/u }).click();
     await page
       .getByRole("button", { name: /选择文件夹|Choose folder/u })
       .click();
@@ -179,7 +295,7 @@ test("previews a complex Markdown folder before in-place import", async () => {
     await assert.rejects(lstat(metadataPath), { code: "ENOENT" });
 
     await page.getByTestId("project-dialog-submit").click();
-    await page.getByRole("button", { name: "01-开场" }).click();
+    await page.getByRole("button", { name: "01-开场", exact: true }).click();
     await expect(page.getByTestId("document-editor")).toHaveValue(
       "# 已有开场\n",
     );

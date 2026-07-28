@@ -422,3 +422,134 @@ describe("ProjectService document authorization and atomic save", () => {
     ).toEqual([]);
   });
 });
+
+describe("ProjectService project and structure editing", () => {
+  it("updates the displayed title without renaming the project folder", async () => {
+    const { projects, userData, service } = await fixture();
+    const project = await service.createProject(projects, "原书名", "novel");
+
+    const updated = await service.updateProjectTitle(
+      project.projectId,
+      "新书名",
+    );
+
+    expect(updated.rootPath).toBe(project.rootPath);
+    expect(updated.metadata.title).toBe("新书名");
+    expect(
+      JSON.parse(
+        await readFile(join(project.rootPath, "author-copilot.json"), "utf8"),
+      ),
+    ).toMatchObject({ title: "新书名" });
+    expect(
+      JSON.parse(await readFile(join(userData, "projects.json"), "utf8")),
+    ).toMatchObject({
+      projects: { [project.projectId]: { metadata: { title: "新书名" } } },
+    });
+  });
+
+  it("renames volumes, chapters, and documents while retaining storage extensions", async () => {
+    const { projects, service } = await fixture();
+    const project = await service.createProject(
+      projects,
+      "可编辑目录",
+      "novel",
+    );
+
+    expect(await service.renameEntry(project.projectId, "第一卷", "序卷")).toBe(
+      "序卷",
+    );
+    expect(
+      await service.renameEntry(project.projectId, "序卷/第一章", "启程"),
+    ).toBe("序卷/启程");
+    expect(
+      await service.renameEntry(
+        project.projectId,
+        "序卷/启程/01-正文.md",
+        "相遇.md",
+      ),
+    ).toBe("序卷/启程/相遇.md");
+    expect(
+      await readFile(join(project.rootPath, "序卷", "启程", "相遇.md"), "utf8"),
+    ).toBe("");
+    expect(
+      (await service.getStructure(project.projectId)).nodes[0],
+    ).toMatchObject({
+      name: "序卷",
+      children: [
+        {
+          name: "启程",
+          children: [{ name: "相遇", relativePath: "序卷/启程/相遇.md" }],
+        },
+      ],
+    });
+  });
+
+  it("rejects unsafe and colliding structure names", async () => {
+    const { projects, service } = await fixture();
+    const project = await service.createProject(
+      projects,
+      "受保护目录",
+      "novel",
+    );
+    await mkdir(join(project.rootPath, "已有卷"));
+
+    await expect(
+      service.renameEntry(project.projectId, "第一卷", "../逃逸"),
+    ).rejects.toBeInstanceOf(InvalidProjectPathError);
+    await expect(
+      service.renameEntry(project.projectId, "第一卷", "已有卷"),
+    ).rejects.toThrow("already exists");
+    await expect(
+      service.renameEntry(project.projectId, ".git", "配置"),
+    ).rejects.toBeInstanceOf(InvalidProjectPathError);
+  });
+
+  it("deletes only recognized documents and structure directories", async () => {
+    const { projects, service } = await fixture();
+    const project = await service.createProject(
+      projects,
+      "可删除目录",
+      "novel",
+    );
+    await mkdir(join(project.rootPath, "隐藏资料"));
+
+    await expect(
+      service.deleteEntry(project.projectId, "隐藏资料"),
+    ).rejects.toBeInstanceOf(InvalidProjectPathError);
+    await service.deleteEntry(project.projectId, "第一卷/第一章/01-正文.md");
+    await expect(
+      lstat(join(project.rootPath, "第一卷", "第一章", "01-正文.md")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    const directoryProject = await service.createProject(
+      projects,
+      "删除整卷",
+      "novel",
+    );
+    await service.deleteEntry(directoryProject.projectId, "第一卷");
+    await expect(
+      lstat(join(directoryProject.rootPath, "第一卷")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("preserves a structure directory when it contains a non-writing file", async () => {
+    const { projects, service } = await fixture();
+    const project = await service.createProject(
+      projects,
+      "包含资料的目录",
+      "novel",
+    );
+    const chapterPath = join(project.rootPath, "第一卷", "第一章");
+    const resourcePath = join(chapterPath, "人物关系.png");
+    await writeFile(resourcePath, "image-placeholder", "utf8");
+
+    await expect(
+      service.deleteEntry(project.projectId, "第一卷"),
+    ).rejects.toBeInstanceOf(InvalidProjectPathError);
+    await expect(readFile(resourcePath, "utf8")).resolves.toBe(
+      "image-placeholder",
+    );
+    await expect(
+      readFile(join(chapterPath, "01-正文.md"), "utf8"),
+    ).resolves.toBe("");
+  });
+});

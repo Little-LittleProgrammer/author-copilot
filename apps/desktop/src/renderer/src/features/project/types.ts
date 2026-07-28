@@ -12,7 +12,8 @@ export interface StructureNode {
   readonly id: string;
   readonly kind: "document" | "group";
   readonly name: string;
-  readonly path?: string;
+  readonly path: string;
+  readonly role: "act" | "chapter" | "scene" | "unclassified" | "volume";
 }
 
 export interface DocumentSnapshot {
@@ -55,6 +56,14 @@ export interface ProjectBridge {
     readonly name: string;
     readonly type: ProjectType;
   }) => Promise<ProjectSummary>;
+  readonly deleteEntry: (input: {
+    readonly path: string;
+    readonly projectId: string;
+  }) => Promise<void>;
+  readonly update: (input: {
+    readonly projectId: string;
+    readonly title: string;
+  }) => Promise<ProjectSummary>;
   readonly getStructure: (input: {
     readonly projectId: string;
   }) => Promise<readonly StructureNode[]>;
@@ -64,6 +73,14 @@ export interface ProjectBridge {
     readonly path: string;
     readonly projectId: string;
   }) => Promise<DocumentSnapshot>;
+  readonly renameEntry: (input: {
+    readonly name: string;
+    readonly path: string;
+    readonly projectId: string;
+  }) => Promise<{
+    readonly path: string;
+    readonly previousPath: string;
+  }>;
   readonly saveDocument: (input: {
     readonly content: string;
     readonly expectedVersion: string;
