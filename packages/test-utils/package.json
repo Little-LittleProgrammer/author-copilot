@@ -27,9 +27,9 @@
   "devDependencies": {
     "@author-copilot/config-eslint": "workspace:*",
     "@author-copilot/config-typescript": "workspace:*",
-    "@types/node": "24.10.4",
-    "eslint": "10.7.0",
-    "typescript": "6.0.3",
-    "vitest": "4.1.10"
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

@@ -7,11 +7,7 @@ interface ProjectSidebarProps {
   readonly activeDocumentPath: string | undefined;
   readonly activeProject: ProjectSummary | undefined;
   readonly loading: boolean;
-  readonly onCreate: (type: "novel" | "screenplay") => void;
-  readonly onImport: () => void;
   readonly onSelectDocument: (node: StructureNode) => void;
-  readonly onSelectProject: (project: ProjectSummary) => void;
-  readonly projects: readonly ProjectSummary[];
   readonly structure: readonly StructureNode[];
   readonly t: (key: MessageKey) => string;
 }
@@ -63,65 +59,20 @@ export function ProjectSidebar(props: ProjectSidebarProps): JSX.Element {
     activeDocumentPath,
     activeProject,
     loading,
-    onCreate,
-    onImport,
     onSelectDocument,
-    onSelectProject,
-    projects,
     structure,
     t,
   } = props;
   return (
     <aside className="sidebar" aria-label={t("projects")}>
-      <div className="sidebar-section project-section">
-        <div className="section-heading">
-          <span>{t("projects")}</span>
-          <button
-            className="icon-button small"
-            type="button"
-            title={t("createProject")}
-            aria-label={t("createProject")}
-            onClick={() => onCreate("novel")}
-          >
-            +
-          </button>
-        </div>
-        <div className="project-actions">
-          <button type="button" onClick={() => onCreate("novel")}>
-            {t("createNovel")}
-          </button>
-          <button type="button" onClick={() => onCreate("screenplay")}>
-            {t("createScreenplay")}
-          </button>
-          <button type="button" onClick={onImport}>
-            {t("importProject")}
-          </button>
-        </div>
-        {loading ? <p className="sidebar-note">{t("loading")}</p> : null}
-        {!loading && projects.length === 0 ? (
-          <div className="sidebar-empty">
-            <strong>{t("noProjects")}</strong>
-            <p>{t("noProjectsHint")}</p>
-          </div>
-        ) : (
-          <select
-            className="project-select"
-            value={activeProject?.id ?? ""}
-            aria-label={t("project")}
-            onChange={(event) => {
-              const project = projects.find(
-                ({ id }) => id === event.target.value,
-              );
-              if (project !== undefined) onSelectProject(project);
-            }}
-          >
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-        )}
+      <div className="sidebar-section project-section editor-project-summary">
+        <span className="eyebrow">{t("currentWork")}</span>
+        <strong>{activeProject?.name ?? t("project")}</strong>
+        <span>
+          {activeProject?.type === "screenplay"
+            ? t("projectTypeScreenplay")
+            : t("projectTypeNovel")}
+        </span>
       </div>
 
       <div className="sidebar-section structure-section">

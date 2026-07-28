@@ -8,12 +8,14 @@ import {
   ProjectImportPreviewResponseSchema,
   ProjectListResponseSchema,
   RuntimeInfoSchema,
+  VersionCreateResponseSchema,
   type DocumentReadRequest,
   type DocumentSaveRequest,
   type ProjectConfirmImportRequest,
   type ProjectCreateRequest,
   type ProjectGetStructureRequest,
   type ProjectImportPreviewRequest,
+  type VersionCreateRequest,
 } from "@author-copilot/contracts";
 import { contextBridge, ipcRenderer } from "electron";
 
@@ -79,6 +81,15 @@ const api: AuthorCopilotApi = Object.freeze({
         request,
       );
       return DocumentSaveResponseSchema.parse(response);
+    },
+  }),
+  version: Object.freeze({
+    create: async (request: VersionCreateRequest) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.versionCreate,
+        request,
+      );
+      return VersionCreateResponseSchema.parse(response);
     },
   }),
 });

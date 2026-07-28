@@ -31,14 +31,14 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "eslint": "10.7.0",
-    "eslint-plugin-react-hooks": "7.1.1",
-    "eslint-plugin-react-refresh": "0.5.3",
-    "typescript-eslint": "8.63.0"
+    "eslint": "catalog:",
+    "eslint-plugin-react-hooks": "catalog:",
+    "eslint-plugin-react-refresh": "catalog:",
+    "typescript-eslint": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "24.10.4",
-    "typescript": "6.0.3",
-    "vitest": "4.1.10"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

@@ -12,13 +12,13 @@
     "package:mac:arm64": "electron-builder --dir --mac --arm64"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.207",
-    "@anthropic-ai/sdk": "0.111.0"
+    "@anthropic-ai/claude-agent-sdk": "catalog:",
+    "@anthropic-ai/sdk": "catalog:"
   },
   "devDependencies": {
-    "@electron/get": "3.1.0",
-    "electron": "43.1.0",
-    "electron-builder": "26.15.3"
+    "@electron/get": "catalog:",
+    "electron": "catalog:",
+    "electron-builder": "catalog:"
   },
   "build": {
     "appId": "com.authorcopilot.spike.claude-sdk",

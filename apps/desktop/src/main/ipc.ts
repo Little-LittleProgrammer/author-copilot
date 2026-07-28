@@ -7,11 +7,14 @@ import { app, ipcMain, type IpcMainInvokeEvent } from "electron";
 
 import { assertTrustedIpcRequest } from "./ipc-policy.js";
 import { registerProjectIpcHandlers } from "./ipc/project-handlers.js";
+import { registerVersionIpcHandlers } from "./ipc/version-handlers.js";
 import type { ProjectDirectoryPicker } from "./project-dialogs.js";
 import type { ProjectService } from "./project/index.js";
+import type { GitService } from "./git/index.js";
 
 export interface IpcHandlerOptions {
   readonly projectService: ProjectService;
+  readonly gitService: GitService;
   readonly directoryPicker: ProjectDirectoryPicker;
   readonly onRuntimeInfo?: () => void;
 }
@@ -53,5 +56,9 @@ export function registerIpcHandlers(
     trustedRendererUrl,
     projectService: options.projectService,
     directoryPicker: options.directoryPicker,
+  });
+  registerVersionIpcHandlers({
+    trustedRendererUrl,
+    gitService: options.gitService,
   });
 }

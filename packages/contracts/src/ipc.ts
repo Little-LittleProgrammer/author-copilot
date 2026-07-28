@@ -24,6 +24,10 @@ import {
   TaskCancelResultSchema,
   TaskProgressEventSchema,
 } from "./tasks.js";
+import {
+  VersionCreateRequestSchema,
+  VersionCreateResponseSchema,
+} from "./version.js";
 
 export const IPC_INVOKE_CHANNELS = {
   runtimeGetInfo: "app:get-runtime-info",
@@ -34,6 +38,7 @@ export const IPC_INVOKE_CHANNELS = {
   projectGetStructure: "project:get-structure",
   documentRead: "document:read",
   documentSave: "document:save",
+  versionCreate: "version:create",
   knowledgeGetStatus: "knowledge:get-status",
   taskCancel: "task:cancel",
 } as const;
@@ -52,6 +57,7 @@ export const IPC_INVOKE_CHANNEL_NAMES = [
   IPC_INVOKE_CHANNELS.projectGetStructure,
   IPC_INVOKE_CHANNELS.documentRead,
   IPC_INVOKE_CHANNELS.documentSave,
+  IPC_INVOKE_CHANNELS.versionCreate,
   IPC_INVOKE_CHANNELS.knowledgeGetStatus,
   IPC_INVOKE_CHANNELS.taskCancel,
 ] as const;
@@ -114,6 +120,10 @@ export const IPC_INVOKE_CONTRACTS = {
   [IPC_INVOKE_CHANNELS.documentSave]: {
     request: DocumentSaveRequestSchema,
     response: DocumentSaveResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.versionCreate]: {
+    request: VersionCreateRequestSchema,
+    response: VersionCreateResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.knowledgeGetStatus]: {
     request: KnowledgeIndexStatusRequestSchema,

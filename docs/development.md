@@ -39,8 +39,8 @@ pnpm --filter @author-copilot/desktop package:win:x64
 ## API
 
 ```bash
-HOST=127.0.0.1 PORT=3000 pnpm --filter @author-copilot/api dev
+HOST=127.0.0.1 PORT=9191 pnpm --filter @author-copilot/api dev
 ```
 
-The M1 health endpoint is available at `http://127.0.0.1:3000/health`.
+The M1 health endpoint is available at `http://127.0.0.1:9191/health`.
 MongoDB and Redis are intentionally deferred to M7.

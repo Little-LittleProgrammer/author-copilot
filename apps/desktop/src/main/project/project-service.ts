@@ -307,6 +307,23 @@ export class ProjectService {
     return this.registry.list();
   }
 
+  async getProjectRoot(projectId: string): Promise<string> {
+    const project = await this.requireProject(projectId);
+    const canonicalRoot = await realpath(project.rootPath);
+    if (canonicalRoot !== project.rootPath) {
+      throw new InvalidProjectPathError(
+        "The registered project root no longer resolves to its original path.",
+      );
+    }
+    const rootStats = await stat(canonicalRoot);
+    if (!rootStats.isDirectory()) {
+      throw new InvalidProjectPathError(
+        "The registered project root is not a directory.",
+      );
+    }
+    return canonicalRoot;
+  }
+
   async getStructure(projectId: string): Promise<ProjectStructure> {
     const project = await this.requireProject(projectId);
     return buildProjectStructure(

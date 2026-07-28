@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 
+import { Button } from "@/components/ui/button.js";
 import type { MessageKey } from "../../i18n/index.js";
 import type { DocumentSnapshot, ProjectSummary } from "../project/types.js";
 
@@ -14,12 +15,14 @@ interface EditorWorkspaceProps {
   readonly loading: boolean;
   readonly onChange: (content: string) => void;
   readonly onDiscard: () => void;
+  readonly onCreateVersion: () => void;
   readonly onReload: () => void;
   readonly onSave: () => void;
   readonly onTabChange: (tab: WorkspaceTab) => void;
   readonly saving: boolean;
   readonly tab: WorkspaceTab;
   readonly t: (key: MessageKey) => string;
+  readonly versionNotice: string | undefined;
 }
 
 export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
@@ -32,12 +35,14 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
     loading,
     onChange,
     onDiscard,
+    onCreateVersion,
     onReload,
     onSave,
     onTabChange,
     saving,
     tab,
     t,
+    versionNotice,
   } = props;
   const tabs: readonly { id: WorkspaceTab; label: MessageKey }[] = [
     { id: "content", label: "content" },
@@ -52,7 +57,11 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
           <h2>{document?.path.split(/[\\/]/).at(-1) ?? t("documentEmpty")}</h2>
         </div>
         <div className="editor-status" aria-live="polite">
-          {dirty ? (
+          {versionNotice !== undefined ? (
+            <span className="max-w-40 overflow-hidden text-ellipsis whitespace-nowrap text-primary">
+              {versionNotice}
+            </span>
+          ) : dirty ? (
             <span className="dirty-indicator">{t("unsaved")}</span>
           ) : document !== undefined ? (
             <span>{t("saved")}</span>
@@ -62,6 +71,18 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
               {t("discard")}
             </button>
           ) : null}
+          <Button
+            type="button"
+            className="h-8 min-w-[78px] text-xs"
+            variant="outline"
+            size="sm"
+            data-testid="save-version"
+            disabled={activeProject === undefined || dirty || saving}
+            title={dirty ? t("versionSaveDocumentFirst") : t("saveVersion")}
+            onClick={onCreateVersion}
+          >
+            {t("saveVersion")}
+          </Button>
           <button
             type="button"
             className="button primary save-button"

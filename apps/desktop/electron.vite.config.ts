@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 
 import react from "@vitejs/plugin-react-swc";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 
 export default defineConfig({
@@ -35,7 +36,12 @@ export default defineConfig({
   },
   renderer: {
     root: resolve(import.meta.dirname, "src/renderer"),
-    plugins: [react()],
+    plugins: [react(), tailwindcss()],
+    resolve: {
+      alias: {
+        "@": resolve(import.meta.dirname, "src/renderer/src"),
+      },
+    },
     build: {
       rolldownOptions: {
         input: resolve(import.meta.dirname, "src/renderer/index.html"),

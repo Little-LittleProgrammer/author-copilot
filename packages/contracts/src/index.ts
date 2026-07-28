@@ -4,3 +4,4 @@ export * from "./ipc.js";
 export * from "./project.js";
 export * from "./runtime.js";
 export * from "./tasks.js";
+export * from "./version.js";

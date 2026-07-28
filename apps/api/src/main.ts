@@ -4,7 +4,7 @@ import { Logger } from "@nestjs/common";
 
 import { createApplication } from "./application.js";
 
-const DEFAULT_PORT = 3000;
+const DEFAULT_PORT = 9191;
 
 function getPort(value: string | undefined): number {
   if (value === undefined) {

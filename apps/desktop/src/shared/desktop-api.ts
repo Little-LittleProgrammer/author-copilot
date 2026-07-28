@@ -13,6 +13,8 @@ import type {
   ProjectImportPreviewResponse,
   ProjectListResponse,
   RuntimeInfo,
+  VersionCreateRequest,
+  VersionCreateResponse,
 } from "@author-copilot/contracts";
 
 export interface AuthorCopilotApi {
@@ -39,5 +41,10 @@ export interface AuthorCopilotApi {
     readonly saveDocument: (
       request: DocumentSaveRequest,
     ) => Promise<DocumentSaveResponse>;
+  };
+  readonly version: {
+    readonly create: (
+      request: VersionCreateRequest,
+    ) => Promise<VersionCreateResponse>;
   };
 }
