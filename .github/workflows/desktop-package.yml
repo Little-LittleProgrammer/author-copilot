@@ -1,6 +1,18 @@
 name: Desktop package matrix
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/desktop-package.yml"
+      - ".node-version"
+      - "apps/desktop/**"
+      - "packages/**"
+      - "tooling/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
   schedule:
     - cron: "17 18 * * *"
   workflow_dispatch:
