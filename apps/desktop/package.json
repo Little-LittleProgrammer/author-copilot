@@ -14,7 +14,7 @@
     "package": "pnpm package:prepare && pnpm runtime:fetch && pnpm build && electron-builder",
     "package:mac:arm64": "pnpm package:prepare && pnpm runtime:fetch:mac:arm64 && pnpm build && electron-builder --mac --arm64",
     "package:mac:x64": "pnpm package:prepare && pnpm runtime:fetch:mac:x64 && pnpm build && electron-builder --mac --x64",
-    "package:prepare": "pnpm --filter @author-copilot/config-typescript build",
+    "package:prepare": "pnpm --workspace-root turbo run build --filter=@author-copilot/desktop^...",
     "package:win:arm64": "pnpm package:prepare && pnpm runtime:fetch:win:arm64 && pnpm build && electron-builder --win --arm64",
     "package:win:x64": "pnpm package:prepare && pnpm runtime:fetch:win:x64 && pnpm build && electron-builder --win --x64",
     "runtime:fetch": "node ../../tooling/scripts/fetch-git-runtime.ts",
