@@ -36,12 +36,12 @@ jobs:
           - os: macos
             target: mac
             arch: x64
-            runner: macos-15
+            runner: macos-15-intel
             executable: apps/desktop/release/mac/Author Copilot.app/Contents/MacOS/Author Copilot
           - os: macos
             target: mac
             arch: arm64
-            runner: macos-15-xlarge
+            runner: macos-15
             executable: apps/desktop/release/mac-arm64/Author Copilot.app/Contents/MacOS/Author Copilot
           - os: windows
             target: win

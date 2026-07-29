@@ -3,6 +3,7 @@
 .turbo/
 coverage/
 playwright-report/
+pnpm-lock.yaml
 test-results/
 dist/
 docs/
@@ -13,3 +14,4 @@ README*.md
 spikes/**/.work/
 spikes/**/dist/
 spikes/**/node_modules/
+spikes/**/pnpm-lock.yaml

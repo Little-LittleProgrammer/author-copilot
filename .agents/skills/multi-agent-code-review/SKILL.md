@@ -25,12 +25,12 @@ You are the lead reviewer. Run a read-only multi-agent code review using child a
 The review has three lanes:
 
 1. **Functional module review lane**
-    - First launch one discovery child agent to map current functional modules.
-    - Then launch independent module-review child agents. Prefer one child agent per module; batch only when concurrency limits require it.
+   - First launch one discovery child agent to map current functional modules.
+   - Then launch independent module-review child agents. Prefer one child agent per module; batch only when concurrency limits require it.
 2. **Overall architecture review lane**
-    - In parallel, launch one architecture-review child agent covering architecture, packaging, project commands, build/test gates, monorepo boundaries, error/message contracts, and release risks.
+   - In parallel, launch one architecture-review child agent covering architecture, packaging, project commands, build/test gates, monorepo boundaries, error/message contracts, and release risks.
 3. **Maintainability review lane**
-    - In parallel, launch one maintainability-review child agent covering architecture maintainability, variable/naming maintainability, code complexity, type safety, and testability.
+   - In parallel, launch one maintainability-review child agent covering architecture maintainability, variable/naming maintainability, code complexity, type safety, and testability.
 
 Do not modify code during the review unless the user explicitly asks for fixes.
 
@@ -389,11 +389,11 @@ Use the narrowest meaningful checks:
 - error/message scans such as `rg -n "getAppErrorInfo|normalizeUnknownError|AppResult|result\\.error\\.message|error\\.message|globalMessage\\.|message\\.error|message\\.success|GlobalMessage" apps packages`
 - anti-pattern scans such as `rg -n "\\.error\\.message" apps/web packages/hooks packages/renderer-services` to find likely AppBusinessError misuse
 - maintainability scans such as:
-    - `rg -c ": any|as any" apps packages` to measure `any` density per file
-    - `rg -n "@ts-ignore|@ts-expect-error" apps packages` to find type suppression
-    - `rg -n "as unknown as" apps packages` to find double-cast type assertions
-    - `rg -n "=== [0-9]+\b" apps packages --include "*.ts" --include "*.vue"` to find magic numbers
-    - `find apps packages -name "*.ts" -o -name "*.vue" | xargs wc -l | sort -rn | head -30` to find oversized files
+  - `rg -c ": any|as any" apps packages` to measure `any` density per file
+  - `rg -n "@ts-ignore|@ts-expect-error" apps packages` to find type suppression
+  - `rg -n "as unknown as" apps packages` to find double-cast type assertions
+  - `rg -n "=== [0-9]+\b" apps packages --include "*.ts" --include "*.vue"` to find magic numbers
+  - `find apps packages -name "*.ts" -o -name "*.vue" | xargs wc -l | sort -rn | head -30` to find oversized files
 
 Report verification honestly:
 
