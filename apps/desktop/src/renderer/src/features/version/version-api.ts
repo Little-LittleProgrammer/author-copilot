@@ -1,6 +1,10 @@
 import type {
   VersionCreateResponse,
+  VersionDiff,
+  VersionDiffResponse,
+  VersionListResponse,
   VersionOperationError,
+  VersionSummary,
 } from "@author-copilot/contracts";
 
 export class VersionApiError extends Error {
@@ -27,12 +31,34 @@ function unwrap(response: VersionCreateResponse): VersionResult {
     : { created: false };
 }
 
+function unwrapList(response: VersionListResponse): readonly VersionSummary[] {
+  if (!response.ok) {
+    throw new VersionApiError(response.error.code, response.error.message);
+  }
+  return response.versions;
+}
+
+function unwrapDiff(response: VersionDiffResponse): VersionDiff {
+  if (!response.ok) {
+    throw new VersionApiError(response.error.code, response.error.message);
+  }
+  return response.diff;
+}
+
 export function getVersionApi():
   | {
       readonly create: (input: {
         readonly message: string;
         readonly projectId: string;
       }) => Promise<VersionResult>;
+      readonly list: (input: {
+        readonly projectId: string;
+        readonly limit?: number;
+      }) => Promise<readonly VersionSummary[]>;
+      readonly diff: (input: {
+        readonly projectId: string;
+        readonly commitId: string;
+      }) => Promise<VersionDiff>;
     }
   | undefined {
   const raw = window.authorCopilot.version;
@@ -41,5 +67,18 @@ export function getVersionApi():
     async create(input) {
       return unwrap(await raw.create(input));
     },
+    async list(input) {
+      return unwrapList(
+        await raw.list({
+          projectId: input.projectId,
+          limit: input.limit ?? 50,
+        }),
+      );
+    },
+    async diff(input) {
+      return unwrapDiff(await raw.diff(input));
+    },
   };
 }
+
+export type { VersionDiff, VersionSummary };

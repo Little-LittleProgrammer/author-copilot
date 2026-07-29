@@ -157,6 +157,21 @@ test("creates, edits, saves, and protects an externally changed novel", async ()
       { encoding: "utf8" },
     );
     expect(versionLog.stdout.trim()).toBe("保存第一场");
+    await page.getByRole("tab", { name: /变更审阅|Change review/u }).click();
+    await expect(
+      page.getByTestId("version-history-item").first(),
+    ).toContainText("保存第一场");
+    await expect(page.locator(".version-file-list")).toContainText(
+      "01-正文.md",
+    );
+    await expect(page.getByTestId("version-diff")).toContainText(
+      "夜雨落在站台上",
+    );
+    await page.screenshot({
+      path: "test-results/m3-version-history-diff.png",
+      fullPage: true,
+    });
+    await page.getByRole("tab", { name: /正文|Content/u }).click();
     await page.screenshot({
       path: "test-results/m2-writing-workspace.png",
       fullPage: true,

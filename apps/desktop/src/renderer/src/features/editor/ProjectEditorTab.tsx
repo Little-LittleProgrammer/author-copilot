@@ -60,6 +60,7 @@ export function ProjectEditorTab({
   const [loading, setLoading] = useState(() => getProjectApi() !== undefined);
   const [saving, setSaving] = useState(false);
   const [versionNotice, setVersionNotice] = useState<string>();
+  const [versionRefreshKey, setVersionRefreshKey] = useState(0);
   const [versionDialogOpen, setVersionDialogOpen] = useState(false);
   const [error, setError] = useState<string>();
   const [tab, setTab] = useState<WorkspaceTab>("content");
@@ -296,6 +297,7 @@ export function ProjectEditorTab({
           ? `${t("versionSaved")} ${result.shortCommitId ?? ""}`.trim()
           : t("versionNoChanges"),
       );
+      if (result.created) setVersionRefreshKey((value) => value + 1);
     },
     [t],
   );
@@ -337,6 +339,7 @@ export function ProjectEditorTab({
           tab={tab}
           t={t}
           versionNotice={versionNotice}
+          versionRefreshKey={versionRefreshKey}
         />
       </div>
       <footer className="statusbar">

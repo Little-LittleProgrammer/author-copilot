@@ -2,6 +2,12 @@ import { spawn } from "node:child_process";
 import { lstat, mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import type {
+  VersionDiff,
+  VersionDiffFile,
+  VersionSummary,
+} from "@author-copilot/contracts";
+
 import { GitServiceError } from "./errors.js";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -47,6 +53,62 @@ function outputLines(value: string): readonly string[] {
   return value.split("\0").filter((entry) => entry.length > 0);
 }
 
+function gitStatus(value: string): VersionDiffFile["status"] {
+  switch (value) {
+    case "A":
+      return "added";
+    case "D":
+      return "deleted";
+    case "T":
+      return "type_changed";
+    default:
+      return "modified";
+  }
+}
+
+function parseNameStatus(value: string): ReadonlyMap<string, string> {
+  const entries = outputLines(value);
+  const statuses = new Map<string, string>();
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index] ?? "";
+    const separator = entry.indexOf("\t");
+    if (separator >= 0) {
+      statuses.set(entry.slice(separator + 1), entry.slice(0, separator));
+      continue;
+    }
+    const path = entries[index + 1];
+    if (path === undefined) break;
+    statuses.set(path, entry);
+    index += 1;
+  }
+  return statuses;
+}
+
+function parseNumstat(
+  value: string,
+  statuses: ReadonlyMap<string, string>,
+): VersionDiffFile[] {
+  return outputLines(value).flatMap((entry) => {
+    const firstSeparator = entry.indexOf("\t");
+    const secondSeparator = entry.indexOf("\t", firstSeparator + 1);
+    if (firstSeparator < 0 || secondSeparator < 0) return [];
+    const additionsValue = entry.slice(0, firstSeparator);
+    const deletionsValue = entry.slice(firstSeparator + 1, secondSeparator);
+    const path = entry.slice(secondSeparator + 1);
+    if (path.length === 0) return [];
+    const binary = additionsValue === "-" || deletionsValue === "-";
+    return [
+      {
+        path,
+        status: gitStatus(statuses.get(path) ?? "M"),
+        additions: binary ? null : Number.parseInt(additionsValue, 10),
+        deletions: binary ? null : Number.parseInt(deletionsValue, 10),
+        binary,
+      },
+    ];
+  });
+}
+
 function isolatedGitEnvironment(
   globalConfigPath: string,
   runtimeEnvironment: Readonly<Record<string, string>> = {},
@@ -73,23 +135,8 @@ export class GitService {
     message: string,
   ): Promise<CreateVersionResult> {
     return this.withProjectLock(projectId, async () => {
-      const rootPath = await realpath(
-        await this.options.resolveProjectRoot(projectId),
-      );
-      await mkdir(this.options.hooksDirectory, {
-        recursive: true,
-        mode: 0o700,
-      });
-      await writeFile(this.globalConfigPath, "", {
-        encoding: "utf8",
-        flag: "w",
-        mode: 0o600,
-      });
-      await writeFile(this.globalAttributesPath, "", {
-        encoding: "utf8",
-        flag: "w",
-        mode: 0o600,
-      });
+      const rootPath = await this.resolveProjectRoot(projectId);
+      await this.prepareIsolationFiles();
       await this.ensureRepository(rootPath);
       await this.assertNoExternalFilters(rootPath);
 
@@ -138,7 +185,176 @@ export class GitService {
     });
   }
 
+  public async listVersions(
+    projectId: string,
+    limit: number,
+  ): Promise<readonly VersionSummary[]> {
+    return this.withProjectLock(projectId, async () => {
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+        throw new GitServiceError(
+          "git_failed",
+          "The version history limit is invalid.",
+          false,
+        );
+      }
+      const rootPath = await this.resolveProjectRoot(projectId);
+      await this.prepareIsolationFiles();
+      if (!(await this.hasRepositoryMetadata(rootPath))) return [];
+      await this.assertRepositoryRoot(rootPath);
+      const head = await this.run(
+        rootPath,
+        ["rev-parse", "--verify", "HEAD"],
+        [0, 1, 128],
+      );
+      if (head.exitCode !== 0) return [];
+      const result = await this.run(rootPath, [
+        "log",
+        "-z",
+        "--abbrev=8",
+        `--max-count=${limit}`,
+        "--format=%H%x00%h%x00%cI%x00%s",
+      ]);
+      const fields = outputLines(result.stdout);
+      if (fields.length % 4 !== 0) {
+        throw new GitServiceError(
+          "git_failed",
+          "Git returned invalid version history.",
+          true,
+        );
+      }
+      const versions: VersionSummary[] = [];
+      for (let index = 0; index < fields.length; index += 4) {
+        const commitId = fields[index]?.trim() ?? "";
+        const shortCommitId = fields[index + 1]?.trim() ?? "";
+        const createdAtValue = fields[index + 2]?.trim() ?? "";
+        const message = (fields[index + 3]?.trim() ?? "").slice(0, 500);
+        const createdAt = new Date(createdAtValue);
+        if (
+          !/^[a-f0-9]{40,64}$/u.test(commitId) ||
+          !/^[a-f0-9]{7,12}$/u.test(shortCommitId) ||
+          Number.isNaN(createdAt.getTime())
+        ) {
+          throw new GitServiceError(
+            "git_failed",
+            "Git returned invalid version history.",
+            true,
+          );
+        }
+        versions.push({
+          commitId,
+          shortCommitId,
+          message,
+          createdAt: createdAt.toISOString(),
+        });
+      }
+      return versions;
+    });
+  }
+
+  public async getVersionDiff(
+    projectId: string,
+    commitId: string,
+  ): Promise<VersionDiff> {
+    return this.withProjectLock(projectId, async () => {
+      if (!/^[a-f0-9]{40,64}$/u.test(commitId)) {
+        throw new GitServiceError(
+          "git_failed",
+          "The requested version is invalid.",
+          false,
+        );
+      }
+      const rootPath = await this.resolveProjectRoot(projectId);
+      await this.prepareIsolationFiles();
+      if (!(await this.hasRepositoryMetadata(rootPath))) {
+        throw new GitServiceError(
+          "invalid_repository",
+          "The project does not have version history.",
+          false,
+        );
+      }
+      await this.assertRepositoryRoot(rootPath);
+      const revision = `${commitId}^{commit}`;
+      await this.run(rootPath, ["cat-file", "-e", revision]);
+      const canonicalCommitId = (
+        await this.run(rootPath, ["rev-parse", revision])
+      ).stdout.trim();
+      const commonArguments = [
+        "--root",
+        "--first-parent",
+        "--no-commit-id",
+        "--no-renames",
+        "-r",
+        canonicalCommitId,
+        "--",
+        ".",
+      ] as const;
+      const [nameStatus, numstat, patch] = await Promise.all([
+        this.run(rootPath, [
+          "diff-tree",
+          "--name-status",
+          "-z",
+          ...commonArguments,
+        ]),
+        this.run(rootPath, [
+          "diff-tree",
+          "--numstat",
+          "-z",
+          ...commonArguments,
+        ]),
+        this.run(rootPath, [
+          "show",
+          "--format=",
+          "--first-parent",
+          "--no-color",
+          "--no-ext-diff",
+          "--no-textconv",
+          "--no-renames",
+          "--unified=3",
+          canonicalCommitId,
+          "--",
+          ".",
+        ]),
+      ]);
+      const statuses = parseNameStatus(nameStatus.stdout);
+      return {
+        commitId: canonicalCommitId,
+        files: parseNumstat(numstat.stdout, statuses),
+        patch: patch.stdout,
+      };
+    });
+  }
+
+  private async resolveProjectRoot(projectId: string): Promise<string> {
+    return realpath(await this.options.resolveProjectRoot(projectId));
+  }
+
+  private async prepareIsolationFiles(): Promise<void> {
+    await mkdir(this.options.hooksDirectory, {
+      recursive: true,
+      mode: 0o700,
+    });
+    await Promise.all([
+      writeFile(this.globalConfigPath, "", {
+        encoding: "utf8",
+        flag: "w",
+        mode: 0o600,
+      }),
+      writeFile(this.globalAttributesPath, "", {
+        encoding: "utf8",
+        flag: "w",
+        mode: 0o600,
+      }),
+    ]);
+  }
+
   private async ensureRepository(rootPath: string): Promise<void> {
+    if (!(await this.hasRepositoryMetadata(rootPath))) {
+      await this.run(rootPath, ["init", "--initial-branch=main"]);
+    }
+    await this.assertRepositoryRoot(rootPath);
+  }
+
+  private async hasRepositoryMetadata(rootPath: string): Promise<boolean> {
     const gitPath = join(rootPath, ".git");
     try {
       const gitStats = await lstat(gitPath);
@@ -156,11 +372,14 @@ export class GitService {
           false,
         );
       }
+      return true;
     } catch (error) {
-      if (!isMissing(error)) throw error;
-      await this.run(rootPath, ["init", "--initial-branch=main"]);
+      if (isMissing(error)) return false;
+      throw error;
     }
+  }
 
+  private async assertRepositoryRoot(rootPath: string): Promise<void> {
     const repositoryRoot = (
       await this.run(rootPath, ["rev-parse", "--show-toplevel"])
     ).stdout.trim();
@@ -233,6 +452,8 @@ export class GitService {
           "gc.auto=0",
           "-c",
           "maintenance.auto=false",
+          "-c",
+          "core.quotePath=false",
           "-c",
           `core.attributesFile=${this.globalAttributesPath}`,
           ...args,

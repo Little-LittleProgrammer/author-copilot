@@ -93,6 +93,59 @@ describe("GitService", () => {
     expect(repositoryRoot.stdout.trim()).toBe(await realpath(projectRoot));
   });
 
+  it("lists versions and returns a structured first-parent diff", async () => {
+    const root = await temporaryRoot();
+    const projectRoot = join(root, "版本历史");
+    const documentPath = join(projectRoot, "第一章.md");
+    await mkdir(projectRoot);
+    await writeFile(documentPath, "第一版\n", "utf8");
+    const service = createService(projectRoot, join(root, "disabled-hooks"));
+
+    const first = await service.createVersion(projectId, "初稿");
+    expect(first.created).toBe(true);
+    await writeFile(documentPath, "第一版\n第二段\n", "utf8");
+    const second = await service.createVersion(projectId, "补充第二段");
+    expect(second.created).toBe(true);
+    if (!second.created) throw new Error("Expected a created version.");
+
+    await expect(service.listVersions(projectId, 10)).resolves.toMatchObject([
+      { message: "补充第二段", commitId: second.version.commitId },
+      { message: "初稿" },
+    ]);
+    const diff = await service.getVersionDiff(
+      projectId,
+      second.version.commitId,
+    );
+    expect(diff).toMatchObject({
+      commitId: second.version.commitId,
+      files: [
+        {
+          path: "第一章.md",
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+          binary: false,
+        },
+      ],
+    });
+    expect(diff.patch).toContain("+第二段");
+  });
+
+  it("does not initialize a repository while reading empty history", async () => {
+    const root = await temporaryRoot();
+    const projectRoot = join(root, "没有版本");
+    await mkdir(projectRoot);
+    const service = createService(projectRoot, join(root, "disabled-hooks"));
+
+    await expect(service.listVersions(projectId, 50)).resolves.toEqual([]);
+    await expect(lstat(join(projectRoot, ".git"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+
+    await execFileAsync("git", ["init", "--initial-branch=main", projectRoot]);
+    await expect(service.listVersions(projectId, 50)).resolves.toEqual([]);
+  });
+
   it("rejects symbolic-link Git metadata", async () => {
     const root = await temporaryRoot();
     const projectRoot = join(root, "project");

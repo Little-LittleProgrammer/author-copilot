@@ -8,6 +8,7 @@ import type {
   ProjectSummary,
   StructureNode,
 } from "../project/types.js";
+import { VersionHistoryPanel } from "../version/VersionHistoryPanel.js";
 
 export type WorkspaceTab = "assistant" | "content" | "review";
 
@@ -29,6 +30,7 @@ interface EditorWorkspaceProps {
   readonly tab: WorkspaceTab;
   readonly t: (key: MessageKey) => string;
   readonly versionNotice: string | undefined;
+  readonly versionRefreshKey: number;
 }
 
 export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
@@ -50,6 +52,7 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
     tab,
     t,
     versionNotice,
+    versionRefreshKey,
   } = props;
   const tabs: readonly { id: WorkspaceTab; label: MessageKey }[] = [
     { id: "content", label: "content" },
@@ -180,12 +183,12 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
               )}
             </section>
           </div>
-        ) : (
-          <div className="disabled-feature">
-            <span className="eyebrow">MVP</span>
-            <h3>{t("changeReview")}</h3>
-            <p>{t("changesUnavailable")}</p>
-          </div>
+        ) : activeProject === undefined ? null : (
+          <VersionHistoryPanel
+            projectId={activeProject.id}
+            refreshKey={versionRefreshKey}
+            t={t}
+          />
         )}
       </section>
     </main>

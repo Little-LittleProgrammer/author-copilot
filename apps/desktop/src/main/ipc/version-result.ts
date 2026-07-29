@@ -30,7 +30,7 @@ export function versionOperationFailure(
     ok: false,
     error: {
       code: "git_failed",
-      message: "The version could not be created.",
+      message: "The version operation could not be completed.",
       retryable: true,
     },
   };

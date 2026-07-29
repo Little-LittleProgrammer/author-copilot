@@ -2,8 +2,8 @@
 
 - Date: 2026-07-28
 - Updated: 2026-07-29
-- Scope: fixed runtime sources, integrity checks, macOS build, Windows archive extraction, Electron packaging, and local qualification
-- Status: delivery pipeline and four-architecture packaging qualification complete; network and release-signing evidence remain open
+- Scope: fixed runtime delivery, four-architecture packaging, controlled version saving, and read-only history/diff review
+- Status: runtime delivery and read-only version review complete; restore, network, credentials, and release-signing evidence remain open
 
 ## Implemented delivery contract
 
@@ -14,6 +14,8 @@
 - macOS helper symlinks remain relative and compact. Manifest-required files are materialized only after their resolved targets are proven to stay inside the runtime root, so required-path verification remains symlink-free without expanding every Git builtin during packaging.
 - Every runtime carries target/version/source metadata. Verification checks required file types and runs init, add, commit, switch, diff, and log on matching hosts.
 - Electron packages copy only the prepared target runtime to `resources/git` outside `app.asar`. The main process injects the runtime's exec path, templates, and CA bundle without exposing them to Renderer IPC.
+- Strict `version:list` and `version:diff` IPC contracts expose at most 100 commit summaries and a bounded structured diff. Diff requests accept only full hexadecimal commit IDs, use the selected commit's first parent, and disable shell execution, external diff drivers, and text conversion.
+- The change-review workspace now lists repository history, file-level addition/deletion counts, binary-file state, and a syntax-colored unified diff. Reading a project without `.git` returns an empty history and does not initialize a repository.
 
 ## Current evidence
 
@@ -25,8 +27,10 @@
 - GitHub Actions run [30420297175](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30420297175) passed macOS x64/arm64 and Windows x64/arm64 packaging. Every target passed runtime qualification, its platform-specific packaged-path assertion, and artifact upload. macOS targets and Windows x64 also passed packaged application smoke tests; Windows arm64 retained its explicit startup-evidence gap.
 - Quality run [30420297168](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30420297168) passed repository formatting, boundaries, lint, type checking, tests, builds, and Electron E2E. Lint reports four existing Fast Refresh warnings and no errors. Generated pnpm lockfiles are excluded from Prettier to avoid formatter/package-manager churn.
 - Local packaging was unsigned because no Developer ID identity is installed; signing and notarization remain release evidence, not local qualification.
+- Local `pnpm verify` passed after the history/diff implementation: version contracts pass 22/22, desktop unit tests pass 41/41, all seven workspace builds pass, and Electron Playwright passes 6/6 including a real save-version -> history -> diff review flow with a Chinese project path.
 
 ## Open exit conditions
 
 - Add HTTPS and SSH fixture qualification, host fingerprint rejection, enterprise CA success/failure, credential-store integration, SBOM generation, and signing/notarization evidence.
+- Add task snapshots, restore, branch switching UI, and failure/retry evidence before treating the M3 version-management milestone as complete.
 - Git for Windows MinGit contains `usr/bin/sh.exe` but not `bash.exe`. This satisfies the M3 Git subprocess scope, not the M6 Agent SDK Bash requirement. M6 must select and qualify an additional shell distribution or remove that product assumption.

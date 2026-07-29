@@ -17,6 +17,8 @@ import {
   TabOperationResultSchema,
   TabStateSchema,
   VersionCreateResponseSchema,
+  VersionDiffResponseSchema,
+  VersionListResponseSchema,
   type DocumentReadRequest,
   type DocumentSaveRequest,
   type ProjectConfirmImportRequest,
@@ -29,6 +31,8 @@ import {
   type ProjectUpdateRequest,
   type TabState,
   type VersionCreateRequest,
+  type VersionDiffRequest,
+  type VersionListRequest,
 } from "@author-copilot/contracts";
 import { contextBridge, ipcRenderer } from "electron";
 
@@ -139,6 +143,20 @@ const api: AuthorCopilotApi = Object.freeze({
         request,
       );
       return VersionCreateResponseSchema.parse(response);
+    },
+    list: async (request: VersionListRequest) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.versionList,
+        request,
+      );
+      return VersionListResponseSchema.parse(response);
+    },
+    diff: async (request: VersionDiffRequest) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.versionDiff,
+        request,
+      );
+      return VersionDiffResponseSchema.parse(response);
     },
   }),
   tabs: Object.freeze({

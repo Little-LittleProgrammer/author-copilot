@@ -2,6 +2,10 @@ import {
   IPC_INVOKE_CHANNELS,
   VersionCreateRequestSchema,
   VersionCreateResponseSchema,
+  VersionDiffRequestSchema,
+  VersionDiffResponseSchema,
+  VersionListRequestSchema,
+  VersionListResponseSchema,
 } from "@author-copilot/contracts";
 import { ipcMain, type IpcMainInvokeEvent } from "electron";
 
@@ -14,21 +18,34 @@ export interface VersionIpcOptions {
   readonly trustedRendererUrl: string;
 }
 
+function assertTrustedVersionIpc(
+  event: IpcMainInvokeEvent,
+  args: readonly unknown[],
+  channel: string,
+  trustedRendererUrl: string,
+): void {
+  const senderFrame = event.senderFrame;
+  assertTrustedIpcRequest({
+    channel,
+    senderFrameUrl: senderFrame?.url ?? "",
+    mainFrameUrl: event.sender.mainFrame.url,
+    trustedRendererUrl,
+    isMainFrame: senderFrame !== null && senderFrame === event.sender.mainFrame,
+    args,
+    expectedArgumentCount: 1,
+  });
+}
+
 export function registerVersionIpcHandlers(options: VersionIpcOptions): void {
   ipcMain.handle(
     IPC_INVOKE_CHANNELS.versionCreate,
     async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
-      const senderFrame = event.senderFrame;
-      assertTrustedIpcRequest({
-        channel: IPC_INVOKE_CHANNELS.versionCreate,
-        senderFrameUrl: senderFrame?.url ?? "",
-        mainFrameUrl: event.sender.mainFrame.url,
-        trustedRendererUrl: options.trustedRendererUrl,
-        isMainFrame:
-          senderFrame !== null && senderFrame === event.sender.mainFrame,
+      assertTrustedVersionIpc(
+        event,
         args,
-        expectedArgumentCount: 1,
-      });
+        IPC_INVOKE_CHANNELS.versionCreate,
+        options.trustedRendererUrl,
+      );
 
       try {
         const request = VersionCreateRequestSchema.parse(args[0]);
@@ -45,6 +62,52 @@ export function registerVersionIpcHandlers(options: VersionIpcOptions): void {
         return VersionCreateResponseSchema.parse(
           versionOperationFailure(error),
         );
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.versionList,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      assertTrustedVersionIpc(
+        event,
+        args,
+        IPC_INVOKE_CHANNELS.versionList,
+        options.trustedRendererUrl,
+      );
+
+      try {
+        const request = VersionListRequestSchema.parse(args[0]);
+        const versions = await options.gitService.listVersions(
+          request.projectId,
+          request.limit,
+        );
+        return VersionListResponseSchema.parse({ ok: true, versions });
+      } catch (error) {
+        return VersionListResponseSchema.parse(versionOperationFailure(error));
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.versionDiff,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      assertTrustedVersionIpc(
+        event,
+        args,
+        IPC_INVOKE_CHANNELS.versionDiff,
+        options.trustedRendererUrl,
+      );
+
+      try {
+        const request = VersionDiffRequestSchema.parse(args[0]);
+        const diff = await options.gitService.getVersionDiff(
+          request.projectId,
+          request.commitId,
+        );
+        return VersionDiffResponseSchema.parse({ ok: true, diff });
+      } catch (error) {
+        return VersionDiffResponseSchema.parse(versionOperationFailure(error));
       }
     },
   );

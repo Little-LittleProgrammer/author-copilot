@@ -50,6 +50,10 @@ import {
 import {
   VersionCreateRequestSchema,
   VersionCreateResponseSchema,
+  VersionDiffRequestSchema,
+  VersionDiffResponseSchema,
+  VersionListRequestSchema,
+  VersionListResponseSchema,
 } from "./version.js";
 
 export const IPC_INVOKE_CHANNELS = {
@@ -65,6 +69,8 @@ export const IPC_INVOKE_CHANNELS = {
   documentRead: "document:read",
   documentSave: "document:save",
   versionCreate: "version:create",
+  versionList: "version:list",
+  versionDiff: "version:diff",
   knowledgeGetStatus: "knowledge:get-status",
   taskCancel: "task:cancel",
   tabGetContext: "tabs:get-context",
@@ -100,6 +106,8 @@ export const IPC_INVOKE_CHANNEL_NAMES = [
   IPC_INVOKE_CHANNELS.documentRead,
   IPC_INVOKE_CHANNELS.documentSave,
   IPC_INVOKE_CHANNELS.versionCreate,
+  IPC_INVOKE_CHANNELS.versionList,
+  IPC_INVOKE_CHANNELS.versionDiff,
   IPC_INVOKE_CHANNELS.knowledgeGetStatus,
   IPC_INVOKE_CHANNELS.taskCancel,
   IPC_INVOKE_CHANNELS.tabGetContext,
@@ -191,6 +199,14 @@ export const IPC_INVOKE_CONTRACTS = {
   [IPC_INVOKE_CHANNELS.versionCreate]: {
     request: VersionCreateRequestSchema,
     response: VersionCreateResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.versionList]: {
+    request: VersionListRequestSchema,
+    response: VersionListResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.versionDiff]: {
+    request: VersionDiffRequestSchema,
+    response: VersionDiffResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.knowledgeGetStatus]: {
     request: KnowledgeIndexStatusRequestSchema,

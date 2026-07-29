@@ -25,6 +25,10 @@ import type {
   TabState,
   VersionCreateRequest,
   VersionCreateResponse,
+  VersionDiffRequest,
+  VersionDiffResponse,
+  VersionListRequest,
+  VersionListResponse,
 } from "@author-copilot/contracts";
 
 export interface AuthorCopilotApi {
@@ -65,6 +69,12 @@ export interface AuthorCopilotApi {
     readonly create: (
       request: VersionCreateRequest,
     ) => Promise<VersionCreateResponse>;
+    readonly list: (
+      request: VersionListRequest,
+    ) => Promise<VersionListResponse>;
+    readonly diff: (
+      request: VersionDiffRequest,
+    ) => Promise<VersionDiffResponse>;
   };
   readonly tabs: {
     readonly getContext: () => Promise<TabContext>;
