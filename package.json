@@ -19,7 +19,8 @@
     "git-runtime:verify": "node tooling/scripts/verify-git-runtime.ts",
     "lint": "turbo run lint",
     "package": "turbo run package",
-    "test": "pnpm git-runtime:test && turbo run test",
+    "rag-benchmark:test": "python3 -m unittest discover -s spikes/rag-benchmark/tests -v",
+    "test": "pnpm git-runtime:test && pnpm rag-benchmark:test && turbo run test",
     "test:e2e": "pnpm --filter @author-copilot/desktop test:e2e",
     "typecheck": "turbo run typecheck",
     "verify": "pnpm format:check && pnpm boundaries && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e"
