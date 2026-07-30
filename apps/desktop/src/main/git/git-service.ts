@@ -3,12 +3,14 @@ import { lstat, mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type {
+  VersionBranchState,
   VersionDiff,
   VersionDiffFile,
   VersionSummary,
 } from "@author-copilot/contracts";
 
 import { GitServiceError } from "./errors.js";
+import { ProjectOperationQueue } from "./project-operation-queue.js";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
@@ -30,6 +32,11 @@ export type CreateVersionResult =
   | { readonly created: false }
   | { readonly created: true; readonly version: CreatedVersion };
 
+export interface SwitchBranchResult {
+  readonly branchName: string;
+  readonly switched: boolean;
+}
+
 export interface GitServiceOptions {
   readonly gitExecutable: string;
   readonly hooksDirectory: string;
@@ -37,6 +44,8 @@ export interface GitServiceOptions {
   readonly runtimeEnvironment?: Readonly<Record<string, string>>;
   readonly timeoutMs?: number;
   readonly maxOutputBytes?: number;
+  readonly operationQueue?: ProjectOperationQueue;
+  readonly hasRecoverableTask?: (projectId: string) => Promise<boolean>;
 }
 
 function isMissing(error: unknown): boolean {
@@ -126,9 +135,11 @@ function isolatedGitEnvironment(
 }
 
 export class GitService {
-  private readonly queues = new Map<string, Promise<void>>();
+  private readonly operationQueue: ProjectOperationQueue;
 
-  public constructor(private readonly options: GitServiceOptions) {}
+  public constructor(private readonly options: GitServiceOptions) {
+    this.operationQueue = options.operationQueue ?? new ProjectOperationQueue();
+  }
 
   public async createVersion(
     projectId: string,
@@ -322,6 +333,98 @@ export class GitService {
         patch: patch.stdout,
       };
     });
+  }
+
+  public async listBranches(projectId: string): Promise<VersionBranchState> {
+    return this.withProjectLock(projectId, async () => {
+      const rootPath = await this.resolveProjectRoot(projectId);
+      await this.prepareIsolationFiles();
+      if (!(await this.hasRepositoryMetadata(rootPath))) {
+        return { branches: [], currentBranch: null };
+      }
+      await this.assertRepositoryRoot(rootPath);
+      return this.listBranchesAtRoot(rootPath);
+    });
+  }
+
+  public async switchBranch(
+    projectId: string,
+    branchName: string,
+  ): Promise<SwitchBranchResult> {
+    return this.withProjectLock(projectId, async () => {
+      const rootPath = await this.resolveProjectRoot(projectId);
+      await this.prepareIsolationFiles();
+      if (!(await this.hasRepositoryMetadata(rootPath))) {
+        throw new GitServiceError(
+          "invalid_repository",
+          "The project does not have version history.",
+          false,
+        );
+      }
+      await this.assertRepositoryRoot(rootPath);
+      const branchState = await this.listBranchesAtRoot(rootPath);
+      if (!branchState.branches.some((branch) => branch.name === branchName)) {
+        throw new GitServiceError(
+          "branch_not_found",
+          "The requested local branch does not exist.",
+          false,
+        );
+      }
+      if (branchState.currentBranch === branchName) {
+        return { branchName, switched: false };
+      }
+      if (await this.options.hasRecoverableTask?.(projectId)) {
+        throw new GitServiceError(
+          "task_active",
+          "Restore or resolve the recoverable Agent task before switching branches.",
+          false,
+        );
+      }
+      const status = await this.run(rootPath, [
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+      ]);
+      if (status.stdout.length > 0) {
+        throw new GitServiceError(
+          "dirty_repository",
+          "Save or discard all project changes before switching branches.",
+          false,
+        );
+      }
+      await this.run(rootPath, [
+        "switch",
+        "--no-guess",
+        "--no-recurse-submodules",
+        "--",
+        branchName,
+      ]);
+      return { branchName, switched: true };
+    });
+  }
+
+  private async listBranchesAtRoot(
+    rootPath: string,
+  ): Promise<VersionBranchState> {
+    const currentResult = await this.run(
+      rootPath,
+      ["symbolic-ref", "--quiet", "--short", "HEAD"],
+      [0, 1, 128],
+    );
+    const currentBranch =
+      currentResult.exitCode === 0 ? currentResult.stdout.trim() : null;
+    const result = await this.run(rootPath, [
+      "for-each-ref",
+      "--sort=refname",
+      "--format=%(refname:lstrip=2)",
+      "refs/heads",
+    ]);
+    const branches = result.stdout
+      .split(/\r?\n/u)
+      .filter((name) => name.length > 0)
+      .map((name) => ({ name, current: name === currentBranch }));
+    return { branches, currentBranch };
   }
 
   private async resolveProjectRoot(projectId: string): Promise<string> {
@@ -546,19 +649,6 @@ export class GitService {
     projectId: string,
     operation: () => Promise<T>,
   ): Promise<T> {
-    const predecessor = this.queues.get(projectId) ?? Promise.resolve();
-    let release = (): void => undefined;
-    const current = new Promise<void>((resolveLock) => {
-      release = resolveLock;
-    });
-    const queued = predecessor.then(() => current);
-    this.queues.set(projectId, queued);
-    await predecessor;
-    try {
-      return await operation();
-    } finally {
-      release();
-      if (this.queues.get(projectId) === queued) this.queues.delete(projectId);
-    }
+    return this.operationQueue.run(projectId, operation);
   }
 }

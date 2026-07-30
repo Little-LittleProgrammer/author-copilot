@@ -2,23 +2,36 @@ import { useEffect, useMemo, useState, type JSX } from "react";
 import {
   AlertCircle,
   FileCode2,
+  GitBranch,
   GitCommitHorizontal,
   History,
   LoaderCircle,
   RefreshCw,
+  RotateCcw,
+  ShieldAlert,
+  X,
 } from "lucide-react";
 
 import type { MessageKey } from "../../i18n/index.js";
 import { errorMessage } from "../project/project-api.js";
 import {
   getVersionApi,
+  VersionApiError,
+  type VersionBranchState,
   type VersionDiff,
   type VersionSummary,
 } from "./version-api.js";
+import {
+  getTaskRecoveryApi,
+  type TaskRecoverySummary,
+  type TaskRestoreResult,
+} from "./task-recovery-api.js";
 
 interface VersionHistoryPanelProps {
   readonly projectId: string;
   readonly refreshKey: number;
+  readonly dirty: boolean;
+  readonly onRepositoryChanged: () => void;
   readonly t: (key: MessageKey) => string;
 }
 
@@ -40,6 +53,8 @@ function diffLineClass(line: string): string {
 export function VersionHistoryPanel({
   projectId,
   refreshKey,
+  dirty,
+  onRepositoryChanged,
   t,
 }: VersionHistoryPanelProps): JSX.Element {
   const [versions, setVersions] = useState<readonly VersionSummary[]>([]);
@@ -53,7 +68,146 @@ export function VersionHistoryPanel({
   const [diffError, setDiffError] = useState<string>();
   const [reloadKey, setReloadKey] = useState(0);
   const [diffRequestKey, setDiffRequestKey] = useState(0);
+  const [recoveries, setRecoveries] = useState<readonly TaskRecoverySummary[]>(
+    [],
+  );
+  const [recoveryError, setRecoveryError] = useState<string>();
+  const [restoreResult, setRestoreResult] = useState<TaskRestoreResult>();
+  const [recoveryReloadKey, setRecoveryReloadKey] = useState(0);
+  const [restoring, setRestoring] = useState(false);
   const apiAvailable = window.authorCopilot.version !== undefined;
+  const [branchState, setBranchState] = useState<VersionBranchState>({
+    branches: [],
+    currentBranch: null,
+  });
+  const [selectedBranch, setSelectedBranch] = useState("");
+  const [branchesLoading, setBranchesLoading] = useState(apiAvailable);
+  const [branchSwitching, setBranchSwitching] = useState(false);
+  const [branchError, setBranchError] = useState<string>();
+  const [branchNotice, setBranchNotice] = useState<string>();
+  const [branchReloadKey, setBranchReloadKey] = useState(0);
+
+  useEffect(() => {
+    const api = getTaskRecoveryApi();
+    let current = true;
+    if (api === undefined) return () => undefined;
+    void api
+      .list(projectId)
+      .then((nextRecoveries) => {
+        if (!current) return;
+        setRecoveries(nextRecoveries);
+        setRecoveryError(undefined);
+      })
+      .catch((reason: unknown) => {
+        if (current) {
+          setRecoveryError(errorMessage(reason, t("taskRecoveryLoadFailed")));
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, [projectId, recoveryReloadKey, t]);
+
+  const activeRecovery = recoveries[0];
+
+  useEffect(() => {
+    const api = getVersionApi();
+    let current = true;
+    if (api === undefined) return () => undefined;
+    void api
+      .listBranches(projectId)
+      .then((state) => {
+        if (!current) return;
+        setBranchState(state);
+        setSelectedBranch(state.currentBranch ?? state.branches[0]?.name ?? "");
+        setBranchError(undefined);
+      })
+      .catch((reason: unknown) => {
+        if (current) {
+          setBranchError(errorMessage(reason, t("branchLoadFailed")));
+        }
+      })
+      .finally(() => {
+        if (current) setBranchesLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [branchReloadKey, projectId, refreshKey, t]);
+
+  const switchBranch = (): void => {
+    const api = getVersionApi();
+    if (
+      api === undefined ||
+      selectedBranch.length === 0 ||
+      selectedBranch === branchState.currentBranch ||
+      activeRecovery !== undefined ||
+      dirty ||
+      branchSwitching
+    ) {
+      return;
+    }
+    setBranchSwitching(true);
+    setBranchError(undefined);
+    setBranchNotice(undefined);
+    void api
+      .switchBranch(projectId, selectedBranch)
+      .then((result) => {
+        setBranchNotice(
+          result.switched ? t("branchSwitched") : t("branchAlreadyCurrent"),
+        );
+        setBranchState((state) => ({
+          currentBranch: result.branchName,
+          branches: state.branches.map((branch) => ({
+            ...branch,
+            current: branch.name === result.branchName,
+          })),
+        }));
+        onRepositoryChanged();
+        setHistoryLoading(true);
+        setReloadKey((value) => value + 1);
+        setRecoveryReloadKey((value) => value + 1);
+      })
+      .catch((reason: unknown) => {
+        setBranchError(
+          reason instanceof VersionApiError &&
+            (reason.code === "dirty_repository" ||
+              reason.code === "task_active")
+            ? reason.code === "task_active"
+              ? t("branchRecoveryFirst")
+              : t("branchDirtyRepository")
+            : errorMessage(reason, t("branchSwitchFailed")),
+        );
+      })
+      .finally(() => setBranchSwitching(false));
+  };
+
+  const restoreTask = (): void => {
+    const api = getTaskRecoveryApi();
+    if (
+      api === undefined ||
+      activeRecovery === undefined ||
+      dirty ||
+      restoring ||
+      !window.confirm(t("taskRecoveryConfirm"))
+    ) {
+      return;
+    }
+    setRestoring(true);
+    setRecoveryError(undefined);
+    setRestoreResult(undefined);
+    void api
+      .restore(projectId, activeRecovery.taskId)
+      .then((result) => {
+        setRestoreResult(result);
+        onRepositoryChanged();
+        setRecoveryReloadKey((value) => value + 1);
+      })
+      .catch((reason: unknown) => {
+        setRecoveryError(errorMessage(reason, t("taskRecoveryFailed")));
+      })
+      .finally(() => setRestoring(false));
+  };
 
   useEffect(() => {
     const api = getVersionApi();
@@ -141,6 +295,159 @@ export function VersionHistoryPanel({
       aria-label={t("changeReview")}
       data-testid="version-history"
     >
+      <div className="version-review-statuses">
+        <div className="version-branch-bar" data-testid="branch-switcher">
+          <div className="version-branch-label">
+            <GitBranch size={16} aria-hidden="true" />
+            <label htmlFor={`branch-${projectId}`}>{t("branch")}</label>
+          </div>
+          <select
+            id={`branch-${projectId}`}
+            value={selectedBranch}
+            disabled={
+              branchesLoading ||
+              branchSwitching ||
+              dirty ||
+              activeRecovery !== undefined ||
+              branchState.branches.length === 0
+            }
+            onChange={(event) => {
+              setSelectedBranch(event.target.value);
+              setBranchError(undefined);
+              setBranchNotice(undefined);
+            }}
+          >
+            {branchState.branches.length === 0 ? (
+              <option value="">{t("branchUnavailable")}</option>
+            ) : (
+              branchState.branches.map((branch) => (
+                <option key={branch.name} value={branch.name}>
+                  {branch.name}
+                </option>
+              ))
+            )}
+          </select>
+          <button
+            type="button"
+            className="button version-branch-action"
+            disabled={
+              selectedBranch.length === 0 ||
+              selectedBranch === branchState.currentBranch ||
+              branchSwitching ||
+              dirty ||
+              activeRecovery !== undefined
+            }
+            title={
+              dirty
+                ? t("branchSaveFirst")
+                : activeRecovery !== undefined
+                  ? t("branchRecoveryFirst")
+                  : t("branchSwitch")
+            }
+            onClick={switchBranch}
+          >
+            {branchSwitching ? (
+              <LoaderCircle className="spin" size={14} aria-hidden="true" />
+            ) : (
+              <GitBranch size={14} aria-hidden="true" />
+            )}
+            {branchSwitching ? t("branchSwitching") : t("branchSwitch")}
+          </button>
+          <span
+            className={
+              branchError === undefined
+                ? "branch-notice"
+                : "branch-notice error"
+            }
+            role={branchError === undefined ? "status" : "alert"}
+          >
+            {branchError ?? branchNotice}
+          </span>
+        </div>
+        {activeRecovery !== undefined ||
+        recoveryError !== undefined ||
+        restoreResult !== undefined ? (
+          <div
+            className={
+              restoreResult?.status === "complete"
+                ? "task-recovery-banner complete"
+                : "task-recovery-banner"
+            }
+            role={recoveryError === undefined ? "status" : "alert"}
+            data-testid="task-recovery"
+          >
+            <ShieldAlert size={18} aria-hidden="true" />
+            <div className="task-recovery-copy">
+              <strong>
+                {restoreResult?.status === "complete"
+                  ? t("taskRecoveryComplete")
+                  : restoreResult?.status === "blocked"
+                    ? t("taskRecoveryBlocked")
+                    : restoreResult?.status === "partial"
+                      ? t("taskRecoveryPartial")
+                      : t("taskRecoveryTitle")}
+              </strong>
+              <span>
+                {recoveryError ??
+                  (restoreResult === undefined
+                    ? `${activeRecovery?.affectedPaths.length ?? 0} ${t("taskRecoveryFiles")}`
+                    : `${restoreResult.restoredPaths.length} ${t("taskRecoveryRestoredFiles")}`)}
+              </span>
+              {restoreResult !== undefined &&
+              restoreResult.conflicts.length > 0 ? (
+                <small>
+                  {restoreResult.conflicts
+                    .map(
+                      (conflict) =>
+                        conflict.path ?? t("taskRecoveryRepository"),
+                    )
+                    .slice(0, 3)
+                    .join(" · ")}
+                </small>
+              ) : null}
+            </div>
+            {restoreResult?.status === "complete" ? (
+              <button
+                type="button"
+                className="task-recovery-dismiss"
+                aria-label={t("close")}
+                title={t("close")}
+                onClick={() => setRestoreResult(undefined)}
+              >
+                <X size={15} aria-hidden="true" />
+              </button>
+            ) : activeRecovery !== undefined ? (
+              <button
+                type="button"
+                className="button task-recovery-action"
+                disabled={dirty || restoring}
+                title={
+                  dirty ? t("taskRecoverySaveFirst") : t("taskRecoveryRestore")
+                }
+                onClick={restoreTask}
+              >
+                {restoring ? (
+                  <LoaderCircle className="spin" size={14} aria-hidden="true" />
+                ) : (
+                  <RotateCcw size={14} aria-hidden="true" />
+                )}
+                {restoring
+                  ? t("taskRecoveryRestoring")
+                  : t("taskRecoveryRestore")}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="button task-recovery-action"
+                onClick={() => setRecoveryReloadKey((value) => value + 1)}
+              >
+                <RefreshCw size={14} aria-hidden="true" />
+                {t("reload")}
+              </button>
+            )}
+          </div>
+        ) : null}
+      </div>
       <aside className="version-history-pane">
         <header className="version-pane-header">
           <div>
@@ -155,8 +462,10 @@ export function VersionHistoryPanel({
             title={t("versionRefresh")}
             onClick={() => {
               setHistoryLoading(true);
+              setBranchesLoading(true);
               setHistoryError(undefined);
               setReloadKey((value) => value + 1);
+              setBranchReloadKey((value) => value + 1);
             }}
           >
             <RefreshCw size={14} aria-hidden="true" />

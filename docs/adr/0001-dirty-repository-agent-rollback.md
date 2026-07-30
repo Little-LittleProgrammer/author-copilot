@@ -1,6 +1,6 @@
 # ADR-0001: Dirty Repository Agent Snapshot and Rollback
 
-- Status: Proposed; semantics validated by M0 spike
+- Status: Accepted; production implementation added in M3, four-architecture qualification pending
 - Date: 2026-07-13
 - Decision owner: Desktop Git Service / AI Orchestrator
 - Related task: M0-05

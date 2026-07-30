@@ -24,6 +24,7 @@ interface EditorWorkspaceProps {
   readonly onDiscard: () => void;
   readonly onCreateVersion: () => void;
   readonly onReload: () => void;
+  readonly onRecoveryRestored: () => void;
   readonly onSave: () => void;
   readonly onTabChange: (tab: WorkspaceTab) => void;
   readonly saving: boolean;
@@ -46,6 +47,7 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
     onDiscard,
     onCreateVersion,
     onReload,
+    onRecoveryRestored,
     onSave,
     onTabChange,
     saving,
@@ -185,6 +187,8 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
           </div>
         ) : activeProject === undefined ? null : (
           <VersionHistoryPanel
+            dirty={dirty}
+            onRepositoryChanged={onRecoveryRestored}
             projectId={activeProject.id}
             refreshKey={versionRefreshKey}
             t={t}

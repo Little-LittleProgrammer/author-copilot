@@ -2,6 +2,12 @@ import { z } from "zod";
 
 import { KnowledgeIndexStatusResultSchema } from "./index-status.js";
 import {
+  TaskRecoveryListRequestSchema,
+  TaskRecoveryListResponseSchema,
+  TaskRecoveryRestoreRequestSchema,
+  TaskRecoveryRestoreResponseSchema,
+} from "./task-recovery.js";
+import {
   DocumentReadRequestSchema,
   DocumentReadResponseSchema,
   DocumentSaveRequestSchema,
@@ -48,6 +54,10 @@ import {
   TaskProgressEventSchema,
 } from "./tasks.js";
 import {
+  VersionBranchListRequestSchema,
+  VersionBranchListResponseSchema,
+  VersionBranchSwitchRequestSchema,
+  VersionBranchSwitchResponseSchema,
   VersionCreateRequestSchema,
   VersionCreateResponseSchema,
   VersionDiffRequestSchema,
@@ -71,6 +81,10 @@ export const IPC_INVOKE_CHANNELS = {
   versionCreate: "version:create",
   versionList: "version:list",
   versionDiff: "version:diff",
+  versionBranchList: "version:branch-list",
+  versionBranchSwitch: "version:branch-switch",
+  taskRecoveryList: "task-recovery:list",
+  taskRecoveryRestore: "task-recovery:restore",
   knowledgeGetStatus: "knowledge:get-status",
   taskCancel: "task:cancel",
   tabGetContext: "tabs:get-context",
@@ -108,6 +122,10 @@ export const IPC_INVOKE_CHANNEL_NAMES = [
   IPC_INVOKE_CHANNELS.versionCreate,
   IPC_INVOKE_CHANNELS.versionList,
   IPC_INVOKE_CHANNELS.versionDiff,
+  IPC_INVOKE_CHANNELS.versionBranchList,
+  IPC_INVOKE_CHANNELS.versionBranchSwitch,
+  IPC_INVOKE_CHANNELS.taskRecoveryList,
+  IPC_INVOKE_CHANNELS.taskRecoveryRestore,
   IPC_INVOKE_CHANNELS.knowledgeGetStatus,
   IPC_INVOKE_CHANNELS.taskCancel,
   IPC_INVOKE_CHANNELS.tabGetContext,
@@ -207,6 +225,22 @@ export const IPC_INVOKE_CONTRACTS = {
   [IPC_INVOKE_CHANNELS.versionDiff]: {
     request: VersionDiffRequestSchema,
     response: VersionDiffResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.versionBranchList]: {
+    request: VersionBranchListRequestSchema,
+    response: VersionBranchListResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.versionBranchSwitch]: {
+    request: VersionBranchSwitchRequestSchema,
+    response: VersionBranchSwitchResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.taskRecoveryList]: {
+    request: TaskRecoveryListRequestSchema,
+    response: TaskRecoveryListResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.taskRecoveryRestore]: {
+    request: TaskRecoveryRestoreRequestSchema,
+    response: TaskRecoveryRestoreResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.knowledgeGetStatus]: {
     request: KnowledgeIndexStatusRequestSchema,

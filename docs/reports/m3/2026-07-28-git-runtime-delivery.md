@@ -1,9 +1,9 @@
 # M3 Bundled Git Runtime Delivery
 
 - Date: 2026-07-28
-- Updated: 2026-07-29
-- Scope: fixed runtime delivery, four-architecture packaging, controlled version saving, and read-only history/diff review
-- Status: runtime delivery and read-only version review complete; restore, network, credentials, and release-signing evidence remain open
+- Updated: 2026-07-30
+- Scope: fixed runtime delivery, four-architecture packaging, controlled version saving, history/diff review, local branch switching, and task recovery
+- Status: local version-management foundations complete; four-architecture recovery qualification, network, credentials, and release-signing evidence remain open
 
 ## Implemented delivery contract
 
@@ -16,6 +16,12 @@
 - Electron packages copy only the prepared target runtime to `resources/git` outside `app.asar`. The main process injects the runtime's exec path, templates, and CA bundle without exposing them to Renderer IPC.
 - Strict `version:list` and `version:diff` IPC contracts expose at most 100 commit summaries and a bounded structured diff. Diff requests accept only full hexadecimal commit IDs, use the selected commit's first parent, and disable shell execution, external diff drivers, and text conversion.
 - The change-review workspace now lists repository history, file-level addition/deletion counts, binary-file state, and a syntax-colored unified diff. Reading a project without `.git` returns an empty history and does not initialize a repository.
+- Strict `version:branch-list` and `version:branch-switch` IPC contracts expose only bounded local branch summaries and exact local-branch selection. Branch changes share the project operation queue, reject staged, unstaged, and untracked changes or a recoverable Agent task, and never accept a revision, remote name, repository path, or Git arguments from Renderer.
+- The change-review workspace provides a local branch selector. It is disabled for unsaved editor content and active task recovery, and a successful switch reloads the project structure, current document, and branch-specific version history.
+- `TaskSnapshotService` stores task manifests and content-addressed blobs outside the repository with user-only permissions, per-file/task storage limits, one open task per project, and a write-ahead mutation ledger. Its internal write/delete methods reject absolute paths, traversal, `.git`, symlinks, and non-regular files.
+- Restore processes mutations in reverse order without changing refs, `HEAD`, or the Git index. It restores exact Agent after-images, preserves clean non-overlapping UTF-8 user edits through reverse three-way merge, blocks `HEAD` drift, reports index drift and overlapping/binary/create-delete conflicts, persists progress after every mutation, and supports idempotent retry.
+- Renderer IPC exposes only recovery listing and restore-by-project/task ID. It does not expose snapshot creation, Agent file mutation, repository paths, snapshot content, hashes, Git arguments, or a general filesystem/Git primitive. Saving versions and restoring tasks share a project operation queue.
+- The change-review workspace shows recoverable tasks and complete/partial/blocked results. Recovery is disabled while the current document has unsaved edits, and a successful restore reloads the current document without leaving the review workspace.
 
 ## Current evidence
 
@@ -28,9 +34,13 @@
 - Quality run [30420297168](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30420297168) passed repository formatting, boundaries, lint, type checking, tests, builds, and Electron E2E. Lint reports four existing Fast Refresh warnings and no errors. Generated pnpm lockfiles are excluded from Prettier to avoid formatter/package-manager churn.
 - Local packaging was unsigned because no Developer ID identity is installed; signing and notarization remain release evidence, not local qualification.
 - Local `pnpm verify` passed after the history/diff implementation: version contracts pass 22/22, desktop unit tests pass 41/41, all seven workspace builds pass, and Electron Playwright passes 6/6 including a real save-version -> history -> diff review flow with a Chinese project path.
+- Local task-recovery validation passes formatting, workspace boundaries, Git runtime tests 3/3, all-workspace type checking/tests/builds 21/21, 26 contract tests, and 47 desktop tests. Dirty-repository integration covers staged, unstaged, mixed, and untracked task-start content; Agent-created/deleted files; non-overlapping and overlapping same-file edits; index and `HEAD` drift; idempotent retry; path/symlink rejection; storage budgets; and single-task locking.
+- Electron Playwright passes 7/7 and covers a real save-version -> task snapshot -> controlled Agent write -> review restore flow. The test verifies both disk content and the reloaded editor, and the success-state screenshot was visually inspected.
+- Local branch-switch validation passes 27 contract tests and 49 desktop tests. It covers empty repositories without implicit initialization, Chinese branches in a project path containing spaces, exact local-name selection, already-current behavior, missing-branch rejection, and dirty-repository rejection without changing `HEAD`.
+- Electron Playwright remains 7/7 after adding a real `main` -> Chinese local branch -> `main` flow. The test verifies the branch-specific commit diff and editor content after each switch; the branch-switch screenshot was visually inspected.
 
 ## Open exit conditions
 
 - Add HTTPS and SSH fixture qualification, host fingerprint rejection, enterprise CA success/failure, credential-store integration, SBOM generation, and signing/notarization evidence.
-- Add task snapshots, restore, branch switching UI, and failure/retry evidence before treating the M3 version-management milestone as complete.
+- Add four-architecture branch-switch and task-recovery qualification before treating the cross-platform version-management path as complete. Production Agent orchestration must use the internal snapshot/write/delete capability when M6 is implemented; no Renderer mutation channel should be added.
 - Git for Windows MinGit contains `usr/bin/sh.exe` but not `bash.exe`. This satisfies the M3 Git subprocess scope, not the M6 Agent SDK Bash requirement. M6 must select and qualify an additional shell distribution or remove that product assumption.

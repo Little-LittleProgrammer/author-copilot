@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
   lstat,
   mkdir,
@@ -20,6 +21,8 @@ import {
   type Page,
 } from "@playwright/test";
 import type { WebContentsView } from "electron";
+
+import { TaskSnapshotService } from "../src/main/git/task-snapshot-service.js";
 
 const inheritedEnvironment = Object.fromEntries(
   Object.entries(process.env).filter(
@@ -157,6 +160,27 @@ test("creates, edits, saves, and protects an externally changed novel", async ()
       { encoding: "utf8" },
     );
     expect(versionLog.stdout.trim()).toBe("保存第一场");
+    await execFileAsync("git", [
+      "-C",
+      projectRoot,
+      "switch",
+      "-c",
+      "备选-结局",
+    ]);
+    await writeFile(documentPath, "# 备选结局\n\n列车驶入晨光。\n", "utf8");
+    await execFileAsync("git", ["-C", projectRoot, "add", "--all"]);
+    await execFileAsync("git", [
+      "-C",
+      projectRoot,
+      "-c",
+      "user.name=E2E",
+      "-c",
+      "user.email=e2e@example.com",
+      "commit",
+      "-m",
+      "保存备选结局",
+    ]);
+    await execFileAsync("git", ["-C", projectRoot, "switch", "main"]);
     await page.getByRole("tab", { name: /变更审阅|Change review/u }).click();
     await expect(
       page.getByTestId("version-history-item").first(),
@@ -171,7 +195,33 @@ test("creates, edits, saves, and protects an externally changed novel", async ()
       path: "test-results/m3-version-history-diff.png",
       fullPage: true,
     });
+    const branchSwitcher = page.getByTestId("branch-switcher");
+    await branchSwitcher
+      .getByRole("combobox", { name: /分支|Branch/u })
+      .selectOption("备选-结局");
+    await branchSwitcher
+      .getByRole("button", { name: /切换分支|Switch branch/u })
+      .click();
+    await expect(branchSwitcher).toContainText(/分支已切换|Branch switched/u);
+    await expect(page.getByTestId("version-diff")).toContainText(
+      "列车驶入晨光",
+    );
+    await page.screenshot({
+      path: "test-results/m3-branch-switch.png",
+      fullPage: true,
+    });
     await page.getByRole("tab", { name: /正文|Content/u }).click();
+    await expect(editor).toHaveValue("# 备选结局\n\n列车驶入晨光。\n");
+    await page.getByRole("tab", { name: /变更审阅|Change review/u }).click();
+    await branchSwitcher
+      .getByRole("combobox", { name: /分支|Branch/u })
+      .selectOption("main");
+    await branchSwitcher
+      .getByRole("button", { name: /切换分支|Switch branch/u })
+      .click();
+    await expect(branchSwitcher).toContainText(/分支已切换|Branch switched/u);
+    await page.getByRole("tab", { name: /正文|Content/u }).click();
+    await expect(editor).toHaveValue("# 第一场\n\n夜雨落在站台上。\n");
     await page.screenshot({
       path: "test-results/m2-writing-workspace.png",
       fullPage: true,
@@ -210,6 +260,86 @@ test("creates the screenplay structure through the desktop workflow", async () =
     await assert.doesNotReject(
       lstat(join(temporaryRoot, projectTitle, "第一幕", "01-第一场.md")),
     );
+  } finally {
+    await application.close();
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("restores an Agent task from the change review without losing the task-start file", async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
+  const projectTitle = "E2E 任务恢复";
+  const application = await launchApplication(temporaryRoot);
+
+  try {
+    const { center } = await signIn(application);
+    await center.getByRole("button", { name: /新建小说|New novel/u }).click();
+    await center.getByTestId("project-name").fill(projectTitle);
+    await center.getByTestId("project-dialog-submit").click();
+    const page = await rendererPage(application, "project");
+    await page.getByRole("button", { name: "01-正文", exact: true }).click();
+    const editor = page.getByTestId("document-editor");
+    const taskStartContent = "# 任务前版本\n\n保留这一段。\n";
+    await editor.fill(taskStartContent);
+    await page.getByTestId("save-document").click();
+    await page.getByTestId("save-version").click();
+    await page.getByTestId("version-message").fill("任务前版本");
+    await page.getByTestId("version-dialog-submit").click();
+    await expect(page.getByText(/版本已保存|Version saved/u)).toBeVisible();
+
+    const registry = JSON.parse(
+      await readFile(
+        join(temporaryRoot, ".user-data", "projects.json"),
+        "utf8",
+      ),
+    ) as {
+      projects: Record<string, { projectId: string; rootPath: string }>;
+    };
+    const project = Object.values(registry.projects)[0];
+    assert.ok(project);
+    const taskService = new TaskSnapshotService({
+      gitExecutable: process.env.AUTHOR_COPILOT_GIT_EXECUTABLE ?? "git",
+      isolationDirectory: join(
+        temporaryRoot,
+        ".user-data",
+        "git-hooks-disabled",
+      ),
+      snapshotsRoot: join(temporaryRoot, ".user-data", "task-snapshots"),
+      resolveProjectRoot: async () => project.rootPath,
+    });
+    const taskId = randomUUID();
+    await taskService.createTaskSnapshot(project.projectId, taskId);
+    await taskService.writeTaskFile(
+      project.projectId,
+      taskId,
+      "第一卷/第一章/01-正文.md",
+      "# Agent 改写\n\n这段应被恢复。\n",
+    );
+
+    await page.getByRole("tab", { name: /变更审阅|Change review/u }).click();
+    const recovery = page.getByTestId("task-recovery");
+    await expect(recovery).toContainText(/恢复 Agent 任务|Recover Agent task/u);
+    page.once("dialog", (dialog) => dialog.accept());
+    await recovery
+      .getByRole("button", { name: /恢复任务|Restore task/u })
+      .click();
+    await expect(recovery).toContainText(
+      /任务改动已恢复|Task changes restored/u,
+    );
+    await page.screenshot({
+      path: "test-results/m3-task-recovery-result.png",
+      fullPage: true,
+    });
+    await expect
+      .poll(() =>
+        readFile(
+          join(project.rootPath, "第一卷", "第一章", "01-正文.md"),
+          "utf8",
+        ),
+      )
+      .toBe(taskStartContent);
+    await page.getByRole("tab", { name: /正文|Content/u }).click();
+    await expect(editor).toHaveValue(taskStartContent);
   } finally {
     await application.close();
     await rm(temporaryRoot, { recursive: true, force: true });

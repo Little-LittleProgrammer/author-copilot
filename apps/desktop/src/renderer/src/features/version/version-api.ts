@@ -1,4 +1,7 @@
 import type {
+  VersionBranchListResponse,
+  VersionBranchState,
+  VersionBranchSwitchResponse,
   VersionCreateResponse,
   VersionDiff,
   VersionDiffResponse,
@@ -45,6 +48,25 @@ function unwrapDiff(response: VersionDiffResponse): VersionDiff {
   return response.diff;
 }
 
+function unwrapBranches(
+  response: VersionBranchListResponse,
+): VersionBranchState {
+  if (!response.ok) {
+    throw new VersionApiError(response.error.code, response.error.message);
+  }
+  return response.state;
+}
+
+function unwrapBranchSwitch(response: VersionBranchSwitchResponse): {
+  readonly branchName: string;
+  readonly switched: boolean;
+} {
+  if (!response.ok) {
+    throw new VersionApiError(response.error.code, response.error.message);
+  }
+  return { branchName: response.branchName, switched: response.switched };
+}
+
 export function getVersionApi():
   | {
       readonly create: (input: {
@@ -59,6 +81,11 @@ export function getVersionApi():
         readonly projectId: string;
         readonly commitId: string;
       }) => Promise<VersionDiff>;
+      readonly listBranches: (projectId: string) => Promise<VersionBranchState>;
+      readonly switchBranch: (
+        projectId: string,
+        branchName: string,
+      ) => Promise<{ readonly branchName: string; readonly switched: boolean }>;
     }
   | undefined {
   const raw = window.authorCopilot.version;
@@ -78,7 +105,15 @@ export function getVersionApi():
     async diff(input) {
       return unwrapDiff(await raw.diff(input));
     },
+    async listBranches(projectId) {
+      return unwrapBranches(await raw.listBranches({ projectId }));
+    },
+    async switchBranch(projectId, branchName) {
+      return unwrapBranchSwitch(
+        await raw.switchBranch({ projectId, branchName }),
+      );
+    },
   };
 }
 
-export type { VersionDiff, VersionSummary };
+export type { VersionBranchState, VersionDiff, VersionSummary };

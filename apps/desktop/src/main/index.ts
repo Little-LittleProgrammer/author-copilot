@@ -5,7 +5,11 @@ import { app, BrowserWindow, session } from "electron";
 import type { ProjectSummary } from "@author-copilot/contracts";
 
 import { DesktopDomainEvents } from "./domain-events.js";
-import { GitService } from "./git/index.js";
+import {
+  GitService,
+  ProjectOperationQueue,
+  TaskSnapshotService,
+} from "./git/index.js";
 import { resolveGitRuntime } from "./git-runtime.js";
 import { registerIpcHandlers } from "./ipc.js";
 import {
@@ -115,11 +119,27 @@ app.whenReady().then(async () => {
       ? {}
       : { developmentOverride: developmentGitExecutable }),
   });
-  const gitService = new GitService({
+  const gitOperationQueue = new ProjectOperationQueue();
+  const gitIsolationDirectory = join(
+    app.getPath("userData"),
+    "git-hooks-disabled",
+  );
+  const taskSnapshotService = new TaskSnapshotService({
     gitExecutable: gitRuntime.executable,
-    hooksDirectory: join(app.getPath("userData"), "git-hooks-disabled"),
+    isolationDirectory: gitIsolationDirectory,
+    snapshotsRoot: join(app.getPath("userData"), "task-snapshots"),
     resolveProjectRoot: (projectId) => projectService.getProjectRoot(projectId),
     runtimeEnvironment: gitRuntime.environment,
+    operationQueue: gitOperationQueue,
+  });
+  const gitService = new GitService({
+    gitExecutable: gitRuntime.executable,
+    hooksDirectory: gitIsolationDirectory,
+    resolveProjectRoot: (projectId) => projectService.getProjectRoot(projectId),
+    runtimeEnvironment: gitRuntime.environment,
+    operationQueue: gitOperationQueue,
+    hasRecoverableTask: (projectId) =>
+      taskSnapshotService.hasRecoverableTaskWhileProjectLocked(projectId),
   });
 
   denyAllPermissions(session.defaultSession);
@@ -129,6 +149,7 @@ app.whenReady().then(async () => {
   registerIpcHandlers(target.url, {
     projectService,
     gitService,
+    taskSnapshotService,
     directoryPicker:
       e2eMode && process.env.AUTHOR_COPILOT_E2E_DIRECTORY !== undefined
         ? createFixedProjectDirectoryPicker({

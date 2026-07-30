@@ -33,8 +33,34 @@ export const VersionDiffRequestSchema = z.strictObject({
 
 export type VersionDiffRequest = z.infer<typeof VersionDiffRequestSchema>;
 
+const BranchNameSchema = z
+  .string()
+  .min(1)
+  .max(255)
+  .regex(/^[^\s\u0000-\u001f\u007f]+$/u);
+
+export const VersionBranchListRequestSchema = z.strictObject({
+  projectId: z.uuid(),
+});
+
+export type VersionBranchListRequest = z.infer<
+  typeof VersionBranchListRequestSchema
+>;
+
+export const VersionBranchSwitchRequestSchema = z.strictObject({
+  projectId: z.uuid(),
+  branchName: BranchNameSchema,
+});
+
+export type VersionBranchSwitchRequest = z.infer<
+  typeof VersionBranchSwitchRequestSchema
+>;
+
 export const VersionOperationErrorCodeSchema = z.enum([
   "not_found",
+  "branch_not_found",
+  "dirty_repository",
+  "task_active",
   "git_unavailable",
   "invalid_repository",
   "git_failed",
@@ -75,6 +101,20 @@ export const VersionDiffSchema = z.strictObject({
 });
 
 export type VersionDiff = z.infer<typeof VersionDiffSchema>;
+
+export const VersionBranchSchema = z.strictObject({
+  name: BranchNameSchema,
+  current: z.boolean(),
+});
+
+export type VersionBranch = z.infer<typeof VersionBranchSchema>;
+
+export const VersionBranchStateSchema = z.strictObject({
+  branches: z.array(VersionBranchSchema).max(1_000),
+  currentBranch: BranchNameSchema.nullable(),
+});
+
+export type VersionBranchState = z.infer<typeof VersionBranchStateSchema>;
 
 export const VersionCreateResponseSchema = z.union([
   z.strictObject({
@@ -124,3 +164,34 @@ export const VersionDiffResponseSchema = z.union([
 ]);
 
 export type VersionDiffResponse = z.infer<typeof VersionDiffResponseSchema>;
+
+export const VersionBranchListResponseSchema = z.union([
+  z.strictObject({
+    ok: z.literal(true),
+    state: VersionBranchStateSchema,
+  }),
+  z.strictObject({
+    ok: z.literal(false),
+    error: VersionOperationErrorSchema,
+  }),
+]);
+
+export type VersionBranchListResponse = z.infer<
+  typeof VersionBranchListResponseSchema
+>;
+
+export const VersionBranchSwitchResponseSchema = z.union([
+  z.strictObject({
+    ok: z.literal(true),
+    switched: z.boolean(),
+    branchName: BranchNameSchema,
+  }),
+  z.strictObject({
+    ok: z.literal(false),
+    error: VersionOperationErrorSchema,
+  }),
+]);
+
+export type VersionBranchSwitchResponse = z.infer<
+  typeof VersionBranchSwitchResponseSchema
+>;

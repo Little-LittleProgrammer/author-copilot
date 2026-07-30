@@ -1,5 +1,11 @@
 export type GitServiceErrorCode =
-  "git_unavailable" | "invalid_repository" | "git_failed" | "timeout";
+  | "branch_not_found"
+  | "dirty_repository"
+  | "git_unavailable"
+  | "invalid_repository"
+  | "git_failed"
+  | "task_active"
+  | "timeout";
 
 export class GitServiceError extends Error {
   public constructor(

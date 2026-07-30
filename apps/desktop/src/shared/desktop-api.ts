@@ -23,6 +23,14 @@ import type {
   TabContext,
   TabOperationResult,
   TabState,
+  TaskRecoveryListRequest,
+  TaskRecoveryListResponse,
+  TaskRecoveryRestoreRequest,
+  TaskRecoveryRestoreResponse,
+  VersionBranchListRequest,
+  VersionBranchListResponse,
+  VersionBranchSwitchRequest,
+  VersionBranchSwitchResponse,
   VersionCreateRequest,
   VersionCreateResponse,
   VersionDiffRequest,
@@ -75,6 +83,20 @@ export interface AuthorCopilotApi {
     readonly diff: (
       request: VersionDiffRequest,
     ) => Promise<VersionDiffResponse>;
+    readonly listBranches: (
+      request: VersionBranchListRequest,
+    ) => Promise<VersionBranchListResponse>;
+    readonly switchBranch: (
+      request: VersionBranchSwitchRequest,
+    ) => Promise<VersionBranchSwitchResponse>;
+  };
+  readonly taskRecovery: {
+    readonly list: (
+      request: TaskRecoveryListRequest,
+    ) => Promise<TaskRecoveryListResponse>;
+    readonly restore: (
+      request: TaskRecoveryRestoreRequest,
+    ) => Promise<TaskRecoveryRestoreResponse>;
   };
   readonly tabs: {
     readonly getContext: () => Promise<TabContext>;

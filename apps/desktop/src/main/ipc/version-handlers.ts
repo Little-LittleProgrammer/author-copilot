@@ -1,5 +1,9 @@
 import {
   IPC_INVOKE_CHANNELS,
+  VersionBranchListRequestSchema,
+  VersionBranchListResponseSchema,
+  VersionBranchSwitchRequestSchema,
+  VersionBranchSwitchResponseSchema,
   VersionCreateRequestSchema,
   VersionCreateResponseSchema,
   VersionDiffRequestSchema,
@@ -108,6 +112,53 @@ export function registerVersionIpcHandlers(options: VersionIpcOptions): void {
         return VersionDiffResponseSchema.parse({ ok: true, diff });
       } catch (error) {
         return VersionDiffResponseSchema.parse(versionOperationFailure(error));
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.versionBranchList,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      assertTrustedVersionIpc(
+        event,
+        args,
+        IPC_INVOKE_CHANNELS.versionBranchList,
+        options.trustedRendererUrl,
+      );
+
+      try {
+        const request = VersionBranchListRequestSchema.parse(args[0]);
+        const state = await options.gitService.listBranches(request.projectId);
+        return VersionBranchListResponseSchema.parse({ ok: true, state });
+      } catch (error) {
+        return VersionBranchListResponseSchema.parse(
+          versionOperationFailure(error),
+        );
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.versionBranchSwitch,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      assertTrustedVersionIpc(
+        event,
+        args,
+        IPC_INVOKE_CHANNELS.versionBranchSwitch,
+        options.trustedRendererUrl,
+      );
+
+      try {
+        const request = VersionBranchSwitchRequestSchema.parse(args[0]);
+        const result = await options.gitService.switchBranch(
+          request.projectId,
+          request.branchName,
+        );
+        return VersionBranchSwitchResponseSchema.parse({ ok: true, ...result });
+      } catch (error) {
+        return VersionBranchSwitchResponseSchema.parse(
+          versionOperationFailure(error),
+        );
       }
     },
   );

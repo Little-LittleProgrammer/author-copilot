@@ -14,13 +14,15 @@ import {
   TabStateSchema,
   TaskCancelRequestSchema,
   TaskProgressEventSchema,
+  VersionBranchListResponseSchema,
+  VersionBranchSwitchRequestSchema,
 } from "../src/index.js";
 
 const taskId = "20000000-0000-4000-8000-000000000001";
 
 describe("IPC contracts", () => {
   it("keeps every declared channel in the validated whitelist", () => {
-    expect(IPC_CHANNEL_NAMES).toHaveLength(31);
+    expect(IPC_CHANNEL_NAMES).toHaveLength(35);
     for (const channel of IPC_CHANNEL_NAMES) {
       expect(IpcChannelSchema.parse(channel)).toBe(channel);
     }
@@ -132,6 +134,30 @@ describe("shared DTO schemas", () => {
         completed: -1,
         total: null,
         timestamp: "not-a-timestamp",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("keeps branch switching limited to a structured local branch name", () => {
+    expect(
+      VersionBranchSwitchRequestSchema.parse({
+        projectId: "10000000-0000-4000-8000-000000000001",
+        branchName: "备选-结局",
+      }).branchName,
+    ).toBe("备选-结局");
+    expect(
+      VersionBranchSwitchRequestSchema.safeParse({
+        projectId: "10000000-0000-4000-8000-000000000001",
+        branchName: "main\n--detach",
+      }).success,
+    ).toBe(false);
+    expect(
+      VersionBranchListResponseSchema.safeParse({
+        ok: true,
+        state: {
+          currentBranch: "main",
+          branches: [{ name: "main", current: true, commitId: "secret" }],
+        },
       }).success,
     ).toBe(false);
   });

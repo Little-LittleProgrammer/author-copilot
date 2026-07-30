@@ -3,6 +3,7 @@ import {
   lstat,
   mkdtemp,
   mkdir,
+  readFile,
   realpath,
   rm,
   symlink,
@@ -138,12 +139,104 @@ describe("GitService", () => {
     const service = createService(projectRoot, join(root, "disabled-hooks"));
 
     await expect(service.listVersions(projectId, 50)).resolves.toEqual([]);
+    await expect(service.listBranches(projectId)).resolves.toEqual({
+      branches: [],
+      currentBranch: null,
+    });
     await expect(lstat(join(projectRoot, ".git"))).rejects.toMatchObject({
       code: "ENOENT",
     });
 
     await execFileAsync("git", ["init", "--initial-branch=main", projectRoot]);
     await expect(service.listVersions(projectId, 50)).resolves.toEqual([]);
+  });
+
+  it("lists and switches exact local branch names in a clean repository", async () => {
+    const root = await temporaryRoot();
+    const projectRoot = join(root, "分支 项目");
+    const documentPath = join(projectRoot, "第一章.md");
+    await mkdir(projectRoot);
+    await writeFile(documentPath, "主线\n", "utf8");
+    const service = createService(projectRoot, join(root, "disabled-hooks"));
+    await service.createVersion(projectId, "保存主线");
+
+    await execFileAsync("git", [
+      "-C",
+      projectRoot,
+      "switch",
+      "-c",
+      "备选-结局",
+    ]);
+    await writeFile(documentPath, "备选结局\n", "utf8");
+    await execFileAsync("git", ["-C", projectRoot, "add", "--all"]);
+    await execFileAsync("git", [
+      "-C",
+      projectRoot,
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.com",
+      "commit",
+      "-m",
+      "保存备选结局",
+    ]);
+    await execFileAsync("git", ["-C", projectRoot, "switch", "main"]);
+
+    await expect(service.listBranches(projectId)).resolves.toEqual({
+      currentBranch: "main",
+      branches: [
+        { name: "main", current: true },
+        { name: "备选-结局", current: false },
+      ],
+    });
+    await expect(service.switchBranch(projectId, "备选-结局")).resolves.toEqual(
+      { branchName: "备选-结局", switched: true },
+    );
+    await expect(readFile(documentPath, "utf8")).resolves.toBe("备选结局\n");
+    await expect(service.switchBranch(projectId, "备选-结局")).resolves.toEqual(
+      { branchName: "备选-结局", switched: false },
+    );
+  });
+
+  it("rejects missing branches and dirty repositories without changing HEAD", async () => {
+    const root = await temporaryRoot();
+    const projectRoot = join(root, "project");
+    await mkdir(projectRoot);
+    await writeFile(join(projectRoot, "chapter.md"), "main\n", "utf8");
+    const service = createService(projectRoot, join(root, "disabled-hooks"));
+    await service.createVersion(projectId, "main");
+    await execFileAsync("git", ["-C", projectRoot, "branch", "other"]);
+
+    await expect(service.switchBranch(projectId, "--detach")).rejects.toEqual(
+      expect.objectContaining<Partial<GitServiceError>>({
+        code: "branch_not_found",
+      }),
+    );
+    const guardedService = new GitService({
+      gitExecutable: "git",
+      hooksDirectory: join(root, "guarded-hooks"),
+      resolveProjectRoot: async () => projectRoot,
+      hasRecoverableTask: async () => true,
+    });
+    await expect(
+      guardedService.switchBranch(projectId, "other"),
+    ).rejects.toEqual(
+      expect.objectContaining<Partial<GitServiceError>>({
+        code: "task_active",
+      }),
+    );
+    await writeFile(join(projectRoot, "untracked.md"), "dirty\n", "utf8");
+    await expect(service.switchBranch(projectId, "other")).rejects.toEqual(
+      expect.objectContaining<Partial<GitServiceError>>({
+        code: "dirty_repository",
+      }),
+    );
+    const branch = await execFileAsync(
+      "git",
+      ["-C", projectRoot, "branch", "--show-current"],
+      { encoding: "utf8" },
+    );
+    expect(branch.stdout.trim()).toBe("main");
   });
 
   it("rejects symbolic-link Git metadata", async () => {

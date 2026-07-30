@@ -174,6 +174,37 @@ export function ProjectEditorTab({
     });
   }, [document, selectDocument]);
 
+  const reloadAfterRepositoryChange = useCallback(() => {
+    const api = getProjectApi();
+    if (api === undefined) return;
+    setLoading(true);
+    setError(undefined);
+    void api
+      .getStructure({ projectId: project.id })
+      .then(async (nodes) => {
+        setStructure(nodes);
+        if (document === undefined) return;
+        const documentStillExists = flattenStructure(nodes).some(
+          (node) => node.kind === "document" && node.path === document.path,
+        );
+        if (!documentStillExists) {
+          setDocument(undefined);
+          setContent("");
+          return;
+        }
+        const snapshot = await api.readDocument({
+          projectId: project.id,
+          path: document.path,
+        });
+        setDocument(snapshot);
+        setContent(snapshot.content);
+      })
+      .catch((reason: unknown) =>
+        setError(errorMessage(reason, t("errorGeneric"))),
+      )
+      .finally(() => setLoading(false));
+  }, [document, project.id, t]);
+
   const updateProject = useCallback(
     async (title: string): Promise<void> => {
       const api = getProjectApi();
@@ -333,6 +364,7 @@ export function ProjectEditorTab({
           }}
           onCreateVersion={() => setVersionDialogOpen(true)}
           onReload={reload}
+          onRecoveryRestored={reloadAfterRepositoryChange}
           onSave={save}
           onTabChange={setTab}
           saving={saving}

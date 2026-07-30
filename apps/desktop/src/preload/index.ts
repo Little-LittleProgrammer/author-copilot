@@ -16,6 +16,10 @@ import {
   TabContextSchema,
   TabOperationResultSchema,
   TabStateSchema,
+  TaskRecoveryListResponseSchema,
+  TaskRecoveryRestoreResponseSchema,
+  VersionBranchListResponseSchema,
+  VersionBranchSwitchResponseSchema,
   VersionCreateResponseSchema,
   VersionDiffResponseSchema,
   VersionListResponseSchema,
@@ -30,6 +34,10 @@ import {
   type ProjectSummary,
   type ProjectUpdateRequest,
   type TabState,
+  type TaskRecoveryListRequest,
+  type TaskRecoveryRestoreRequest,
+  type VersionBranchListRequest,
+  type VersionBranchSwitchRequest,
   type VersionCreateRequest,
   type VersionDiffRequest,
   type VersionListRequest,
@@ -157,6 +165,36 @@ const api: AuthorCopilotApi = Object.freeze({
         request,
       );
       return VersionDiffResponseSchema.parse(response);
+    },
+    listBranches: async (request: VersionBranchListRequest) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.versionBranchList,
+        request,
+      );
+      return VersionBranchListResponseSchema.parse(response);
+    },
+    switchBranch: async (request: VersionBranchSwitchRequest) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.versionBranchSwitch,
+        request,
+      );
+      return VersionBranchSwitchResponseSchema.parse(response);
+    },
+  }),
+  taskRecovery: Object.freeze({
+    list: async (request: TaskRecoveryListRequest) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.taskRecoveryList,
+        request,
+      );
+      return TaskRecoveryListResponseSchema.parse(response);
+    },
+    restore: async (request: TaskRecoveryRestoreRequest) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.taskRecoveryRestore,
+        request,
+      );
+      return TaskRecoveryRestoreResponseSchema.parse(response);
     },
   }),
   tabs: Object.freeze({
