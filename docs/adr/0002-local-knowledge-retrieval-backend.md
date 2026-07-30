@@ -74,8 +74,10 @@ production-service, HTTPS/SSH, credential and enterprise CA suites.
 | Windows arm64 | [90841833222](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552/job/90841833222) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
 | Windows x64   | [90841833264](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552/job/90841833264) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
 
-[Quality run 30533716209](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716209)
-also passed formatting, boundaries, lint, typecheck, tests, builds and Electron E2E for the same SHA.
+[Quality run 30534649949](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534649949)
+passed formatting, boundaries, lint, typecheck, the root-integrated RAG benchmark tests, workspace
+tests, builds and Electron E2E at commit `bd7f07f`. The production backend is unchanged from the
+four-architecture-qualified commit.
 Windows ARM64 packaged UI startup remains the separately documented M1-04 gap; this run does prove
 that the native Windows ARM64 Electron executable can load `node:sqlite`, create FTS5/trigram data and
 query it, and that the Windows ARM64 artifact packages successfully.

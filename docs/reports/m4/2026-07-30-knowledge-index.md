@@ -33,8 +33,8 @@ The following checks passed on macOS arm64 with Node 24.16.0 and pnpm 11.7.0:
 
 ## CI Evidence
 
-- [Quality run 30533716209](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716209) passed formatting, boundaries, lint, typecheck, tests, builds and all 8 Electron E2E workflows for commit `92756ec66f1a35a90a78545d41472fb3bb874fc3`.
-- [Desktop package matrix run 30533716552](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552) passed macOS x64/arm64 and Windows x64/arm64 packaging and artifact upload for the same commit.
+- [Quality run 30534649949](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534649949) passed formatting, boundaries, lint, typecheck, root-integrated RAG benchmark tests, workspace tests, builds and all 8 Electron E2E workflows for commit `bd7f07f`.
+- [Desktop package matrix run 30533716552](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552) passed macOS x64/arm64 and Windows x64/arm64 packaging and artifact upload for production-backend commit `92756ec66f1a35a90a78545d41472fb3bb874fc3`.
 - All four matrix jobs passed the Electron SQLite FTS5 runtime check with Electron 43.1.0, Node 24.18.0 and SQLite 3.53.1, including Chinese and English trigram queries.
 - All four jobs also passed bundled Git qualification, production Git services, HTTPS/SSH, credential and enterprise CA paths. macOS x64/arm64 and Windows x64 packaged startup passed. Windows ARM64 packaged UI startup remains the intentional M1-04 gap, but its native Electron FTS5 runtime and package artifact both passed.
 
