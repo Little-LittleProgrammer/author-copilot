@@ -53,6 +53,11 @@ class FixtureTests(unittest.TestCase):
             self.assertTrue(
                 all(query["review"]["status"] == "pending" for query in queries)
             )
+            self.assertEqual(120, len({query["query"] for query in queries}))
+            self.assertEqual(
+                20,
+                sum(query["case"] == "near-synonym" for query in queries),
+            )
             review = json.loads(
                 (root / "review-template.json").read_text(encoding="utf-8")
             )

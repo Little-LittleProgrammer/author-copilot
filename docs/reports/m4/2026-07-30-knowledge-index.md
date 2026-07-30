@@ -33,8 +33,8 @@ The following checks passed on macOS arm64 with Node 24.16.0 and pnpm 11.7.0:
 
 ## CI Evidence
 
-- [Quality run 30534649949](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534649949) passed formatting, boundaries, lint, typecheck, root-integrated RAG benchmark tests, workspace tests, builds and all 8 Electron E2E workflows for commit `bd7f07f`.
-- [Desktop package matrix run 30533716552](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552) passed macOS x64/arm64 and Windows x64/arm64 packaging and artifact upload for production-backend commit `92756ec66f1a35a90a78545d41472fb3bb874fc3`.
+- [Quality run 30534821741](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821741) passed formatting, boundaries, lint, typecheck, root-integrated RAG benchmark tests, workspace tests, builds and all 8 Electron E2E workflows for commit `0f11bb6`.
+- [Desktop package matrix run 30534821740](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821740) passed macOS x64/arm64 and Windows x64/arm64 packaging and artifact upload for commit `0f11bb64514e686c5850f91110803378e0ff78f2`.
 - All four matrix jobs passed the Electron SQLite FTS5 runtime check with Electron 43.1.0, Node 24.18.0 and SQLite 3.53.1, including Chinese and English trigram queries.
 - All four jobs also passed bundled Git qualification, production Git services, HTTPS/SSH, credential and enterprise CA paths. macOS x64/arm64 and Windows x64 packaged startup passed. Windows ARM64 packaged UI startup remains the intentional M1-04 gap, but its native Electron FTS5 runtime and package artifact both passed.
 
@@ -55,6 +55,6 @@ Visual evidence is stored at `apps/desktop/test-results/m4-knowledge-index.png`.
 
 ## Open Exit Conditions
 
-The formal-scale candidate report now covers exact 100,000/1,000,000/5,000,000-character corpora and 120 generated labels. On the macOS arm64 reference run, all three scales recorded 83.33% Recall@5 and 100% recalled-source path/range accuracy; the 1,000,000-character query p95 was 0.222 ms. The 20 misses are deliberate pure near-synonym cases and document the lexical baseline's semantic limit. Full results are in `spikes/rag-benchmark/reports/sqlite-fts5-formal-candidate.json` and the backend decision is frozen in ADR-0002.
+The formal-scale candidate report now covers exact 100,000/1,000,000/5,000,000-character corpora and 120 generated labels. All 120 query texts are unique; each of the 20 pure near-synonym cases uses a distinct paraphrased color clue that maps to exactly one source. On the macOS arm64 reference run, all three scales recorded 83.33% Recall@5 and 100% recalled-source path/range accuracy; the 1,000,000-character query p95 was 0.226 ms. The 20 misses document the lexical baseline's semantic limit. Full results are in `spikes/rag-benchmark/reports/sqlite-fts5-formal-candidate.json` and the backend decision is frozen in ADR-0002.
 
 This does not close M4. Generated labels remain pending human review, so they do not satisfy the plan's requirement for at least 100 human-labeled queries. The selected backend now has four-architecture packaging and runtime evidence, but M0/M4 completion must not be claimed until the human-label gate is satisfied.

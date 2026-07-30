@@ -13,6 +13,32 @@ PROJECT_ID = "formal-fixture-project-001"
 FORMAL_SCALES = (100_000, 1_000_000, 5_000_000)
 QUERY_COUNT = 120
 
+ZH_NEAR_SYNONYM_CLUES = (
+    ("绯红色", "深红色"),
+    ("天青色", "天空蓝"),
+    ("象牙白", "乳白色"),
+    ("乌木黑", "墨黑色"),
+    ("翡翠绿", "宝石绿"),
+    ("琥珀黄", "蜂蜜黄"),
+    ("堇紫色", "紫罗兰色"),
+    ("朱红色", "火焰红"),
+    ("松石青", "蓝绿色"),
+    ("银灰色", "金属灰"),
+)
+
+EN_NEAR_SYNONYM_CLUES = (
+    ("crimson", "deep-red"),
+    ("azure", "sky-blue"),
+    ("ivory", "off-white"),
+    ("ebony", "jet-black"),
+    ("emerald", "jewel-green"),
+    ("amber", "honey-yellow"),
+    ("violet", "royal-purple"),
+    ("scarlet", "flame-red"),
+    ("turquoise", "blue-green"),
+    ("silver", "metallic-gray"),
+)
+
 
 def _anchor(index: int) -> tuple[str, str, dict[str, Any]]:
     number = index + 1
@@ -21,11 +47,16 @@ def _anchor(index: int) -> tuple[str, str, dict[str, Any]]:
         path = f"zh/第{number:03d}章/01-线索.md"
         person = f"记录员{number:03d}"
         place = f"北港{number:03d}号仓库"
-        evidence = f"{person}把刻有编号 {code} 的铜制航标存入{place}的第{number % 17 + 1}格。"
         if index % 6 == 0:
-            query = "谁保管了古铜色导航标记"
+            source_clue, query_clue = ZH_NEAR_SYNONYM_CLUES[index // 6]
+            evidence = (
+                f"{person}把一枚{source_clue}的铜制航标存入"
+                f"{place}的第{number % 17 + 1}格。"
+            )
+            query = f"谁保管了{query_clue}的古铜导航标记？"
             case = "near-synonym"
         else:
+            evidence = f"{person}把刻有编号 {code} 的铜制航标存入{place}的第{number % 17 + 1}格。"
             query = f"编号 {code} 的航标在哪里"
             case = "identifier"
         language = "zh"
@@ -34,14 +65,21 @@ def _anchor(index: int) -> tuple[str, str, dict[str, Any]]:
         path = f"en/chapter-{number:03d}/01-clue.md"
         person = f"Archivist {number:03d}"
         place = f"North Quay vault {number:03d}"
-        evidence = (
-            f"{person} stored the brass beacon marked {code} in drawer "
-            f"{number % 17 + 1} of {place}."
-        )
         if index % 6 == 0:
-            query = "Who secured the bronze navigation marker?"
+            source_clue, query_clue = EN_NEAR_SYNONYM_CLUES[
+                (index - QUERY_COUNT // 2) // 6
+            ]
+            evidence = (
+                f"{person} stored the {source_clue} brass beacon in drawer "
+                f"{number % 17 + 1} of {place}."
+            )
+            query = f"Who secured the {query_clue} bronze navigation marker?"
             case = "near-synonym"
         else:
+            evidence = (
+                f"{person} stored the brass beacon marked {code} in drawer "
+                f"{number % 17 + 1} of {place}."
+            )
             query = f"Where is the beacon marked {code}?"
             case = "identifier"
         language = "en"

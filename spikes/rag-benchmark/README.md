@@ -81,5 +81,7 @@ required gate.
 Every smoke report sets `formal_exit_gate.satisfied_by_this_report` to `false`. Formal-scale
 candidate reports separately record engineering thresholds and human review. The generated labels
 include 100 identifier/partial-expression cases and 20 pure near-synonym cases that expose the
-lexical candidate's expected semantic misses. They are useful for regression and performance
-qualification, but they are not a substitute for the required human-labeled dataset.
+lexical candidate's expected semantic misses. Every near-synonym query has a distinct paraphrased
+color clue, so a reviewer can map it to exactly one labeled source rather than approve an ambiguous
+repeated query. The generated cases are useful for regression and performance qualification, but
+they are not a substitute for the required human-labeled dataset.

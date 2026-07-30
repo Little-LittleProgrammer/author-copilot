@@ -46,13 +46,15 @@ The deterministic formal-scale candidate run on macOS arm64 used Python 3.14.6 a
 
 | Characters | Documents | Chunks | First index | Index size | Incremental update | Query p95 | Recall@5 | Source accuracy |
 | ---------- | --------- | ------ | ----------- | ---------- | ------------------ | --------- | -------- | --------------- |
-| 100,000    | 125       | 237    | 6.767 ms    | 0.49 MiB   | 2.457 ms           | 0.165 ms  | 83.33%   | 100%            |
-| 1,000,000  | 170       | 1,399  | 73.294 ms   | 4.29 MiB   | 7.595 ms           | 0.222 ms  | 83.33%   | 100%            |
-| 5,000,000  | 368       | 6,568  | 388.031 ms  | 21.14 MiB  | 5.463 ms           | 0.354 ms  | 83.33%   | 100%            |
+| 100,000    | 125       | 237    | 7.276 ms    | 0.49 MiB   | 2.178 ms           | 0.170 ms  | 83.33%   | 100%            |
+| 1,000,000  | 170       | 1,400  | 64.562 ms   | 4.29 MiB   | 2.949 ms           | 0.226 ms  | 83.33%   | 100%            |
+| 5,000,000  | 368       | 6,568  | 378.652 ms  | 21.15 MiB  | 5.564 ms           | 0.371 ms  | 83.33%   | 100%            |
 
-The 120 generated labels deliberately include 20 pure near-synonym queries that lexical FTS does not
-answer. This makes the 83.33% result an explicit baseline rather than a semantic-search claim. The
-engineering thresholds pass, but generated labels are not human labels. The report therefore keeps
+The 120 generated labels have unique query texts and deliberately include 20 pure near-synonym
+queries that lexical FTS does not answer. Each near-synonym query uses a distinct paraphrased color
+clue that maps to exactly one source, avoiding ambiguous repeated labels. This makes the 83.33% result
+an explicit baseline rather than a semantic-search claim. The engineering thresholds pass, but
+generated labels are not human labels. The report therefore keeps
 `human_label_review_passed` and `satisfied_by_this_report` false. M0 and M4 remain open until at least
 100 labels are independently reviewed.
 
@@ -62,21 +64,21 @@ expected query ID. Missing, extra, pending or stale decisions fail closed.
 
 ## Four-Architecture Qualification
 
-[Desktop package matrix run 30533716552](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552)
-passed against commit `92756ec66f1a35a90a78545d41472fb3bb874fc3`. Every job packaged and uploaded
+[Desktop package matrix run 30534821740](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821740)
+passed against commit `0f11bb64514e686c5850f91110803378e0ff78f2`. Every job packaged and uploaded
 the target artifact, then ran the Electron SQLite FTS5 qualification and the existing bundled Git,
 production-service, HTTPS/SSH, credential and enterprise CA suites.
 
 | Target        | Job                                                                                                                           | Electron | Node    | SQLite | FTS5 trigram |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------- | ------- | ------ | ------------ |
-| macOS arm64   | [90841833276](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552/job/90841833276) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
-| macOS x64     | [90841833330](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552/job/90841833330) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
-| Windows arm64 | [90841833222](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552/job/90841833222) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
-| Windows x64   | [90841833264](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552/job/90841833264) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
+| macOS arm64   | [90846092047](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821740/job/90846092047) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
+| macOS x64     | [90846092036](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821740/job/90846092036) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
+| Windows arm64 | [90846092102](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821740/job/90846092102) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
+| Windows x64   | [90846092022](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821740/job/90846092022) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
 
-[Quality run 30534649949](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534649949)
+[Quality run 30534821741](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821741)
 passed formatting, boundaries, lint, typecheck, the root-integrated RAG benchmark tests, workspace
-tests, builds and Electron E2E at commit `bd7f07f`. The production backend is unchanged from the
+tests, builds and Electron E2E at commit `0f11bb6`. The production backend is unchanged from the
 four-architecture-qualified commit.
 Windows ARM64 packaged UI startup remains the separately documented M1-04 gap; this run does prove
 that the native Windows ARM64 Electron executable can load `node:sqlite`, create FTS5/trigram data and
