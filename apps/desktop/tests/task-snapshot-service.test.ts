@@ -16,10 +16,8 @@ import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  TaskSnapshotError,
-  TaskSnapshotService,
-} from "../src/main/git/task-snapshot-service.js";
+import { TaskSnapshotService } from "../src/main/git/task-snapshot-service.js";
+import type { TaskSnapshotError } from "../src/main/git/task-snapshot-service.js";
 
 const execFileAsync = promisify(execFile);
 const projectId = "10000000-0000-4000-8000-000000000001";

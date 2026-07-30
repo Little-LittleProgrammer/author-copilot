@@ -78,6 +78,11 @@ jobs:
       - name: Qualify bundled Git runtime
         run: pnpm --filter @author-copilot/desktop runtime:verify
 
+      - name: Qualify bundled Git production services
+        env:
+          AUTHOR_COPILOT_TEST_GIT_RESOURCES_PATH: ${{ github.workspace }}/apps/desktop/resources
+        run: pnpm --filter @author-copilot/desktop runtime:qualify-services
+
       - name: Assert macOS package contains Git runtime
         if: matrix.os == 'macos'
         run: test -x "$(dirname '${{ matrix.executable }}')/../Resources/git/bin/git"
