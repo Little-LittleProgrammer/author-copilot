@@ -15,7 +15,11 @@ from rag_benchmark.chunking import chunk_markdown  # noqa: E402
 from rag_benchmark.contracts import SourceDocument  # noqa: E402
 from rag_benchmark.fixtures import generate_fixture  # noqa: E402
 from rag_benchmark.formal_fixtures import generate_formal_fixture  # noqa: E402
-from rag_benchmark.runner import run_benchmark, run_formal_benchmark  # noqa: E402
+from rag_benchmark.runner import (  # noqa: E402
+    run_benchmark,
+    run_formal_benchmark,
+    validate_label_review,
+)
 from rag_benchmark.adapters.sqlite_fts5 import SqliteFts5Adapter  # noqa: E402
 
 
@@ -49,6 +53,39 @@ class FixtureTests(unittest.TestCase):
             self.assertTrue(
                 all(query["review"]["status"] == "pending" for query in queries)
             )
+            review = json.loads(
+                (root / "review-template.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(120, len(review["decisions"]))
+            self.assertEqual({"pending"}, set(review["decisions"].values()))
+
+    def test_human_review_requires_every_query_and_matching_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "formal"
+            generate_formal_fixture(root, 100_000)
+            queries = json.loads(
+                (root / "queries.json").read_text(encoding="utf-8")
+            )
+            review_path = root / "review-template.json"
+            review = json.loads(review_path.read_text(encoding="utf-8"))
+            review.update(
+                {
+                    "reviewed_by": "benchmark-test-reviewer",
+                    "reviewed_at": "2026-07-30T10:00:00Z",
+                    "decisions": {
+                        query_id: "approved" for query_id in review["decisions"]
+                    },
+                }
+            )
+            review_path.write_text(json.dumps(review), encoding="utf-8")
+            self.assertEqual(
+                120,
+                validate_label_review(review_path, queries)["approved_queries"],
+            )
+            review["query_set_sha256"] = "0" * 64
+            review_path.write_text(json.dumps(review), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                validate_label_review(review_path, queries)
 
 
 class SqliteSmokeTests(unittest.TestCase):

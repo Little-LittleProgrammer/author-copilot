@@ -30,14 +30,14 @@
         "labeled_queries": 120
       },
       "metrics": {
-        "first_index_ms": 7.435,
+        "first_index_ms": 6.767,
         "index_size_bytes": 512000,
-        "single_file_incremental_ms": 2.411,
+        "single_file_incremental_ms": 2.457,
         "single_file_incremental_verified": true,
         "query_latency_ms": {
           "samples": 2400,
-          "p50": 0.045,
-          "p95": 0.162
+          "p50": 0.046,
+          "p95": 0.165
         },
         "recall_at_5": 0.833333,
         "source_path_range_accuracy": 1.0,
@@ -3226,14 +3226,14 @@
         "labeled_queries": 120
       },
       "metrics": {
-        "first_index_ms": 61.439,
+        "first_index_ms": 73.294,
         "index_size_bytes": 4497408,
-        "single_file_incremental_ms": 2.86,
+        "single_file_incremental_ms": 7.595,
         "single_file_incremental_verified": true,
         "query_latency_ms": {
           "samples": 2400,
-          "p50": 0.078,
-          "p95": 0.216
+          "p50": 0.082,
+          "p95": 0.222
         },
         "recall_at_5": 0.833333,
         "source_path_range_accuracy": 1.0,
@@ -6422,14 +6422,14 @@
         "labeled_queries": 120
       },
       "metrics": {
-        "first_index_ms": 420.559,
+        "first_index_ms": 388.031,
         "index_size_bytes": 22171648,
-        "single_file_incremental_ms": 5.582,
+        "single_file_incremental_ms": 5.463,
         "single_file_incremental_verified": true,
         "query_latency_ms": {
           "samples": 2400,
-          "p50": 0.159,
-          "p95": 0.347
+          "p50": 0.163,
+          "p95": 0.354
         },
         "recall_at_5": 0.833333,
         "source_path_range_accuracy": 1.0,
@@ -9613,6 +9613,10 @@
     "recall_at_5_minimum": 0.8,
     "one_million_character_query_p95_ms_maximum": 300,
     "engineering_thresholds_passed": true,
+    "human_label_review": {
+      "provided": false,
+      "passed": false
+    },
     "human_label_review_passed": false,
     "satisfied_by_this_report": false
   }

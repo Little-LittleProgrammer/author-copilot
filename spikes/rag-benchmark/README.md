@@ -33,6 +33,12 @@ python3 benchmark.py run \
   --report reports/sqlite-fts5-formal-candidate.json
 ```
 
+Formal generation also writes `review-template.json`. An independent reviewer must inspect every
+query/source label, fill `reviewed_by` and `reviewed_at`, and change every decision from `pending` to
+`approved`. Pass that file with `--label-review <path>`. The run rejects incomplete decisions,
+timestamps, unknown/missing query IDs and stale query-set hashes; without a valid manifest the final
+gate remains false.
+
 The commands recreate their fixture directory, so repeated runs start from identical bytes. The
 report contains the fixture SHA-256 and runtime versions. Generated databases and fixtures stay
 under `.work/` and are ignored. Each adapter instance is project-scoped and rejects chunks from a

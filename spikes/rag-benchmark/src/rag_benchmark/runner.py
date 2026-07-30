@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime
 import json
 from pathlib import Path
 import platform
@@ -18,6 +19,7 @@ from .formal_fixtures import (
     generate_formal_fixture,
     load_documents as load_formal_documents,
     load_queries as load_formal_queries,
+    query_set_sha256,
 )
 
 
@@ -104,6 +106,7 @@ def run_formal_benchmark(
     work_dir: Path,
     report_path: Path,
     query_repetitions: int = 20,
+    label_review_path: Path | None = None,
 ) -> dict[str, Any]:
     scale_reports: list[dict[str, Any]] = []
     for scale in FORMAL_SCALES:
@@ -158,6 +161,10 @@ def run_formal_benchmark(
             for item in scale_reports
         )
     )
+    label_review = validate_label_review(
+        label_review_path,
+        load_formal_queries(work_dir / f"fixture-{FORMAL_SCALES[0]}"),
+    )
     report = {
         "schema_version": 1,
         "classification": "formal-scale-candidate",
@@ -182,8 +189,11 @@ def run_formal_benchmark(
             "recall_at_5_minimum": 0.8,
             "one_million_character_query_p95_ms_maximum": 300,
             "engineering_thresholds_passed": engineering_thresholds_passed,
-            "human_label_review_passed": False,
-            "satisfied_by_this_report": False,
+            "human_label_review": label_review,
+            "human_label_review_passed": label_review["passed"],
+            "satisfied_by_this_report": (
+                engineering_thresholds_passed and label_review["passed"]
+            ),
         },
     }
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -193,6 +203,49 @@ def run_formal_benchmark(
         newline="\n",
     )
     return report
+
+
+def validate_label_review(
+    review_path: Path | None,
+    queries: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if review_path is None:
+        return {"provided": False, "passed": False}
+    review: Any = json.loads(review_path.read_text(encoding="utf-8"))
+    if not isinstance(review, dict):
+        raise ValueError("The human label review manifest must be a JSON object")
+    expected_ids = {query["id"] for query in queries}
+    decisions = review.get("decisions")
+    reviewed_by = review.get("reviewed_by")
+    reviewed_at = review.get("reviewed_at")
+    if (
+        review.get("schema_version") != 1
+        or review.get("query_set_sha256") != query_set_sha256(queries)
+        or not isinstance(reviewed_by, str)
+        or not reviewed_by.strip()
+        or not isinstance(reviewed_at, str)
+        or not reviewed_at.strip()
+        or not isinstance(decisions, dict)
+        or set(decisions) != expected_ids
+        or any(decision != "approved" for decision in decisions.values())
+    ):
+        raise ValueError(
+            "The human label review manifest is incomplete or does not match the query set"
+        )
+    try:
+        timestamp = datetime.fromisoformat(reviewed_at.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ValueError("The human label review timestamp is invalid") from error
+    if timestamp.tzinfo is None:
+        raise ValueError("The human label review timestamp must include a timezone")
+    return {
+        "provided": True,
+        "passed": True,
+        "reviewed_by": reviewed_by.strip(),
+        "reviewed_at": reviewed_at,
+        "approved_queries": len(expected_ids),
+        "query_set_sha256": query_set_sha256(queries),
+    }
 
 
 def _measure_candidate(

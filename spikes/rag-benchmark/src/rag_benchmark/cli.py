@@ -34,6 +34,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="run all three formal scales; generated labels remain pending human review",
     )
+    run.add_argument(
+        "--label-review",
+        type=Path,
+        help="human review manifest generated from a formal fixture",
+    )
     return parser
 
 
@@ -56,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
                 work_dir=args.work_dir,
                 report_path=args.report,
                 query_repetitions=args.query_repetitions,
+                label_review_path=args.label_review,
             )
             if args.formal
             else run_benchmark(

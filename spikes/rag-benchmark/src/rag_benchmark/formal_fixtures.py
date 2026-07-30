@@ -109,6 +109,11 @@ def generate_formal_fixture(destination: Path, target_characters: int) -> dict[s
         encoding="utf-8",
         newline="\n",
     )
+    (destination / "review-template.json").write_text(
+        json.dumps(review_template(queries), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
     manifest = {
         "fixture_version": 1,
         "classification": "formal-scale-synthetic-labels",
@@ -155,3 +160,34 @@ def load_documents(destination: Path) -> list[SourceDocument]:
 
 def load_queries(destination: Path) -> list[dict[str, Any]]:
     return json.loads((destination / "queries.json").read_text(encoding="utf-8"))
+
+
+def query_set_sha256(queries: list[dict[str, Any]]) -> str:
+    canonical = [
+        {
+            "id": query["id"],
+            "language": query["language"],
+            "query": query["query"],
+            "case": query["case"],
+            "expected_sources": query["expected_sources"],
+        }
+        for query in queries
+    ]
+    return hashlib.sha256(
+        json.dumps(
+            canonical,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def review_template(queries: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "query_set_sha256": query_set_sha256(queries),
+        "reviewed_by": "",
+        "reviewed_at": "",
+        "decisions": {query["id"]: "pending" for query in queries},
+    }

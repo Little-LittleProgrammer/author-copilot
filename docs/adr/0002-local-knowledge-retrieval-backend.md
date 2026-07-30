@@ -46,15 +46,19 @@ The deterministic formal-scale candidate run on macOS arm64 used Python 3.14.6 a
 
 | Characters | Documents | Chunks | First index | Index size | Incremental update | Query p95 | Recall@5 | Source accuracy |
 | ---------- | --------- | ------ | ----------- | ---------- | ------------------ | --------- | -------- | --------------- |
-| 100,000    | 125       | 237    | 7.435 ms    | 0.49 MiB   | 2.411 ms           | 0.162 ms  | 83.33%   | 100%            |
-| 1,000,000  | 170       | 1,399  | 61.439 ms   | 4.29 MiB   | 2.860 ms           | 0.216 ms  | 83.33%   | 100%            |
-| 5,000,000  | 368       | 6,568  | 420.559 ms  | 21.14 MiB  | 5.582 ms           | 0.347 ms  | 83.33%   | 100%            |
+| 100,000    | 125       | 237    | 6.767 ms    | 0.49 MiB   | 2.457 ms           | 0.165 ms  | 83.33%   | 100%            |
+| 1,000,000  | 170       | 1,399  | 73.294 ms   | 4.29 MiB   | 7.595 ms           | 0.222 ms  | 83.33%   | 100%            |
+| 5,000,000  | 368       | 6,568  | 388.031 ms  | 21.14 MiB  | 5.463 ms           | 0.354 ms  | 83.33%   | 100%            |
 
 The 120 generated labels deliberately include 20 pure near-synonym queries that lexical FTS does not
 answer. This makes the 83.33% result an explicit baseline rather than a semantic-search claim. The
 engineering thresholds pass, but generated labels are not human labels. The report therefore keeps
 `human_label_review_passed` and `satisfied_by_this_report` false. M0 and M4 remain open until at least
 100 labels are independently reviewed.
+
+Formal fixture generation emits a review manifest bound to the query-set SHA-256. The benchmark
+accepts it only when a named reviewer supplies a timezone-qualified timestamp and approves every
+expected query ID. Missing, extra, pending or stale decisions fail closed.
 
 ## Four-Architecture Qualification
 

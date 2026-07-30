@@ -28,7 +28,7 @@ The following checks passed on macOS arm64 with Node 24.16.0 and pnpm 11.7.0:
 - Desktop lint: zero errors; four existing Fast Refresh warnings remain.
 - Desktop typecheck and Electron main/preload/renderer production build passed.
 - Electron E2E: 8 workflows passed, including initialization, search, source-line display, and navigation back to the current document.
-- RAG benchmark suite: 6 tests passed, including all three formal corpus scales and the fail-closed human-review gate.
+- RAG benchmark suite: 7 tests passed, including all three formal corpus scales and the fail-closed human-review manifest gate.
 - Electron runtime qualification passed locally on macOS arm64 with Electron 43.1.0, Node 24.18.0 and SQLite 3.53.1.
 
 ## CI Evidence
@@ -55,6 +55,6 @@ Visual evidence is stored at `apps/desktop/test-results/m4-knowledge-index.png`.
 
 ## Open Exit Conditions
 
-The formal-scale candidate report now covers exact 100,000/1,000,000/5,000,000-character corpora and 120 generated labels. On the macOS arm64 reference run, all three scales recorded 83.33% Recall@5 and 100% recalled-source path/range accuracy; the 1,000,000-character query p95 was 0.216 ms. The 20 misses are deliberate pure near-synonym cases and document the lexical baseline's semantic limit. Full results are in `spikes/rag-benchmark/reports/sqlite-fts5-formal-candidate.json` and the backend decision is frozen in ADR-0002.
+The formal-scale candidate report now covers exact 100,000/1,000,000/5,000,000-character corpora and 120 generated labels. On the macOS arm64 reference run, all three scales recorded 83.33% Recall@5 and 100% recalled-source path/range accuracy; the 1,000,000-character query p95 was 0.222 ms. The 20 misses are deliberate pure near-synonym cases and document the lexical baseline's semantic limit. Full results are in `spikes/rag-benchmark/reports/sqlite-fts5-formal-candidate.json` and the backend decision is frozen in ADR-0002.
 
 This does not close M4. Generated labels remain pending human review, so they do not satisfy the plan's requirement for at least 100 human-labeled queries. The selected backend now has four-architecture packaging and runtime evidence, but M0/M4 completion must not be claimed until the human-label gate is satisfied.
