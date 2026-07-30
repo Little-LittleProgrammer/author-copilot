@@ -29,5 +29,9 @@
     "prettier": "catalog:",
     "turbo": "catalog:",
     "typescript": "catalog:"
+  },
+  "volta": {
+    "node": "24.16.0",
+    "pnpm": "11.7.0"
   }
 }
