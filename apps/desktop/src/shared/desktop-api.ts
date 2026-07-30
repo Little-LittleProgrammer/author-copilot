@@ -3,6 +3,12 @@ import type {
   DocumentReadResponse,
   DocumentSaveRequest,
   DocumentSaveResponse,
+  KnowledgeIndexStatusRequest,
+  KnowledgeIndexTaskRequest,
+  KnowledgeSearchRequest,
+  KnowledgeSearchResponse,
+  KnowledgeStatusResponse,
+  KnowledgeTaskStartResponse,
   ProjectConfirmImportRequest,
   ProjectConfirmImportResponse,
   ProjectCreateRequest,
@@ -23,6 +29,10 @@ import type {
   TabContext,
   TabOperationResult,
   TabState,
+  TaskCancelRequest,
+  TaskCancelResult,
+  TaskCancelledEvent,
+  TaskProgressEvent,
   TaskRecoveryListRequest,
   TaskRecoveryListResponse,
   TaskRecoveryRestoreRequest,
@@ -89,6 +99,27 @@ export interface AuthorCopilotApi {
     readonly switchBranch: (
       request: VersionBranchSwitchRequest,
     ) => Promise<VersionBranchSwitchResponse>;
+  };
+  readonly knowledge: {
+    readonly getStatus: (
+      request: KnowledgeIndexStatusRequest,
+    ) => Promise<KnowledgeStatusResponse>;
+    readonly initialize: (
+      request: KnowledgeIndexTaskRequest,
+    ) => Promise<KnowledgeTaskStartResponse>;
+    readonly rebuild: (
+      request: KnowledgeIndexTaskRequest,
+    ) => Promise<KnowledgeTaskStartResponse>;
+    readonly search: (
+      request: KnowledgeSearchRequest,
+    ) => Promise<KnowledgeSearchResponse>;
+    readonly cancel: (request: TaskCancelRequest) => Promise<TaskCancelResult>;
+    readonly onProgress: (
+      listener: (event: TaskProgressEvent) => void,
+    ) => () => void;
+    readonly onCancelled: (
+      listener: (event: TaskCancelledEvent) => void,
+    ) => () => void;
   };
   readonly taskRecovery: {
     readonly list: (

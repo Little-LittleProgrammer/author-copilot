@@ -1,6 +1,13 @@
 import { z } from "zod";
 
-import { KnowledgeIndexStatusResultSchema } from "./index-status.js";
+import {
+  KnowledgeIndexStatusRequestSchema,
+  KnowledgeSearchRequestSchema,
+  KnowledgeSearchResponseSchema,
+  KnowledgeStatusResponseSchema,
+  KnowledgeTaskStartResponseSchema,
+  KnowledgeIndexTaskRequestSchema,
+} from "./index-status.js";
 import {
   TaskRecoveryListRequestSchema,
   TaskRecoveryListResponseSchema,
@@ -86,6 +93,9 @@ export const IPC_INVOKE_CHANNELS = {
   taskRecoveryList: "task-recovery:list",
   taskRecoveryRestore: "task-recovery:restore",
   knowledgeGetStatus: "knowledge:get-status",
+  knowledgeInitialize: "knowledge:initialize",
+  knowledgeRebuild: "knowledge:rebuild",
+  knowledgeSearch: "knowledge:search",
   taskCancel: "task:cancel",
   tabGetContext: "tabs:get-context",
   tabGetState: "tabs:get-state",
@@ -127,6 +137,9 @@ export const IPC_INVOKE_CHANNEL_NAMES = [
   IPC_INVOKE_CHANNELS.taskRecoveryList,
   IPC_INVOKE_CHANNELS.taskRecoveryRestore,
   IPC_INVOKE_CHANNELS.knowledgeGetStatus,
+  IPC_INVOKE_CHANNELS.knowledgeInitialize,
+  IPC_INVOKE_CHANNELS.knowledgeRebuild,
+  IPC_INVOKE_CHANNELS.knowledgeSearch,
   IPC_INVOKE_CHANNELS.taskCancel,
   IPC_INVOKE_CHANNELS.tabGetContext,
   IPC_INVOKE_CHANNELS.tabGetState,
@@ -160,14 +173,6 @@ export const IpcChannelSchema = z.enum(IPC_CHANNEL_NAMES);
 export type IpcInvokeChannel = z.infer<typeof IpcInvokeChannelSchema>;
 export type IpcEventChannel = z.infer<typeof IpcEventChannelSchema>;
 export type IpcChannel = z.infer<typeof IpcChannelSchema>;
-
-export const KnowledgeIndexStatusRequestSchema = z.strictObject({
-  projectId: z.uuid(),
-});
-
-export type KnowledgeIndexStatusRequest = z.infer<
-  typeof KnowledgeIndexStatusRequestSchema
->;
 
 export const IPC_INVOKE_CONTRACTS = {
   [IPC_INVOKE_CHANNELS.runtimeGetInfo]: {
@@ -244,7 +249,19 @@ export const IPC_INVOKE_CONTRACTS = {
   },
   [IPC_INVOKE_CHANNELS.knowledgeGetStatus]: {
     request: KnowledgeIndexStatusRequestSchema,
-    response: KnowledgeIndexStatusResultSchema,
+    response: KnowledgeStatusResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.knowledgeInitialize]: {
+    request: KnowledgeIndexTaskRequestSchema,
+    response: KnowledgeTaskStartResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.knowledgeRebuild]: {
+    request: KnowledgeIndexTaskRequestSchema,
+    response: KnowledgeTaskStartResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.knowledgeSearch]: {
+    request: KnowledgeSearchRequestSchema,
+    response: KnowledgeSearchResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.taskCancel]: {
     request: TaskCancelRequestSchema,

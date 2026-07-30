@@ -2,6 +2,9 @@ import {
   DocumentReadResponseSchema,
   DocumentSaveResponseSchema,
   IPC_INVOKE_CHANNELS,
+  KnowledgeSearchResponseSchema,
+  KnowledgeStatusResponseSchema,
+  KnowledgeTaskStartResponseSchema,
   ProjectConfirmImportResponseSchema,
   ProjectCreateResponseSchema,
   ProjectDeleteEntryResponseSchema,
@@ -16,6 +19,9 @@ import {
   TabContextSchema,
   TabOperationResultSchema,
   TabStateSchema,
+  TaskCancelResultSchema,
+  TaskCancelledEventSchema,
+  TaskProgressEventSchema,
   TaskRecoveryListResponseSchema,
   TaskRecoveryRestoreResponseSchema,
   VersionBranchListResponseSchema,
@@ -25,6 +31,9 @@ import {
   VersionListResponseSchema,
   type DocumentReadRequest,
   type DocumentSaveRequest,
+  type KnowledgeIndexStatusRequest,
+  type KnowledgeIndexTaskRequest,
+  type KnowledgeSearchRequest,
   type ProjectConfirmImportRequest,
   type ProjectCreateRequest,
   type ProjectDeleteEntryRequest,
@@ -34,6 +43,9 @@ import {
   type ProjectSummary,
   type ProjectUpdateRequest,
   type TabState,
+  type TaskCancelRequest,
+  type TaskCancelledEvent,
+  type TaskProgressEvent,
   type TaskRecoveryListRequest,
   type TaskRecoveryRestoreRequest,
   type VersionBranchListRequest,
@@ -180,6 +192,55 @@ const api: AuthorCopilotApi = Object.freeze({
       );
       return VersionBranchSwitchResponseSchema.parse(response);
     },
+  }),
+  knowledge: Object.freeze({
+    getStatus: async (request: KnowledgeIndexStatusRequest) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.knowledgeGetStatus,
+        request,
+      );
+      return KnowledgeStatusResponseSchema.parse(response);
+    },
+    initialize: async (request: KnowledgeIndexTaskRequest) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.knowledgeInitialize,
+        request,
+      );
+      return KnowledgeTaskStartResponseSchema.parse(response);
+    },
+    rebuild: async (request: KnowledgeIndexTaskRequest) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.knowledgeRebuild,
+        request,
+      );
+      return KnowledgeTaskStartResponseSchema.parse(response);
+    },
+    search: async (request: KnowledgeSearchRequest) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.knowledgeSearch,
+        request,
+      );
+      return KnowledgeSearchResponseSchema.parse(response);
+    },
+    cancel: async (request: TaskCancelRequest) => {
+      const response: unknown = await ipcRenderer.invoke(
+        IPC_INVOKE_CHANNELS.taskCancel,
+        request,
+      );
+      return TaskCancelResultSchema.parse(response);
+    },
+    onProgress: (listener: (event: TaskProgressEvent) => void) =>
+      subscribe(
+        IPC_EVENT_CHANNELS.taskProgress,
+        (value) => TaskProgressEventSchema.parse(value),
+        listener,
+      ),
+    onCancelled: (listener: (event: TaskCancelledEvent) => void) =>
+      subscribe(
+        IPC_EVENT_CHANNELS.taskCancelled,
+        (value) => TaskCancelledEventSchema.parse(value),
+        listener,
+      ),
   }),
   taskRecovery: Object.freeze({
     list: async (request: TaskRecoveryListRequest) => {

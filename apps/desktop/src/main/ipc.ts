@@ -7,18 +7,21 @@ import { app, ipcMain, type IpcMainInvokeEvent } from "electron";
 
 import { assertTrustedIpcRequest } from "./ipc-policy.js";
 import { registerProjectIpcHandlers } from "./ipc/project-handlers.js";
+import { registerKnowledgeIpcHandlers } from "./ipc/knowledge-handlers.js";
 import { registerTabIpcHandlers } from "./ipc/tab-handlers.js";
 import { registerTaskRecoveryIpcHandlers } from "./ipc/task-recovery-handlers.js";
 import { registerVersionIpcHandlers } from "./ipc/version-handlers.js";
 import type { ProjectDirectoryPicker } from "./project-dialogs.js";
 import type { ProjectService } from "./project/index.js";
 import type { GitService, TaskSnapshotService } from "./git/index.js";
+import type { KnowledgeService } from "./knowledge/index.js";
 import type { TabManager } from "./tabs/index.js";
 
 export interface IpcHandlerOptions {
   readonly projectService: ProjectService;
   readonly gitService: GitService;
   readonly taskSnapshotService: TaskSnapshotService;
+  readonly knowledgeService: KnowledgeService;
   readonly directoryPicker: ProjectDirectoryPicker;
   readonly onRuntimeInfo?: () => void;
   readonly getTabManager: () => TabManager | undefined;
@@ -63,6 +66,10 @@ export function registerIpcHandlers(
     directoryPicker: options.directoryPicker,
     onProjectChanged: (project) =>
       options.getTabManager()?.projectChanged(project),
+  });
+  registerKnowledgeIpcHandlers({
+    trustedRendererUrl,
+    knowledgeService: options.knowledgeService,
   });
   registerVersionIpcHandlers({
     trustedRendererUrl,

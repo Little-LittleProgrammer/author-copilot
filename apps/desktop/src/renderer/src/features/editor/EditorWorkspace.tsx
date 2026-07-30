@@ -1,8 +1,7 @@
 import type { JSX } from "react";
-import { Sparkles } from "lucide-react";
-
 import { Button } from "@/components/ui/button.js";
 import type { MessageKey } from "../../i18n/index.js";
+import { KnowledgePanel } from "../assistant/KnowledgePanel.js";
 import type {
   DocumentSnapshot,
   ProjectSummary,
@@ -24,6 +23,7 @@ interface EditorWorkspaceProps {
   readonly onDiscard: () => void;
   readonly onCreateVersion: () => void;
   readonly onReload: () => void;
+  readonly onOpenKnowledgeSource: (relativePath: string) => void;
   readonly onRecoveryRestored: () => void;
   readonly onSave: () => void;
   readonly onTabChange: (tab: WorkspaceTab) => void;
@@ -47,6 +47,7 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
     onDiscard,
     onCreateVersion,
     onReload,
+    onOpenKnowledgeSource,
     onRecoveryRestored,
     onSave,
     onTabChange,
@@ -162,10 +163,14 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
             />
           )
         ) : tab === "assistant" ? (
-          <div className="assistant-placeholder">
-            <Sparkles size={24} aria-hidden="true" />
-            <h3>{t("aiChat")}</h3>
-            <p>{t("aiUnavailable")}</p>
+          <div className="assistant-workspace">
+            {activeProject === undefined ? null : (
+              <KnowledgePanel
+                onOpenSource={onOpenKnowledgeSource}
+                projectId={activeProject.id}
+                t={t}
+              />
+            )}
             <section className="ai-context-section" aria-label={t("aiContext")}>
               <div className="ai-context-heading">
                 <strong>{t("aiContext")}</strong>

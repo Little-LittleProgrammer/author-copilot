@@ -589,6 +589,53 @@ test("fills the writing page and edits work, volume, chapter, and document names
   }
 });
 
+test("initializes and searches the local whole-work index with source navigation", async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
+  const application = await launchApplication(temporaryRoot);
+
+  try {
+    const { center } = await signIn(application);
+    await center.getByRole("button", { name: /新建小说|New novel/u }).click();
+    await center.getByTestId("project-name").fill("索引证据");
+    await center.getByTestId("project-dialog-submit").click();
+    const page = await rendererPage(application, "project");
+    await page.getByRole("button", { name: "01-正文", exact: true }).click();
+    await page
+      .getByTestId("document-editor")
+      .fill("# 雨夜\n\n白塔钟声响起，林舟在旧站台等候。\n");
+    await page.getByTestId("save-document").click();
+    await expect(
+      page.getByText(/已保存|Saved/u, { exact: true }),
+    ).toBeVisible();
+
+    await page.getByRole("tab", { name: /AI 对话|AI chat/u }).click();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page
+      .getByRole("button", { name: /初始化|Initialize/u, exact: true })
+      .click();
+    await expect(page.getByText(/可用|Ready/u, { exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
+    await page
+      .getByRole("searchbox", { name: /检索|Search/u })
+      .fill("白塔钟声");
+    await page
+      .getByRole("button", { name: /检索|Search/u, exact: true })
+      .click();
+    const result = page.getByRole("button", { name: /白塔钟声/u });
+    await expect(result).toContainText("第一卷", { timeout: 10_000 });
+    await page.screenshot({
+      path: "test-results/m4-knowledge-index.png",
+      fullPage: true,
+    });
+    await result.click();
+    await expect(page.getByTestId("document-editor")).toHaveValue(/白塔钟声/u);
+  } finally {
+    await application.close();
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
 test("previews a complex Markdown folder before in-place import", async () => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
   const sourceRoot = join(temporaryRoot, "旧作品");

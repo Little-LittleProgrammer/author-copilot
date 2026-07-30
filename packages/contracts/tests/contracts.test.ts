@@ -22,7 +22,7 @@ const taskId = "20000000-0000-4000-8000-000000000001";
 
 describe("IPC contracts", () => {
   it("keeps every declared channel in the validated whitelist", () => {
-    expect(IPC_CHANNEL_NAMES).toHaveLength(35);
+    expect(IPC_CHANNEL_NAMES).toHaveLength(38);
     for (const channel of IPC_CHANNEL_NAMES) {
       expect(IpcChannelSchema.parse(channel)).toBe(channel);
     }
@@ -92,6 +92,50 @@ describe("shared DTO schemas", () => {
       "stale",
     ]);
     expect(KnowledgeIndexStatusSchema.safeParse("failed").success).toBe(false);
+  });
+
+  it("keeps knowledge search bounded and source-relative", () => {
+    const searchContract =
+      IPC_INVOKE_CONTRACTS[IPC_INVOKE_CHANNELS.knowledgeSearch];
+    expect(
+      searchContract.request.parse({
+        projectId: "10000000-0000-4000-8000-000000000001",
+        query: "雨夜重逢",
+      }),
+    ).toMatchObject({ query: "雨夜重逢", limit: 5 });
+    expect(
+      searchContract.request.safeParse({
+        projectId: "10000000-0000-4000-8000-000000000001",
+        query: "雨",
+        limit: 21,
+      }).success,
+    ).toBe(false);
+    expect(
+      searchContract.response.safeParse({
+        ok: true,
+        status: {
+          projectId: "10000000-0000-4000-8000-000000000001",
+          status: "ready",
+          indexVersion: "index-v1",
+          updatedAt: "2026-07-30T00:00:00.000Z",
+          documentCount: 1,
+          chunkCount: 1,
+          activeTaskId: null,
+          lastError: null,
+        },
+        hits: [
+          {
+            relativePath: "第一卷/第一章/01-正文.md",
+            titleContext: ["雨夜"],
+            startLine: 3,
+            endLine: 4,
+            score: 0.8,
+            text: "她在雨夜回来。",
+            indexVersion: "index-v1",
+          },
+        ],
+      }).success,
+    ).toBe(true);
   });
 
   it("rejects extra runtime fields and unsupported platforms", () => {

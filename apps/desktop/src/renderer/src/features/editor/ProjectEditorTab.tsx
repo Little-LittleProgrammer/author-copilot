@@ -174,6 +174,17 @@ export function ProjectEditorTab({
     });
   }, [document, selectDocument]);
 
+  const openKnowledgeSource = useCallback(
+    (relativePath: string): void => {
+      const node = flattenStructure(structure).find(
+        (candidate) =>
+          candidate.kind === "document" && candidate.path === relativePath,
+      );
+      if (node !== undefined) selectDocument(node);
+    },
+    [selectDocument, structure],
+  );
+
   const reloadAfterRepositoryChange = useCallback(() => {
     const api = getProjectApi();
     if (api === undefined) return;
@@ -364,6 +375,7 @@ export function ProjectEditorTab({
           }}
           onCreateVersion={() => setVersionDialogOpen(true)}
           onReload={reload}
+          onOpenKnowledgeSource={openKnowledgeSource}
           onRecoveryRestored={reloadAfterRepositoryChange}
           onSave={save}
           onTabChange={setTab}

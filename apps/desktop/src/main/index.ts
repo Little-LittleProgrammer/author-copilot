@@ -12,6 +12,7 @@ import {
 } from "./git/index.js";
 import { resolveGitRuntime } from "./git-runtime.js";
 import { registerIpcHandlers } from "./ipc.js";
+import { KnowledgeService } from "./knowledge/index.js";
 import {
   createFixedProjectDirectoryPicker,
   createProjectDirectoryPicker,
@@ -108,6 +109,11 @@ app.whenReady().then(async () => {
     registry: new RegistryStore(app.getPath("userData")),
     publishEvent: domainEvents.publish,
   });
+  const knowledgeService = new KnowledgeService({
+    storageRoot: join(app.getPath("userData"), "knowledge-indexes"),
+    projectService,
+  });
+  domainEvents.subscribe(knowledgeService.handleDocumentSaved);
   const preloadPath = join(import.meta.dirname, "../preload/index.cjs");
   const developmentGitExecutable = process.env.AUTHOR_COPILOT_GIT_EXECUTABLE;
   const gitRuntime = resolveGitRuntime({
@@ -150,6 +156,7 @@ app.whenReady().then(async () => {
     projectService,
     gitService,
     taskSnapshotService,
+    knowledgeService,
     directoryPicker:
       e2eMode && process.env.AUTHOR_COPILOT_E2E_DIRECTORY !== undefined
         ? createFixedProjectDirectoryPicker({
