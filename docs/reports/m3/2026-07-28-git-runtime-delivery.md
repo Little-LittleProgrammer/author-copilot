@@ -3,7 +3,7 @@
 - Date: 2026-07-28
 - Updated: 2026-07-30
 - Scope: fixed runtime delivery, four-architecture packaging, controlled version saving, history/diff review, local branch switching, task recovery, and secure Git transport qualification
-- Status: version-management foundations and four-architecture recovery qualification complete; four-architecture network security and release-signing evidence remain open
+- Status: version-management, recovery, and secure transport qualification complete on four architectures; product remote-operation integration and release-compliance evidence remain open
 
 ## Implemented delivery contract
 
@@ -43,10 +43,13 @@
 - Electron Playwright remains 7/7 after adding a real `main` -> Chinese local branch -> `main` flow. The test verifies the branch-specific commit diff and editor content after each switch; the branch-switch screenshot was visually inspected.
 - A focused production-service qualification runs `GitService` branch switching and `TaskSnapshotService` dirty-state recovery against the prepared bundled runtime. It passes 2/2 with Chinese/space paths, exact branch selection, dirty rejection, staged-state preservation, Agent create/delete reversal, and task-start content restoration.
 - GitHub Actions run [30526330582](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30526330582) passed the production-service qualification on macOS x64/arm64 and Windows x64/arm64. All four targets also passed packaging, runtime verification, packaged-path assertions, and artifact upload; macOS targets and Windows x64 passed startup smoke tests, while Windows arm64 retained its explicit startup-evidence gap.
-- Local network qualification passes with both system Git and the prepared macOS arm64 runtime. The HTTPS fixture rejects an untrusted enterprise CA and an incorrect credential before accepting the exact encrypted-store credential and CA. The SSH fixture rejects an incorrect host fingerprint and private key before accepting the pinned host and authorized key. A fresh four-architecture matrix run is still required before recording cross-platform network evidence.
+- Local network qualification passes with both system Git and the prepared macOS arm64 runtime. The HTTPS fixture rejects an untrusted enterprise CA and an incorrect credential before accepting the exact encrypted-store credential and CA. The SSH fixture rejects an incorrect host fingerprint and private key before accepting the pinned host and authorized key.
+- GitHub Actions run [30528605854](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30528605854) passed the same HTTPS/SSH, credential, host-fingerprint, and enterprise-CA qualification on macOS x64/arm64 and Windows x64/arm64. Every target also passed packaging, runtime and production-service qualification, packaged-path assertions, and artifact upload. macOS targets and Windows x64 passed startup smoke tests; Windows arm64 retained its explicit startup-evidence gap.
+- Quality run [30528605916](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30528605916) passed formatting, workspace boundaries, lint, type checking, all tests and builds, and Electron E2E for the same commit.
 
 ## Open exit conditions
 
-- Record a successful four-architecture run of HTTPS/SSH, credential, host fingerprint, and enterprise CA qualification. Add SBOM generation and signing/notarization evidence.
+- Integrate the qualified credential, enterprise-CA, and SSH authorization primitives into a future typed Main/preload remote-operation flow. That flow must visually confirm first-contact SSH fingerprints and must not return secrets, private keys, executable paths, or arbitrary Git arguments to Renderer.
+- Add SBOM generation, open-source license evidence, and signing/notarization evidence. A signed Windows arm64 installer startup test also remains open.
 - Production Agent orchestration must use the internal snapshot/write/delete capability when M6 is implemented; no Renderer mutation channel should be added.
 - Git for Windows MinGit contains `usr/bin/sh.exe` but not `bash.exe`. This satisfies the M3 Git subprocess scope, not the M6 Agent SDK Bash requirement. M6 must select and qualify an additional shell distribution or remove that product assumption.
