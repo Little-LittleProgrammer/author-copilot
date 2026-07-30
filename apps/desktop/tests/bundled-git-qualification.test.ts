@@ -92,7 +92,15 @@ describe("bundled Git production service qualification", () => {
     await git(projectRoot, ["switch", "-c", "备选-结局"]);
     await writeFile(documentPath, "alternate\n", "utf8");
     await git(projectRoot, ["add", "--all"]);
-    await git(projectRoot, ["commit", "-m", "alternate version"]);
+    await git(projectRoot, [
+      "-c",
+      "user.name=Author Copilot Test",
+      "-c",
+      "user.email=test@author-copilot.invalid",
+      "commit",
+      "-m",
+      "alternate version",
+    ]);
     await git(projectRoot, ["switch", "main"]);
 
     await expect(service.listBranches(projectId)).resolves.toEqual({
