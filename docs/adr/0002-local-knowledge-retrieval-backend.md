@@ -1,6 +1,6 @@
 # ADR-0002: Local Knowledge Retrieval Backend
 
-- Status: Accepted for the MVP lexical baseline; human-label and four-architecture qualification pending
+- Status: Accepted for the MVP lexical baseline; human-label qualification pending
 - Date: 2026-07-30
 - Decision owner: Desktop Knowledge Service
 - Related tasks: M0-02, M4
@@ -54,8 +54,27 @@ The 120 generated labels deliberately include 20 pure near-synonym queries that 
 answer. This makes the 83.33% result an explicit baseline rather than a semantic-search claim. The
 engineering thresholds pass, but generated labels are not human labels. The report therefore keeps
 `human_label_review_passed` and `satisfied_by_this_report` false. M0 and M4 remain open until at least
-100 labels are independently reviewed and the selected Electron runtime check passes on macOS and
-Windows, x64 and arm64.
+100 labels are independently reviewed.
+
+## Four-Architecture Qualification
+
+[Desktop package matrix run 30533716552](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552)
+passed against commit `92756ec66f1a35a90a78545d41472fb3bb874fc3`. Every job packaged and uploaded
+the target artifact, then ran the Electron SQLite FTS5 qualification and the existing bundled Git,
+production-service, HTTPS/SSH, credential and enterprise CA suites.
+
+| Target        | Job                                                                                                                           | Electron | Node    | SQLite | FTS5 trigram |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------- | ------- | ------ | ------------ |
+| macOS arm64   | [90841833276](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552/job/90841833276) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
+| macOS x64     | [90841833330](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552/job/90841833330) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
+| Windows arm64 | [90841833222](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552/job/90841833222) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
+| Windows x64   | [90841833264](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552/job/90841833264) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
+
+[Quality run 30533716209](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716209)
+also passed formatting, boundaries, lint, typecheck, tests, builds and Electron E2E for the same SHA.
+Windows ARM64 packaged UI startup remains the separately documented M1-04 gap; this run does prove
+that the native Windows ARM64 Electron executable can load `node:sqlite`, create FTS5/trigram data and
+query it, and that the Windows ARM64 artifact packages successfully.
 
 ## Rejected Alternatives
 

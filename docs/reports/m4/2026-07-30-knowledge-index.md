@@ -2,7 +2,7 @@
 
 - Date: 2026-07-30
 - Scope: project-local lifecycle, Markdown chunking, source retrieval, cancellation, recovery, and M2 save-event integration
-- Status: SQLite FTS5 production baseline implemented; human-label and four-architecture qualification remain open
+- Status: SQLite FTS5 production baseline implemented and four-architecture qualified; human-label qualification remains open
 
 ## Implemented Slice
 
@@ -31,6 +31,13 @@ The following checks passed on macOS arm64 with Node 24.16.0 and pnpm 11.7.0:
 - RAG benchmark suite: 6 tests passed, including all three formal corpus scales and the fail-closed human-review gate.
 - Electron runtime qualification passed locally on macOS arm64 with Electron 43.1.0, Node 24.18.0 and SQLite 3.53.1.
 
+## CI Evidence
+
+- [Quality run 30533716209](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716209) passed formatting, boundaries, lint, typecheck, tests, builds and all 8 Electron E2E workflows for commit `92756ec66f1a35a90a78545d41472fb3bb874fc3`.
+- [Desktop package matrix run 30533716552](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30533716552) passed macOS x64/arm64 and Windows x64/arm64 packaging and artifact upload for the same commit.
+- All four matrix jobs passed the Electron SQLite FTS5 runtime check with Electron 43.1.0, Node 24.18.0 and SQLite 3.53.1, including Chinese and English trigram queries.
+- All four jobs also passed bundled Git qualification, production Git services, HTTPS/SSH, credential and enterprise CA paths. macOS x64/arm64 and Windows x64 packaged startup passed. Windows ARM64 packaged UI startup remains the intentional M1-04 gap, but its native Electron FTS5 runtime and package artifact both passed.
+
 The focused Knowledge tests cover:
 
 - heading/paragraph chunking and exact line ranges;
@@ -50,4 +57,4 @@ Visual evidence is stored at `apps/desktop/test-results/m4-knowledge-index.png`.
 
 The formal-scale candidate report now covers exact 100,000/1,000,000/5,000,000-character corpora and 120 generated labels. On the macOS arm64 reference run, all three scales recorded 83.33% Recall@5 and 100% recalled-source path/range accuracy; the 1,000,000-character query p95 was 0.216 ms. The 20 misses are deliberate pure near-synonym cases and document the lexical baseline's semantic limit. Full results are in `spikes/rag-benchmark/reports/sqlite-fts5-formal-candidate.json` and the backend decision is frozen in ADR-0002.
 
-This does not close M4. Generated labels remain pending human review, so they do not satisfy the plan's requirement for at least 100 human-labeled queries. The new Electron FTS5 qualification step also needs a successful macOS x64/arm64 and Windows x64/arm64 CI run after push. Until both gates are evidenced, the backend is the accepted MVP lexical baseline but M0/M4 completion must not be claimed.
+This does not close M4. Generated labels remain pending human review, so they do not satisfy the plan's requirement for at least 100 human-labeled queries. The selected backend now has four-architecture packaging and runtime evidence, but M0/M4 completion must not be claimed until the human-label gate is satisfied.
