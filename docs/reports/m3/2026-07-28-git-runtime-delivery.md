@@ -23,7 +23,7 @@
 - Renderer IPC exposes only recovery listing and restore-by-project/task ID. It does not expose snapshot creation, Agent file mutation, repository paths, snapshot content, hashes, Git arguments, or a general filesystem/Git primitive. Saving versions and restoring tasks share a project operation queue.
 - The change-review workspace shows recoverable tasks and complete/partial/blocked results. Recovery is disabled while the current document has unsaved edits, and a successful restore reloads the current document without leaving the review workspace.
 - HTTPS credentials are stored outside repositories in an atomic user-only file. Secrets are encrypted through Electron `safeStorage`; status reads omit secrets, and no credential API is exposed to Renderer.
-- HTTPS remote execution accepts credential-free URLs only, scopes Basic authentication to the exact origin, forces certificate verification, disables redirects, and overrides the bundled public CA path only for the explicit enterprise CA used by that operation. It never sets `GIT_SSL_NO_VERIFY`.
+- HTTPS remote execution accepts credential-free URLs only, scopes Basic authentication to the exact origin, forces certificate verification, disables redirects, and overrides the bundled public CA path only for the explicit enterprise CA used by that operation. Windows selects the bundled OpenSSL backend so custom PEM CA files also work under Unicode paths. It never sets `GIT_SSL_NO_VERIFY`.
 - SSH remote execution accepts `ssh://` URLs only and uses an explicit executable plus generated configuration path. Qualification enables batch mode, exact identity selection, and strict `known_hosts` verification without exposing private-key material to Renderer.
 
 ## Current evidence

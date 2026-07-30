@@ -112,6 +112,9 @@ export function createHttpsRemoteEnvironment(
     [`${scope}.sslVerify`, "true"],
     [`${scope}.followRedirects`, "false"],
   ];
+  if (process.platform === "win32") {
+    entries.push(["http.sslBackend", "openssl"]);
+  }
   if (options.credential !== undefined) {
     const basic = Buffer.from(
       `${options.credential.username}:${options.credential.secret}`,

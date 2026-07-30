@@ -35,6 +35,9 @@ describe("remote Git environment", () => {
         "base64",
       )}`,
     );
+    expect(entries["http.sslBackend"]).toBe(
+      process.platform === "win32" ? "openssl" : undefined,
+    );
   });
 
   it("rejects embedded or cross-origin HTTPS credentials", () => {
