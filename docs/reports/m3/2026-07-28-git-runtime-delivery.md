@@ -2,8 +2,8 @@
 
 - Date: 2026-07-28
 - Updated: 2026-07-30
-- Scope: fixed runtime delivery, four-architecture packaging, controlled version saving, history/diff review, local branch switching, and task recovery
-- Status: local version-management foundations complete; four-architecture recovery qualification, network, credentials, and release-signing evidence remain open
+- Scope: fixed runtime delivery, four-architecture packaging, controlled version saving, history/diff review, local branch switching, task recovery, and secure Git transport qualification
+- Status: version-management foundations and four-architecture recovery qualification complete; four-architecture network security and release-signing evidence remain open
 
 ## Implemented delivery contract
 
@@ -22,6 +22,9 @@
 - Restore processes mutations in reverse order without changing refs, `HEAD`, or the Git index. It restores exact Agent after-images, preserves clean non-overlapping UTF-8 user edits through reverse three-way merge, blocks `HEAD` drift, reports index drift and overlapping/binary/create-delete conflicts, persists progress after every mutation, and supports idempotent retry.
 - Renderer IPC exposes only recovery listing and restore-by-project/task ID. It does not expose snapshot creation, Agent file mutation, repository paths, snapshot content, hashes, Git arguments, or a general filesystem/Git primitive. Saving versions and restoring tasks share a project operation queue.
 - The change-review workspace shows recoverable tasks and complete/partial/blocked results. Recovery is disabled while the current document has unsaved edits, and a successful restore reloads the current document without leaving the review workspace.
+- HTTPS credentials are stored outside repositories in an atomic user-only file. Secrets are encrypted through Electron `safeStorage`; status reads omit secrets, and no credential API is exposed to Renderer.
+- HTTPS remote execution accepts credential-free URLs only, scopes Basic authentication to the exact origin, forces certificate verification, disables redirects, and overrides the bundled public CA path only for the explicit enterprise CA used by that operation. It never sets `GIT_SSL_NO_VERIFY`.
+- SSH remote execution accepts `ssh://` URLs only and uses an explicit executable plus generated configuration path. Qualification enables batch mode, exact identity selection, and strict `known_hosts` verification without exposing private-key material to Renderer.
 
 ## Current evidence
 
@@ -38,10 +41,12 @@
 - Electron Playwright passes 7/7 and covers a real save-version -> task snapshot -> controlled Agent write -> review restore flow. The test verifies both disk content and the reloaded editor, and the success-state screenshot was visually inspected.
 - Local branch-switch validation passes 27 contract tests and 49 desktop tests. It covers empty repositories without implicit initialization, Chinese branches in a project path containing spaces, exact local-name selection, already-current behavior, missing-branch rejection, and dirty-repository rejection without changing `HEAD`.
 - Electron Playwright remains 7/7 after adding a real `main` -> Chinese local branch -> `main` flow. The test verifies the branch-specific commit diff and editor content after each switch; the branch-switch screenshot was visually inspected.
-- A focused production-service qualification now runs `GitService` branch switching and `TaskSnapshotService` dirty-state recovery against the prepared bundled runtime. It passes 2/2 locally on macOS arm64 with Chinese/space paths, exact branch selection, dirty rejection, staged-state preservation, Agent create/delete reversal, and task-start content restoration. The four-architecture packaging workflow now runs the same qualification after runtime verification; a fresh matrix run is still required before recording cross-platform evidence.
+- A focused production-service qualification runs `GitService` branch switching and `TaskSnapshotService` dirty-state recovery against the prepared bundled runtime. It passes 2/2 with Chinese/space paths, exact branch selection, dirty rejection, staged-state preservation, Agent create/delete reversal, and task-start content restoration.
+- GitHub Actions run [30526330582](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30526330582) passed the production-service qualification on macOS x64/arm64 and Windows x64/arm64. All four targets also passed packaging, runtime verification, packaged-path assertions, and artifact upload; macOS targets and Windows x64 passed startup smoke tests, while Windows arm64 retained its explicit startup-evidence gap.
+- Local network qualification passes with both system Git and the prepared macOS arm64 runtime. The HTTPS fixture rejects an untrusted enterprise CA and an incorrect credential before accepting the exact encrypted-store credential and CA. The SSH fixture rejects an incorrect host fingerprint and private key before accepting the pinned host and authorized key. A fresh four-architecture matrix run is still required before recording cross-platform network evidence.
 
 ## Open exit conditions
 
-- Add HTTPS and SSH fixture qualification, host fingerprint rejection, enterprise CA success/failure, credential-store integration, SBOM generation, and signing/notarization evidence.
-- Record a successful fresh four-architecture run of the new branch-switch and task-recovery production-service qualification before treating the cross-platform version-management path as complete. Production Agent orchestration must use the internal snapshot/write/delete capability when M6 is implemented; no Renderer mutation channel should be added.
+- Record a successful four-architecture run of HTTPS/SSH, credential, host fingerprint, and enterprise CA qualification. Add SBOM generation and signing/notarization evidence.
+- Production Agent orchestration must use the internal snapshot/write/delete capability when M6 is implemented; no Renderer mutation channel should be added.
 - Git for Windows MinGit contains `usr/bin/sh.exe` but not `bash.exe`. This satisfies the M3 Git subprocess scope, not the M6 Agent SDK Bash requirement. M6 must select and qualify an additional shell distribution or remove that product assumption.

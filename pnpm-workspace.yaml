@@ -16,6 +16,7 @@ catalog:
   "@types/node": "24.10.4"
   "@types/react": "19.2.14"
   "@types/react-dom": "19.2.3"
+  "@types/ssh2": "1.15.5"
   "@vitejs/plugin-react-swc": "4.3.1"
   class-transformer: "0.5.1"
   class-validator: "0.14.3"
@@ -35,6 +36,8 @@ catalog:
   reflect-metadata: "0.2.2"
   rolldown: "1.1.5"
   rxjs: "7.8.2"
+  selfsigned: "5.5.0"
+  ssh2: "1.17.0"
   tailwind-merge: "3.6.0"
   tailwindcss: "4.3.3"
   turbo: "2.10.4"
@@ -48,9 +51,11 @@ catalog:
 allowBuilds:
   "@nestjs/core": true
   "@swc/core": true
+  cpu-features: false
   electron: true
   electron-winstaller: false
   esbuild: true
+  ssh2: false
 
 overrides:
   "@electron/get@^3.0.0": 3.1.0
