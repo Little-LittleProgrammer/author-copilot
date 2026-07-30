@@ -22,6 +22,7 @@
     "runtime:fetch:mac:x64": "node ../../tooling/scripts/fetch-git-runtime.ts --platform=darwin --arch=x64",
     "runtime:fetch:win:arm64": "node ../../tooling/scripts/fetch-git-runtime.ts --platform=win32 --arch=arm64",
     "runtime:fetch:win:x64": "node ../../tooling/scripts/fetch-git-runtime.ts --platform=win32 --arch=x64",
+    "knowledge:qualify-runtime": "node ./scripts/knowledge-runtime-qualification.ts",
     "runtime:qualify-network": "vitest run tests/git-network-qualification.test.ts",
     "runtime:qualify-services": "vitest run tests/bundled-git-qualification.test.ts",
     "runtime:verify": "node ../../tooling/scripts/verify-git-runtime.ts",

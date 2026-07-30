@@ -14,15 +14,17 @@ import type {
 import type { DocumentSavedEvent, ProjectService } from "../project/index.js";
 import { atomicWriteFile } from "../project/file-utils.js";
 import { authorizeExistingDocument } from "../project/path-policy.js";
-import {
-  chunkMarkdown,
-  scoreKnowledgeChunk,
-  type KnowledgeChunk,
-} from "./chunking.js";
+import { chunkMarkdown, type KnowledgeChunk } from "./chunking.js";
 import {
   KnowledgeServiceError,
   KnowledgeTaskCancelledError,
 } from "./errors.js";
+import {
+  buildSqliteKnowledgeIndex,
+  replaceSqliteKnowledgeSource,
+  searchSqliteKnowledgeIndex,
+  verifySqliteKnowledgeIndex,
+} from "./sqlite-index.js";
 
 interface IndexedDocument {
   readonly contentHash: string;
@@ -302,28 +304,23 @@ export class KnowledgeService {
       );
     }
     const index = await this.readIndex(projectId);
-    const candidates = Object.values(index.documents)
-      .flatMap((document) => document.chunks)
-      .map((chunk) => ({ chunk, score: scoreKnowledgeChunk(chunk, query) }))
-      .filter((candidate) => candidate.score > 0)
-      .sort(
-        (left, right) =>
-          right.score - left.score ||
-          left.chunk.relativePath.localeCompare(right.chunk.relativePath) ||
-          left.chunk.startLine - right.chunk.startLine,
-      )
-      .slice(0, limit);
+    const candidates = searchSqliteKnowledgeIndex({
+      databasePath: this.databasePath(projectId),
+      projectId,
+      indexVersion: index.indexVersion,
+      query,
+      limit,
+    });
 
     const verifiedPaths = new Set<string>();
     for (const candidate of candidates) {
-      if (verifiedPaths.has(candidate.chunk.relativePath)) continue;
+      if (verifiedPaths.has(candidate.relativePath)) continue;
       const current = await this.options.projectService.readDocument(
         projectId,
-        candidate.chunk.relativePath,
+        candidate.relativePath,
       );
       if (
-        current.hash !==
-        index.documents[candidate.chunk.relativePath]?.contentHash
+        current.hash !== index.documents[candidate.relativePath]?.contentHash
       ) {
         await this.writeState(
           stateFromIndex(index, {
@@ -337,18 +334,18 @@ export class KnowledgeService {
           true,
         );
       }
-      verifiedPaths.add(candidate.chunk.relativePath);
+      verifiedPaths.add(candidate.relativePath);
     }
 
     return {
       status,
-      hits: candidates.map(({ chunk, score }) => ({
-        relativePath: chunk.relativePath,
-        titleContext: [...chunk.titleContext],
-        startLine: chunk.startLine,
-        endLine: chunk.endLine,
-        score,
-        text: chunk.text,
+      hits: candidates.map((candidate) => ({
+        relativePath: candidate.relativePath,
+        titleContext: [...candidate.titleContext],
+        startLine: candidate.startLine,
+        endLine: candidate.endLine,
+        score: candidate.score,
+        text: candidate.text,
         indexVersion: index.indexVersion,
       })),
     };
@@ -465,6 +462,17 @@ export class KnowledgeService {
         updatedAt: this.options.now().toISOString(),
         documents,
       };
+      await buildSqliteKnowledgeIndex({
+        databasePath: this.databasePath(task.projectId),
+        projectId: task.projectId,
+        indexVersion: persisted.indexVersion,
+        chunks: Object.values(documents).flatMap((document) => document.chunks),
+        afterBatch: async () => {
+          this.throwIfCancelled(task);
+          await this.options.yieldControl();
+        },
+      });
+      this.throwIfCancelled(task);
       await this.writeIndex(persisted);
       const ready = stateFromIndex(persisted);
       await this.writeState(ready);
@@ -526,6 +534,14 @@ export class KnowledgeService {
       updatedAt: this.options.now().toISOString(),
       documents: { ...index.documents, [event.relativePath]: document },
     };
+    replaceSqliteKnowledgeSource({
+      databasePath: this.databasePath(event.projectId),
+      projectId: event.projectId,
+      previousIndexVersion: index.indexVersion,
+      nextIndexVersion: updated.indexVersion,
+      relativePath: event.relativePath,
+      chunks: document.chunks,
+    });
     await this.writeIndex(updated);
     await this.writeState(stateFromIndex(updated));
   }
@@ -562,6 +578,11 @@ export class KnowledgeService {
         this.readIndex(projectId),
       ]);
       const paths = portableDocumentPaths(structure);
+      verifySqliteKnowledgeIndex({
+        databasePath: this.databasePath(projectId),
+        projectId,
+        indexVersion: index.indexVersion,
+      });
       const indexedPaths = Object.keys(index.documents).sort((left, right) =>
         left.localeCompare(right),
       );
@@ -663,6 +684,10 @@ export class KnowledgeService {
 
   private projectDirectory(projectId: string): string {
     return join(this.options.storageRoot, projectId);
+  }
+
+  private databasePath(projectId: string): string {
+    return join(this.projectDirectory(projectId), "search.db");
   }
 
   private async readState(projectId: string): Promise<PersistedKnowledgeState> {

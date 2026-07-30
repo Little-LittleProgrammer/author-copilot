@@ -4,9 +4,11 @@ This spike provides one repeatable harness for local Knowledge Index candidates.
 fixture, Markdown chunking, adapter contract, quality labels and metric definitions so candidate
 engines are compared on the same inputs.
 
-The bundled fixture is deliberately small. It covers Chinese and English Markdown, long and short
-chapters, duplicate titles, cross-file retrieval and near-synonym queries. It is a **smoke test only**
-and cannot approve an engine for M0.
+The bundled smoke fixture covers Chinese and English Markdown, long and short chapters, duplicate
+titles, cross-file retrieval and near-synonym queries. A second deterministic suite generates the
+formal 100,000, 1,000,000 and 5,000,000-character scales with 120 labeled queries. Generated labels
+remain explicitly pending until a human reviewer approves them, so an unattended run cannot close
+the M0 quality gate.
 
 ## Run
 
@@ -22,6 +24,13 @@ python3 benchmark.py run \
   --adapter sqlite-fts5 \
   --work-dir .work/sqlite-smoke \
   --report reports/sqlite-fts5-smoke.json
+
+python3 benchmark.py generate --scale 100000 --output .work/formal-100k
+python3 benchmark.py run \
+  --adapter sqlite-fts5 \
+  --formal \
+  --work-dir .work/sqlite-formal \
+  --report reports/sqlite-fts5-formal-candidate.json
 ```
 
 The commands recreate their fixture directory, so repeated runs start from identical bytes. The
@@ -63,5 +72,8 @@ p95 below 300 ms on the recorded reference device. Single-file updates must also
 content saves. Electron packaging stability across macOS and Windows, x64 and arm64 is a separate
 required gate.
 
-Every smoke report sets `formal_exit_gate.satisfied_by_this_report` to `false`; smoke numbers must
-not be cited as an engine-selection result.
+Every smoke report sets `formal_exit_gate.satisfied_by_this_report` to `false`. Formal-scale
+candidate reports separately record engineering thresholds and human review. The generated labels
+include 100 identifier/partial-expression cases and 20 pure near-synonym cases that expose the
+lexical candidate's expected semantic misses. They are useful for regression and performance
+qualification, but they are not a substitute for the required human-labeled dataset.

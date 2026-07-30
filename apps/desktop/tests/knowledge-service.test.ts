@@ -123,6 +123,11 @@ describe("KnowledgeService", () => {
       lastError: null,
     });
     expect(status.chunkCount).toBeGreaterThanOrEqual(4);
+    expect(
+      (
+        await stat(join(setup.storageRoot, setup.projectId, "search.db"))
+      ).isFile(),
+    ).toBe(true);
     const result = await service.search(setup.projectId, "铜钥匙 站台", 5);
     expect(result.hits[0]).toMatchObject({
       relativePath: setup.relativePath,
@@ -130,6 +135,12 @@ describe("KnowledgeService", () => {
       startLine: 7,
       endLine: 7,
       indexVersion: status.indexVersion,
+    });
+    expect(
+      (await service.search(setup.projectId, "雨夜", 5)).hits[0],
+    ).toMatchObject({
+      relativePath: setup.relativePath,
+      startLine: 3,
     });
 
     const indexPath = join(setup.storageRoot, setup.projectId, "index.json");
@@ -243,6 +254,29 @@ describe("KnowledgeService", () => {
     });
   });
 
+  it("marks a legacy ready index stale when its SQLite search database is absent", async () => {
+    const setup = await fixture();
+    const service = new KnowledgeService({
+      storageRoot: setup.storageRoot,
+      projectService: setup.projectService,
+    });
+    await service.initialize(setup.projectId);
+    await service.waitForIdle(setup.projectId);
+    await rm(join(setup.storageRoot, setup.projectId, "search.db"));
+
+    const restarted = new KnowledgeService({
+      storageRoot: setup.storageRoot,
+      projectService: setup.projectService,
+    });
+    expect(await restarted.getStatus(setup.projectId)).toMatchObject({
+      status: "stale",
+      lastError: expect.stringContaining("database"),
+    });
+    await expect(
+      restarted.search(setup.projectId, "铜钥匙", 5),
+    ).rejects.toMatchObject({ code: "unavailable" });
+  });
+
   it("updates only the saved document asynchronously and advances the index version", async () => {
     const services: { knowledge?: KnowledgeService } = {};
     const setup = await fixture({
@@ -276,6 +310,62 @@ describe("KnowledgeService", () => {
     expect(
       (await knowledgeService.search(setup.projectId, "白塔钟声", 5)).hits,
     ).toEqual([expect.objectContaining({ relativePath: setup.relativePath })]);
+  });
+
+  it("does not make document saves wait for incremental indexing", async () => {
+    const services: { knowledge?: KnowledgeService } = {};
+    const setup = await fixture({
+      publishEvent: (event) => services.knowledge?.handleDocumentSaved(event),
+    });
+    let blockRead = false;
+    let signalRead = (): void => undefined;
+    let releaseRead = (): void => undefined;
+    const readStarted = new Promise<void>((resolve) => {
+      signalRead = resolve;
+    });
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    const knowledgeService = new KnowledgeService({
+      storageRoot: setup.storageRoot,
+      projectService: {
+        getProjectRoot: setup.projectService.getProjectRoot.bind(
+          setup.projectService,
+        ),
+        getStructure: setup.projectService.getStructure.bind(
+          setup.projectService,
+        ),
+        readDocument: async (projectId, relativePath) => {
+          if (blockRead) {
+            signalRead();
+            await readGate;
+          }
+          return setup.projectService.readDocument(projectId, relativePath);
+        },
+      },
+    });
+    services.knowledge = knowledgeService;
+    await knowledgeService.initialize(setup.projectId);
+    await knowledgeService.waitForIdle(setup.projectId);
+    const document = await setup.projectService.readDocument(
+      setup.projectId,
+      setup.relativePath,
+    );
+
+    blockRead = true;
+    const saved = await setup.projectService.saveDocument(
+      setup.projectId,
+      setup.relativePath,
+      `${document.content}\n保存先于索引完成。\n`,
+      document.hash,
+    );
+    expect(saved.hash).not.toBe(document.hash);
+    expect(
+      await readFile(join(setup.rootPath, setup.relativePath), "utf8"),
+    ).toContain("保存先于索引完成");
+    await readStarted;
+    releaseRead();
+    await knowledgeService.waitForIdle(setup.projectId);
   });
 
   it("marks the index stale after an external file change and rejects search", async () => {
