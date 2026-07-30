@@ -211,6 +211,10 @@ function sha256(content: Buffer): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
+function portableFileMode(mode: number): number {
+  return process.platform === "win32" ? 0o666 : mode & 0o777;
+}
+
 function sameState(left: FileState, right: FileState): boolean {
   if (left.kind !== right.kind) return false;
   return (
@@ -1186,7 +1190,12 @@ export class TaskSnapshotService {
       await writeFile(blobPath, content, { flag: "wx", mode: 0o600 });
       manifest.totalBlobBytes = nextTotal;
     }
-    return { kind: "file", hash, mode, size: content.length };
+    return {
+      kind: "file",
+      hash,
+      mode: portableFileMode(mode),
+      size: content.length,
+    };
   }
 
   private async readStateContent(
