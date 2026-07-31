@@ -72,22 +72,22 @@ Evidence is stored in `spikes/rag-benchmark/reviews/formal-label-review.json` an
 
 ## Four-Architecture Qualification
 
-[Desktop package matrix run 30534821740](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821740)
-passed against commit `0f11bb64514e686c5850f91110803378e0ff78f2`. Every job packaged and uploaded
+[Desktop package matrix run 30640904457](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904457)
+passed against commit `dd31e9b2df9731b8854fd15810f1117c9f5dbfd0`. Every job packaged and uploaded
 the target artifact, then ran the Electron SQLite FTS5 qualification and the existing bundled Git,
 production-service, HTTPS/SSH, credential and enterprise CA suites.
 
 | Target        | Job                                                                                                                           | Electron | Node    | SQLite | FTS5 trigram |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------- | ------- | ------ | ------------ |
-| macOS arm64   | [90846092047](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821740/job/90846092047) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
-| macOS x64     | [90846092036](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821740/job/90846092036) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
-| Windows arm64 | [90846092102](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821740/job/90846092102) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
-| Windows x64   | [90846092022](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821740/job/90846092022) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
+| macOS arm64   | [91190290578](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904457/job/91190290578) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
+| macOS x64     | [91190290562](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904457/job/91190290562) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
+| Windows arm64 | [91190290582](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904457/job/91190290582) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
+| Windows x64   | [91190290460](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904457/job/91190290460) | 43.1.0   | 24.18.0 | 3.53.1 | passed       |
 
-[Quality run 30534821741](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821741)
+[Quality run 30640904304](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904304)
 passed formatting, boundaries, lint, typecheck, the root-integrated RAG benchmark tests, workspace
-tests, builds and Electron E2E at commit `0f11bb6`. The production backend is unchanged from the
-four-architecture-qualified commit.
+tests, builds and Electron E2E at commit `dd31e9b`. This run includes the schema-v2 review validator,
+the tracked authorization manifest and the reviewed formal report.
 Windows ARM64 packaged UI startup remains the separately documented M1-04 gap; this run does prove
 that the native Windows ARM64 Electron executable can load `node:sqlite`, create FTS5/trigram data and
 query it, and that the Windows ARM64 artifact packages successfully.

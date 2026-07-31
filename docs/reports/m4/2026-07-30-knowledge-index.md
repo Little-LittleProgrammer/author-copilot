@@ -33,10 +33,10 @@ The following checks passed on macOS arm64 with Node 24.16.0 and pnpm 11.7.0:
 
 ## CI Evidence
 
-- [Quality run 30534821741](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821741) passed formatting, boundaries, lint, typecheck, root-integrated RAG benchmark tests, workspace tests, builds and all 8 Electron E2E workflows for commit `0f11bb6`.
-- [Desktop package matrix run 30534821740](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30534821740) passed macOS x64/arm64 and Windows x64/arm64 packaging and artifact upload for commit `0f11bb64514e686c5850f91110803378e0ff78f2`.
+- [Quality run 30640904304](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904304) passed formatting, boundaries, lint, typecheck, all 9 root-integrated RAG benchmark tests, workspace tests, builds and all 8 Electron E2E workflows for commit `dd31e9b`.
+- [Desktop package matrix run 30640904457](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904457) passed macOS x64/arm64 and Windows x64/arm64 packaging and artifact upload for commit `dd31e9b2df9731b8854fd15810f1117c9f5dbfd0`.
 - All four matrix jobs passed the Electron SQLite FTS5 runtime check with Electron 43.1.0, Node 24.18.0 and SQLite 3.53.1, including Chinese and English trigram queries.
-- All four jobs also passed bundled Git qualification, production Git services, HTTPS/SSH, credential and enterprise CA paths. macOS x64/arm64 and Windows x64 packaged startup passed. Windows ARM64 packaged UI startup remains the intentional M1-04 gap, but its native Electron FTS5 runtime and package artifact both passed.
+- All four jobs also passed bundled Git qualification, production Git services, HTTPS/SSH, exact credential, SSH host-fingerprint/private-key and enterprise CA success/rejection paths. [macOS x64](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904457/job/91190290562), [macOS arm64](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904457/job/91190290578), [Windows x64](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904457/job/91190290460) and [Windows arm64](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904457/job/91190290582) all succeeded. macOS x64/arm64 and Windows x64 packaged startup passed. Windows ARM64 packaged UI startup remains the intentional M1-04 gap, but its native Electron FTS5 runtime and package artifact both passed.
 
 The focused Knowledge tests cover:
 
