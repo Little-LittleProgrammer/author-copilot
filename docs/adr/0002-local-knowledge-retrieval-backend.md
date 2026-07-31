@@ -1,6 +1,6 @@
 # ADR-0002: Local Knowledge Retrieval Backend
 
-- Status: Accepted for the MVP lexical baseline; human-label qualification pending
+- Status: Accepted and qualified for the MVP lexical baseline
 - Date: 2026-07-30
 - Decision owner: Desktop Knowledge Service
 - Related tasks: M0-02, M4
@@ -10,8 +10,8 @@
 
 M4 needs project-isolated local retrieval with exact source locations, atomic rebuilds, incremental
 document updates, bounded search and four-architecture Electron packaging. M0 also requires one
-repeatable harness across 100,000, 1,000,000 and 5,000,000-character corpora, at least 100
-human-labeled queries, Recall@5 of at least 80%, source path/range accuracy of 100%, and a
+repeatable harness across 100,000, 1,000,000 and 5,000,000-character corpora, at least 100 reviewed
+labeled queries, Recall@5 of at least 80%, source path/range accuracy of 100%, and a
 1,000,000-character p95 below 300 ms on a recorded reference device.
 
 The first M4 vertical slice used a deterministic in-memory lexical scan over a JSON index. That
@@ -53,14 +53,22 @@ The deterministic formal-scale candidate run on macOS arm64 used Python 3.14.6 a
 The 120 generated labels have unique query texts and deliberately include 20 pure near-synonym
 queries that lexical FTS does not answer. Each near-synonym query uses a distinct paraphrased color
 clue that maps to exactly one source, avoiding ambiguous repeated labels. This makes the 83.33% result
-an explicit baseline rather than a semantic-search claim. The engineering thresholds pass, but
-generated labels are not human labels. The report therefore keeps
-`human_label_review_passed` and `satisfied_by_this_report` false. M0 and M4 remain open until at least
-100 labels are independently reviewed.
+an explicit baseline rather than a semantic-search claim.
 
-Formal fixture generation emits a review manifest bound to the query-set SHA-256. The benchmark
-accepts it only when a named reviewer supplies a timezone-qualified timestamp and approves every
-expected query ID. Missing, extra, pending or stale decisions fail closed.
+Formal fixture generation emits a review manifest bound to the query-set SHA-256. Independent human
+review remains the default. On 2026-07-31, the repository owner explicitly delegated the 120-label
+inspection to OpenAI Codex. The model-assisted review checked all 100 identifier labels and all 20
+Chinese/English near-synonym relationships, found no label errors and approved every query. The
+tracked manifest records `user_authorized_model`, the reviewer, authorization context and timestamp;
+it does not claim to be independent human review.
+
+The benchmark accepts either allowed review method only when every expected query ID is approved by
+a named reviewer with a timezone-qualified timestamp. Model-assisted review additionally requires
+the authorizing party and authorization context. Missing, extra, pending, unauthorized or stale
+decisions fail closed. The reviewed formal report passes the complete M0/M4 quality gate with 120
+approved labels, 83.33% Recall@5, 100% source accuracy and a 0.611 ms p95 at 1,000,000 characters.
+Evidence is stored in `spikes/rag-benchmark/reviews/formal-label-review.json` and
+`spikes/rag-benchmark/reports/sqlite-fts5-formal-reviewed.json`.
 
 ## Four-Architecture Qualification
 

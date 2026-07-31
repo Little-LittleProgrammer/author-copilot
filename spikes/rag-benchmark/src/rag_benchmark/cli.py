@@ -8,6 +8,7 @@ import sys
 from .contracts import AdapterUnavailable
 from .fixtures import generate_fixture
 from .formal_fixtures import FORMAL_SCALES, generate_formal_fixture
+from .review import review_fixture
 from .runner import ADAPTERS, run_benchmark, run_formal_benchmark
 
 
@@ -23,6 +24,10 @@ def build_parser() -> argparse.ArgumentParser:
         choices=FORMAL_SCALES,
         help="generate a formal-scale synthetic fixture instead of the smoke fixture",
     )
+
+    review = subparsers.add_parser("review", help="interactively review formal query labels")
+    review.add_argument("--fixture", type=Path, default=Path(".work/formal-100k"))
+    review.add_argument("--reviewed-by", required=True, help="independent human reviewer identity")
 
     run = subparsers.add_parser("run", help="run one candidate benchmark")
     run.add_argument("--adapter", choices=sorted(ADAPTERS), default="sqlite-fts5")
@@ -51,6 +56,10 @@ def main(argv: list[str] | None = None) -> int:
             else generate_formal_fixture(args.output, args.scale)
         )
         print(json.dumps(manifest, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "review":
+        summary = review_fixture(args.fixture, args.reviewed_by)
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
     if args.query_repetitions < 1:
         raise SystemExit("--query-repetitions must be at least 1")

@@ -223,9 +223,12 @@ def query_set_sha256(queries: list[dict[str, Any]]) -> str:
 
 def review_template(queries: list[dict[str, Any]]) -> dict[str, Any]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "query_set_sha256": query_set_sha256(queries),
+        "review_method": "",
         "reviewed_by": "",
         "reviewed_at": "",
+        "authorized_by": "",
+        "authorization_context": "",
         "decisions": {query["id"]: "pending" for query in queries},
     }

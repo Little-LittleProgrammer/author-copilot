@@ -24,14 +24,14 @@
     "labeled_queries": 10
   },
   "metrics": {
-    "first_index_ms": 2.343,
+    "first_index_ms": 1.716,
     "index_size_bytes": 49152,
-    "single_file_incremental_ms": 0.609,
+    "single_file_incremental_ms": 0.64,
     "single_file_incremental_verified": true,
     "query_latency_ms": {
       "samples": 200,
-      "p50": 0.034,
-      "p95": 0.115
+      "p50": 0.036,
+      "p95": 0.122
     },
     "recall_at_5": 0.818182,
     "source_path_range_accuracy": 1.0,
@@ -209,11 +209,11 @@
     "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
     "machine": "arm64",
     "python": "3.14.6",
-    "sqlite": "3.53.3"
+    "sqlite": "3.53.4"
   },
   "formal_exit_gate": {
     "corpus_characters": [100000, 1000000, 5000000],
-    "minimum_human_labeled_queries": 100,
+    "minimum_validated_queries": 100,
     "source_path_range_accuracy": 1.0,
     "recall_at_5_minimum": 0.8,
     "one_million_character_query_p95_ms_maximum": 300,

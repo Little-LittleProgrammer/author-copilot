@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import sys
 import tempfile
@@ -15,6 +16,7 @@ from rag_benchmark.chunking import chunk_markdown  # noqa: E402
 from rag_benchmark.contracts import SourceDocument  # noqa: E402
 from rag_benchmark.fixtures import generate_fixture  # noqa: E402
 from rag_benchmark.formal_fixtures import generate_formal_fixture  # noqa: E402
+from rag_benchmark.review import review_fixture  # noqa: E402
 from rag_benchmark.runner import (  # noqa: E402
     run_benchmark,
     run_formal_benchmark,
@@ -64,7 +66,7 @@ class FixtureTests(unittest.TestCase):
             self.assertEqual(120, len(review["decisions"]))
             self.assertEqual({"pending"}, set(review["decisions"].values()))
 
-    def test_human_review_requires_every_query_and_matching_hash(self) -> None:
+    def test_label_review_requires_every_query_and_matching_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "formal"
             generate_formal_fixture(root, 100_000)
@@ -75,6 +77,7 @@ class FixtureTests(unittest.TestCase):
             review = json.loads(review_path.read_text(encoding="utf-8"))
             review.update(
                 {
+                    "review_method": "independent_human",
                     "reviewed_by": "benchmark-test-reviewer",
                     "reviewed_at": "2026-07-30T10:00:00Z",
                     "decisions": {
@@ -91,6 +94,58 @@ class FixtureTests(unittest.TestCase):
             review_path.write_text(json.dumps(review), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "does not match"):
                 validate_label_review(review_path, queries)
+
+    def test_interactive_review_approves_each_label_and_writes_valid_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "formal"
+            generate_formal_fixture(root, 100_000)
+            decisions = iter(["a"] * 120)
+            summary = review_fixture(
+                root,
+                "independent-test-reviewer",
+                input_fn=lambda _: next(decisions),
+                output_fn=lambda _: None,
+                now_fn=lambda: datetime(2026, 7, 31, 9, 0, tzinfo=timezone.utc),
+            )
+            self.assertTrue(summary["passed"])
+            self.assertEqual(120, summary["approved"])
+            self.assertEqual(0, summary["pending"])
+            queries = json.loads(
+                (root / "queries.json").read_text(encoding="utf-8")
+            )
+            review = validate_label_review(root / "review-template.json", queries)
+            self.assertEqual("independent-test-reviewer", review["reviewed_by"])
+            self.assertEqual("2026-07-31T09:00:00Z", review["reviewed_at"])
+            self.assertEqual("independent_human", review["review_method"])
+
+    def test_user_authorized_model_review_requires_authorization(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "formal"
+            generate_formal_fixture(root, 100_000)
+            queries = json.loads(
+                (root / "queries.json").read_text(encoding="utf-8")
+            )
+            review_path = root / "review-template.json"
+            review = json.loads(review_path.read_text(encoding="utf-8"))
+            review.update(
+                {
+                    "review_method": "user_authorized_model",
+                    "reviewed_by": "test-model",
+                    "reviewed_at": "2026-07-31T10:00:00Z",
+                    "authorized_by": "test-owner",
+                    "decisions": {
+                        query_id: "approved" for query_id in review["decisions"]
+                    },
+                }
+            )
+            review_path.write_text(json.dumps(review), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "must record its authorization"):
+                validate_label_review(review_path, queries)
+            review["authorization_context"] = "Explicit test authorization"
+            review_path.write_text(json.dumps(review), encoding="utf-8")
+            result = validate_label_review(review_path, queries)
+            self.assertTrue(result["passed"])
+            self.assertEqual("user_authorized_model", result["review_method"])
 
 
 class SqliteSmokeTests(unittest.TestCase):
@@ -122,7 +177,7 @@ class SqliteSmokeTests(unittest.TestCase):
             self.assertEqual(1.0, metrics["source_path_range_accuracy"])
             self.assertFalse(report["formal_exit_gate"]["satisfied_by_this_report"])
 
-    def test_formal_report_does_not_pass_without_human_label_review(self) -> None:
+    def test_formal_report_does_not_pass_without_label_review(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
             report = run_formal_benchmark(
@@ -136,7 +191,7 @@ class SqliteSmokeTests(unittest.TestCase):
                 [scale["dataset"]["characters"] for scale in report["scales"]],
             )
             self.assertTrue(report["formal_exit_gate"]["engineering_thresholds_passed"])
-            self.assertFalse(report["formal_exit_gate"]["human_label_review_passed"])
+            self.assertFalse(report["formal_exit_gate"]["label_review_passed"])
             self.assertFalse(report["formal_exit_gate"]["satisfied_by_this_report"])
 
 

@@ -7,7 +7,7 @@ engines are compared on the same inputs.
 The bundled smoke fixture covers Chinese and English Markdown, long and short chapters, duplicate
 titles, cross-file retrieval and near-synonym queries. A second deterministic suite generates the
 formal 100,000, 1,000,000 and 5,000,000-character scales with 120 labeled queries. Generated labels
-remain explicitly pending until a human reviewer approves them, so an unattended run cannot close
+remain explicitly pending until an allowed reviewer approves them, so an unattended run cannot close
 the M0 quality gate.
 
 ## Run
@@ -33,11 +33,26 @@ python3 benchmark.py run \
   --report reports/sqlite-fts5-formal-candidate.json
 ```
 
-Formal generation also writes `review-template.json`. An independent reviewer must inspect every
-query/source label, fill `reviewed_by` and `reviewed_at`, and change every decision from `pending` to
-`approved`. Pass that file with `--label-review <path>`. The run rejects incomplete decisions,
+Formal generation also writes a schema-v2 `review-template.json`. The default path is an independent
+human inspection of every query/source label. A repository owner may instead explicitly delegate the
+inspection to a model, in which case the manifest must identify `user_authorized_model`, its reviewer,
+the authorizing party and the authorization context. Pass the completed file with
+`--label-review <path>`. The run rejects missing authorization, incomplete decisions, invalid
 timestamps, unknown/missing query IDs and stale query-set hashes; without a valid manifest the final
-gate remains false.
+gate remains false. The tracked qualification evidence is `reviews/formal-label-review.json`.
+
+Use the interactive reviewer to inspect the canonical source text and record one decision at a time:
+
+```bash
+python3 benchmark.py review \
+  --fixture .work/formal-100k \
+  --reviewed-by "Reviewer Name"
+```
+
+The command is the independent-human workflow. It accepts `approve`, `reject`, `skip` and `quit`,
+saves atomically after each decision and resumes at pending labels. It locks an in-progress manifest
+to one reviewer and timestamps it only after every label has a decision. The formal gate still
+requires every decision to be `approved`.
 
 The commands recreate their fixture directory, so repeated runs start from identical bytes. The
 report contains the fixture SHA-256 and runtime versions. Generated databases and fixtures stay
@@ -72,16 +87,16 @@ preserves 1-based Markdown line ranges.
 ## Formal M0 exit gate
 
 The formal comparison must replace this smoke fixture with **100,000, 1,000,000 and 5,000,000
-Chinese-character-scale corpora** and at least **100 human-labeled queries**. The implementation plan
+Chinese-character-scale corpora** and at least **100 reviewed labeled queries**. The implementation plan
 requires source path/range accuracy of 100%, Recall@5 of at least 80%, and 1,000,000-character query
 p95 below 300 ms on the recorded reference device. Single-file updates must also avoid blocking
 content saves. Electron packaging stability across macOS and Windows, x64 and arm64 is a separate
 required gate.
 
 Every smoke report sets `formal_exit_gate.satisfied_by_this_report` to `false`. Formal-scale
-candidate reports separately record engineering thresholds and human review. The generated labels
+candidate reports separately record engineering thresholds and label review. The generated labels
 include 100 identifier/partial-expression cases and 20 pure near-synonym cases that expose the
 lexical candidate's expected semantic misses. Every near-synonym query has a distinct paraphrased
 color clue, so a reviewer can map it to exactly one labeled source rather than approve an ambiguous
 repeated query. The generated cases are useful for regression and performance qualification, but
-they are not a substitute for the required human-labeled dataset.
+they cannot satisfy the gate until an allowed reviewer records a complete, hash-bound review.

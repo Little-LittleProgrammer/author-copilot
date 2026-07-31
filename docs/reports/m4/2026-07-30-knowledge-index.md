@@ -2,7 +2,7 @@
 
 - Date: 2026-07-30
 - Scope: project-local lifecycle, Markdown chunking, source retrieval, cancellation, recovery, and M2 save-event integration
-- Status: SQLite FTS5 production baseline implemented and four-architecture qualified; human-label qualification remains open
+- Status: complete; SQLite FTS5 production baseline implemented, label-reviewed and four-architecture qualified
 
 ## Implemented Slice
 
@@ -28,7 +28,7 @@ The following checks passed on macOS arm64 with Node 24.16.0 and pnpm 11.7.0:
 - Desktop lint: zero errors; four existing Fast Refresh warnings remain.
 - Desktop typecheck and Electron main/preload/renderer production build passed.
 - Electron E2E: 8 workflows passed, including initialization, search, source-line display, and navigation back to the current document.
-- RAG benchmark suite: 7 tests passed, including all three formal corpus scales and the fail-closed human-review manifest gate.
+- RAG benchmark suite: 9 tests passed, including all three formal corpus scales and fail-closed independent-human/user-authorized-model review paths.
 - Electron runtime qualification passed locally on macOS arm64 with Electron 43.1.0, Node 24.18.0 and SQLite 3.53.1.
 
 ## CI Evidence
@@ -53,8 +53,20 @@ The focused Knowledge tests cover:
 
 Visual evidence is stored at `apps/desktop/test-results/m4-knowledge-index.png`.
 
-## Open Exit Conditions
+## Formal Exit Gate
 
 The formal-scale candidate report now covers exact 100,000/1,000,000/5,000,000-character corpora and 120 generated labels. All 120 query texts are unique; each of the 20 pure near-synonym cases uses a distinct paraphrased color clue that maps to exactly one source. On the macOS arm64 reference run, all three scales recorded 83.33% Recall@5 and 100% recalled-source path/range accuracy; the 1,000,000-character query p95 was 0.226 ms. The 20 misses document the lexical baseline's semantic limit. Full results are in `spikes/rag-benchmark/reports/sqlite-fts5-formal-candidate.json` and the backend decision is frozen in ADR-0002.
 
-This does not close M4. Generated labels remain pending human review, so they do not satisfy the plan's requirement for at least 100 human-labeled queries. The selected backend now has four-architecture packaging and runtime evidence, but M0/M4 completion must not be claimed until the human-label gate is satisfied.
+The repository owner explicitly authorized OpenAI Codex to validate the full label set. The tracked
+schema-v2 manifest records that this was a `user_authorized_model` review rather than an independent
+human review. All 100 identifier labels and 20 Chinese/English near-synonym labels were checked; all
+query IDs, query texts and expected sources are unique, every expected evidence string exists only in
+its recorded source, and no label errors were found.
+
+The reviewed formal run passed the complete gate: 120/120 labels approved, engineering thresholds
+passed, Recall@5 remained 83.33%, source path/range accuracy remained 100%, and the 1,000,000-character
+query p95 was 0.611 ms. The review is bound to query-set SHA-256
+`7df68dd2a22ceb6dcc9dcedc667b582e89ecb65f4d7a888ae5e5bf183f512fe2`. Evidence is stored in
+`spikes/rag-benchmark/reviews/formal-label-review.json` and
+`spikes/rag-benchmark/reports/sqlite-fts5-formal-reviewed.json`. M0's retrieval-quality gate and M4
+are complete; the known Windows ARM64 packaged UI startup gap remains owned by M1-04, not M4.

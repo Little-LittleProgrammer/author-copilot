@@ -27,6 +27,7 @@ ADAPTERS: dict[str, Callable[..., KnowledgeIndexAdapter]] = {
     "sqlite-fts5": SqliteFts5Adapter,
     "lancedb": LanceDbCandidate,
 }
+REVIEW_METHODS = {"independent_human", "user_authorized_model"}
 
 
 def run_benchmark(
@@ -83,7 +84,7 @@ def run_benchmark(
             },
             "formal_exit_gate": {
                 "corpus_characters": [100_000, 1_000_000, 5_000_000],
-                "minimum_human_labeled_queries": 100,
+                "minimum_validated_queries": 100,
                 "source_path_range_accuracy": 1.0,
                 "recall_at_5_minimum": 0.8,
                 "one_million_character_query_p95_ms_maximum": 300,
@@ -184,13 +185,13 @@ def run_formal_benchmark(
         },
         "formal_exit_gate": {
             "required_corpus_characters": list(FORMAL_SCALES),
-            "minimum_human_labeled_queries": 100,
+            "minimum_validated_queries": 100,
             "source_path_range_accuracy": 1.0,
             "recall_at_5_minimum": 0.8,
             "one_million_character_query_p95_ms_maximum": 300,
             "engineering_thresholds_passed": engineering_thresholds_passed,
-            "human_label_review": label_review,
-            "human_label_review_passed": label_review["passed"],
+            "label_review": label_review,
+            "label_review_passed": label_review["passed"],
             "satisfied_by_this_report": (
                 engineering_thresholds_passed and label_review["passed"]
             ),
@@ -213,14 +214,18 @@ def validate_label_review(
         return {"provided": False, "passed": False}
     review: Any = json.loads(review_path.read_text(encoding="utf-8"))
     if not isinstance(review, dict):
-        raise ValueError("The human label review manifest must be a JSON object")
+        raise ValueError("The label review manifest must be a JSON object")
     expected_ids = {query["id"] for query in queries}
     decisions = review.get("decisions")
     reviewed_by = review.get("reviewed_by")
     reviewed_at = review.get("reviewed_at")
+    review_method = review.get("review_method")
+    authorized_by = review.get("authorized_by")
+    authorization_context = review.get("authorization_context")
     if (
-        review.get("schema_version") != 1
+        review.get("schema_version") != 2
         or review.get("query_set_sha256") != query_set_sha256(queries)
+        or review_method not in REVIEW_METHODS
         or not isinstance(reviewed_by, str)
         or not reviewed_by.strip()
         or not isinstance(reviewed_at, str)
@@ -230,19 +235,35 @@ def validate_label_review(
         or any(decision != "approved" for decision in decisions.values())
     ):
         raise ValueError(
-            "The human label review manifest is incomplete or does not match the query set"
+            "The label review manifest is incomplete or does not match the query set"
+        )
+    if review_method == "user_authorized_model" and (
+        not isinstance(authorized_by, str)
+        or not authorized_by.strip()
+        or not isinstance(authorization_context, str)
+        or not authorization_context.strip()
+    ):
+        raise ValueError(
+            "A user-authorized model review must record its authorization"
         )
     try:
         timestamp = datetime.fromisoformat(reviewed_at.replace("Z", "+00:00"))
     except ValueError as error:
-        raise ValueError("The human label review timestamp is invalid") from error
+        raise ValueError("The label review timestamp is invalid") from error
     if timestamp.tzinfo is None:
-        raise ValueError("The human label review timestamp must include a timezone")
+        raise ValueError("The label review timestamp must include a timezone")
     return {
         "provided": True,
         "passed": True,
         "reviewed_by": reviewed_by.strip(),
         "reviewed_at": reviewed_at,
+        "review_method": review_method,
+        "authorized_by": authorized_by.strip() if isinstance(authorized_by, str) else "",
+        "authorization_context": (
+            authorization_context.strip()
+            if isinstance(authorization_context, str)
+            else ""
+        ),
         "approved_queries": len(expected_ids),
         "query_set_sha256": query_set_sha256(queries),
     }
