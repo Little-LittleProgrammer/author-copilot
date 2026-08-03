@@ -105,15 +105,7 @@ jobs:
           }
 
       - name: Smoke-test packaged application
-        if: matrix.os != 'windows' || matrix.arch != 'arm64'
         run: node apps/desktop/scripts/electron-smoke.ts --executable "${{ matrix.executable }}"
-
-      - name: Record Windows ARM64 launch verification gap
-        if: matrix.os == 'windows' && matrix.arch == 'arm64'
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          Write-Error "TODO(M1-04): add a signed Windows ARM64 installer launch smoke test; packaging alone is not startup evidence."
 
       - name: Upload desktop package
         if: always() && steps.package.outcome == 'success'
