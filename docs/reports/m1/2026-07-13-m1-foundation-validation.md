@@ -1,8 +1,9 @@
 # M1 Foundation Validation
 
 - Date: 2026-07-13
+- Updated: 2026-08-03
 - Scope: M1-01 through M1-04 engineering foundation
-- Status: Implemented; cross-platform exit gate remains open
+- Status: Complete
 
 ## Implemented baseline
 
@@ -15,9 +16,9 @@
 - NestJS 11 health endpoint, validation, security headers, and default-off CORS.
 - GitHub Actions quality gate and macOS/Windows x64/arm64 package matrix.
 
-## Local evidence
+## Validation evidence
 
-`pnpm verify` passed on macOS arm64 with Node 24.16.0:
+The initial `pnpm verify` passed on macOS arm64 with Node 24.16.0:
 
 - Prettier and workspace-boundary checks passed.
 - Lint and typecheck passed for all seven workspace packages.
@@ -29,12 +30,12 @@
 
 Desktop runtime evidence:
 
-| Target | Package | Packaged IPC smoke |
-| --- | --- | --- |
-| macOS arm64 | ZIP, DMG, `.app` | Passed |
-| macOS x64 | ZIP, DMG, `.app` | Passed under Rosetta |
-| Windows x64 | CI matrix configured | Not run locally |
-| Windows arm64 | CI matrix configured | Packaging and real launch not yet run |
+| Target        | Package                 | Packaged IPC smoke       |
+| ------------- | ----------------------- | ------------------------ |
+| macOS arm64   | ZIP, DMG, `.app`        | Passed locally and in CI |
+| macOS x64     | ZIP, DMG, `.app`        | Passed under Rosetta and in native CI |
+| Windows x64   | NSIS, unpacked app      | Passed in native CI      |
+| Windows arm64 | NSIS, ARM64 unpacked app | Passed in native CI     |
 
 A local Windows x64 cross-package attempt reached the Electron runtime download
 but was cancelled after sustained CDN throughput stalled; it produced no
@@ -45,14 +46,32 @@ preload API, the main process authorizes the sender and channel, and the runtime
 response passes the shared Zod schema. A loaded window alone is not considered
 success.
 
-## Open exit conditions
+[Desktop package matrix run 30802457876](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30802457876)
+passed all four native jobs for commit `da020d2c601cd8dc6a1801d1294cb07e2fb1d860`:
+[macOS x64](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30802457876/job/91649977034),
+[macOS arm64](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30802457876/job/91649977053),
+[Windows x64](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30802457876/job/91649977102), and
+[Windows arm64](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30802457876/job/91649977153).
+The Windows ARM64 job ran on the `windows-11-arm64` image, launched
+`win-arm64-unpacked/Author Copilot.exe`, and received
+`AUTHOR_COPILOT_ELECTRON_SMOKE_READY`. The same job also passed Electron SQLite
+FTS5, bundled Git runtime, production-service, network-security, packaged-path,
+and artifact-upload checks. The smoke step is blocking for every architecture.
 
-M1 cannot be closed until the package workflow has produced and launched the
-Windows x64 and arm64 artifacts on matching runners. Windows arm64 launch is an
-explicit non-blocking gap in the initial workflow and must become blocking
-before M1 exit.
+[Quality run 30802457850](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30802457850)
+passed formatting, workspace boundaries, lint with no errors, typecheck, tests,
+builds, and Electron E2E for the same commit.
+
+## Exit gate result
+
+M1-04 is closed. The package workflow now produces and launches macOS x64/arm64
+and Windows x64/arm64 artifacts on matching native runners, and a startup failure
+on any target fails the matrix. Signing, notarization, and installed-package
+smoke remain M8 release-candidate evidence rather than M1 development-package
+startup evidence.
 
 `electron-vite@6.0.0-beta.1` is used because stable 5.0.0 does not declare Vite
 8 compatibility. The beta remains pinned and may be promoted only after the
 four-architecture package and startup matrix passes or a stable Vite 8-capable
-release is available.
+release is available. The matrix now passes; changing the pinned beta still
+requires a separate dependency qualification rather than an automatic upgrade.

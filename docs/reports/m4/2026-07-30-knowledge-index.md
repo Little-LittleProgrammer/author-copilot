@@ -37,6 +37,7 @@ The following checks passed on macOS arm64 with Node 24.16.0 and pnpm 11.7.0:
 - [Desktop package matrix run 30640904457](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904457) passed macOS x64/arm64 and Windows x64/arm64 packaging and artifact upload for commit `dd31e9b2df9731b8854fd15810f1117c9f5dbfd0`.
 - All four matrix jobs passed the Electron SQLite FTS5 runtime check with Electron 43.1.0, Node 24.18.0 and SQLite 3.53.1, including Chinese and English trigram queries.
 - All four jobs also passed bundled Git qualification, production Git services, HTTPS/SSH, exact credential, SSH host-fingerprint/private-key and enterprise CA success/rejection paths. [macOS x64](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904457/job/91190290562), [macOS arm64](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904457/job/91190290578), [Windows x64](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904457/job/91190290460) and [Windows arm64](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30640904457/job/91190290582) all succeeded. macOS x64/arm64 and Windows x64 packaged startup passed. Windows ARM64 packaged UI startup remains the intentional M1-04 gap, but its native Electron FTS5 runtime and package artifact both passed.
+- Follow-up matrix [30802457876](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30802457876) closed M1-04. Its [Windows arm64 job](https://github.com/Little-LittleProgrammer/author-copilot/actions/runs/30802457876/job/91649977153) ran the same FTS5 and Git qualifications and then passed the blocking packaged application smoke on the native `windows-11-arm64` image.
 
 The focused Knowledge tests cover:
 
@@ -69,4 +70,5 @@ query p95 was 0.611 ms. The review is bound to query-set SHA-256
 `7df68dd2a22ceb6dcc9dcedc667b582e89ecb65f4d7a888ae5e5bf183f512fe2`. Evidence is stored in
 `spikes/rag-benchmark/reviews/formal-label-review.json` and
 `spikes/rag-benchmark/reports/sqlite-fts5-formal-reviewed.json`. M0's retrieval-quality gate and M4
-are complete; the known Windows ARM64 packaged UI startup gap remains owned by M1-04, not M4.
+are complete. The separately owned Windows ARM64 packaged UI startup gap was subsequently closed by
+M1-04 matrix run 30802457876.
