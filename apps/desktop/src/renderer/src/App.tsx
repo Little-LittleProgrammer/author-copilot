@@ -9,6 +9,7 @@ import type {
 } from "@author-copilot/contracts";
 
 import { LoginPage } from "./features/auth/LoginPage.js";
+import { CredentialDialog } from "./features/assistant/CredentialDialog.js";
 import { WriterCenter } from "./features/center/WriterCenter.js";
 import { ProjectEditorTab } from "./features/editor/ProjectEditorTab.js";
 import { ProjectDialog } from "./features/project/ProjectDialog.js";
@@ -165,6 +166,7 @@ function WriterCenterApp(): JSX.Element {
     ProjectType | "import" | null
   >(null);
   const [themeDialogOpen, setThemeDialogOpen] = useState(false);
+  const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
   const account = initialAccount() ?? "";
 
   useEffect(() => {
@@ -217,6 +219,7 @@ function WriterCenterApp(): JSX.Element {
         onImport={() => setProjectDialog("import")}
         onLocaleChange={setLocale}
         onLogout={() => void window.authorCopilot.tabs.requestLogout()}
+        onOpenCredentials={() => setCredentialDialogOpen(true)}
         onOpenProject={openProject}
         onOpenTheme={() => setThemeDialogOpen(true)}
         projects={projects}
@@ -235,6 +238,13 @@ function WriterCenterApp(): JSX.Element {
         onClose={() => setThemeDialogOpen(false)}
         t={t}
       />
+      {credentialDialogOpen ? (
+        <CredentialDialog
+          locale={locale}
+          onClose={() => setCredentialDialogOpen(false)}
+          t={t}
+        />
+      ) : null}
     </div>
   );
 }

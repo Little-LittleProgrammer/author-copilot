@@ -677,6 +677,65 @@ test("previews a complex Markdown folder before in-place import", async () => {
   }
 });
 
+test("configures and removes an encrypted Anthropic API key", async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
+  const credentialPath = join(
+    temporaryRoot,
+    ".user-data",
+    "credentials",
+    "secure-credentials.json",
+  );
+  const apiKey = "sk-ant-api03-e2e-secret";
+  const application = await launchApplication(temporaryRoot);
+
+  try {
+    const { center: page } = await signIn(application);
+    await page.getByRole("button", { name: /Claude API Key/u }).click();
+    await expect(page.getByTestId("anthropic-credential-dialog")).toBeVisible();
+    await expect(page.getByTestId("anthropic-credential-status")).toHaveText(
+      /未配置|Not configured/u,
+    );
+
+    await page.getByTestId("anthropic-api-key").fill(apiKey);
+    await page.getByTestId("anthropic-credential-save").click();
+    await expect(page.getByTestId("anthropic-credential-status")).toHaveText(
+      /已配置|Configured/u,
+    );
+    await expect(page.getByTestId("anthropic-api-key")).toHaveValue("");
+    await page.screenshot({
+      path: "test-results/m5-anthropic-credential-dialog.png",
+      fullPage: true,
+    });
+    await expect
+      .poll(() => readFile(credentialPath, "utf8"))
+      .not.toContain(apiKey);
+    expect(
+      await page.evaluate(
+        (secret) =>
+          Object.keys(localStorage).some((key) =>
+            localStorage.getItem(key)?.includes(secret),
+          ),
+        apiKey,
+      ),
+    ).toBe(false);
+
+    await page.getByRole("button", { name: /关闭|Close/u }).click();
+    await page.getByRole("button", { name: /Claude API Key/u }).click();
+    await expect(page.getByTestId("anthropic-credential-status")).toHaveText(
+      /已配置|Configured/u,
+    );
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByTestId("anthropic-credential-delete").click();
+    await expect(page.getByTestId("anthropic-credential-status")).toHaveText(
+      /未配置|Not configured/u,
+    );
+    expect(await readFile(credentialPath, "utf8")).not.toContain(apiKey);
+  } finally {
+    await application.close();
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
 test("persists custom themes and local background images", async () => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
   const backgroundPath = join(temporaryRoot, "background.png");

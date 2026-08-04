@@ -6,6 +6,7 @@ import {
   FilePlus2,
   FolderInput,
   Grid2X2,
+  KeyRound,
   Languages,
   LogOut,
   Palette,
@@ -28,6 +29,7 @@ interface WriterCenterProps {
   readonly onImport: () => void;
   readonly onLocaleChange: (locale: Locale) => void;
   readonly onLogout: () => void;
+  readonly onOpenCredentials: () => void;
   readonly onOpenProject: (project: ProjectSummary) => void;
   readonly onOpenTheme: () => void;
   readonly projects: readonly ProjectSummary[];
@@ -49,6 +51,7 @@ export function WriterCenter({
   onImport,
   onLocaleChange,
   onLogout,
+  onOpenCredentials,
   onOpenProject,
   onOpenTheme,
   projects,
@@ -120,7 +123,19 @@ export function WriterCenter({
             </button>
           </div>
         </nav>
-        <div className="center-sidebar-tools" aria-label={t("appearance")}>
+        <div
+          className="center-sidebar-tools"
+          aria-label={`${t("appearance")}, ${t("aiSettings")}`}
+        >
+          <button
+            className="sidebar-tool sidebar-tooltip"
+            type="button"
+            aria-label={t("anthropicCredentialSettings")}
+            data-tooltip={t("anthropicCredentialSettings")}
+            onClick={onOpenCredentials}
+          >
+            <KeyRound size={17} />
+          </button>
           <button
             className="sidebar-tool sidebar-tooltip"
             type="button"
