@@ -2,6 +2,7 @@ export * from "./errors.js";
 export * from "./ai-credentials.js";
 export * from "./ai-context.js";
 export * from "./ai-chat.js";
+export * from "./ai-patch.js";
 export * from "./index-status.js";
 export * from "./ipc.js";
 export * from "./project.js";
