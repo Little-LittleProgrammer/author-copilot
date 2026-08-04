@@ -1,4 +1,5 @@
 import {
+  AnthropicCredentialResponseSchema,
   DocumentReadResponseSchema,
   DocumentSaveResponseSchema,
   IPC_INVOKE_CHANNELS,
@@ -29,6 +30,7 @@ import {
   VersionCreateResponseSchema,
   VersionDiffResponseSchema,
   VersionListResponseSchema,
+  type AnthropicCredentialSetRequest,
   type DocumentReadRequest,
   type DocumentSaveRequest,
   type KnowledgeIndexStatusRequest,
@@ -83,6 +85,31 @@ const api: AuthorCopilotApi = Object.freeze({
       );
       return RuntimeInfoSchema.parse(response);
     },
+  }),
+  credentials: Object.freeze({
+    anthropic: Object.freeze({
+      getStatus: async () => {
+        const response: unknown = await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.anthropicCredentialGetStatus,
+          {},
+        );
+        return AnthropicCredentialResponseSchema.parse(response);
+      },
+      set: async (request: AnthropicCredentialSetRequest) => {
+        const response: unknown = await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.anthropicCredentialSet,
+          request,
+        );
+        return AnthropicCredentialResponseSchema.parse(response);
+      },
+      delete: async () => {
+        const response: unknown = await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.anthropicCredentialDelete,
+          {},
+        );
+        return AnthropicCredentialResponseSchema.parse(response);
+      },
+    }),
   }),
   project: Object.freeze({
     create: async (request: ProjectCreateRequest) => {

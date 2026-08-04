@@ -5,7 +5,9 @@ import {
 } from "@author-copilot/contracts";
 import { app, ipcMain, type IpcMainInvokeEvent } from "electron";
 
+import type { SecureCredentialStore } from "./credentials/index.js";
 import { assertTrustedIpcRequest } from "./ipc-policy.js";
+import { registerAiCredentialIpcHandlers } from "./ipc/ai-credential-handlers.js";
 import { registerProjectIpcHandlers } from "./ipc/project-handlers.js";
 import { registerKnowledgeIpcHandlers } from "./ipc/knowledge-handlers.js";
 import { registerTabIpcHandlers } from "./ipc/tab-handlers.js";
@@ -18,6 +20,7 @@ import type { KnowledgeService } from "./knowledge/index.js";
 import type { TabManager } from "./tabs/index.js";
 
 export interface IpcHandlerOptions {
+  readonly credentialStore: SecureCredentialStore;
   readonly projectService: ProjectService;
   readonly gitService: GitService;
   readonly taskSnapshotService: TaskSnapshotService;
@@ -60,6 +63,10 @@ export function registerIpcHandlers(
     },
   );
 
+  registerAiCredentialIpcHandlers({
+    trustedRendererUrl,
+    credentialStore: options.credentialStore,
+  });
   registerProjectIpcHandlers({
     trustedRendererUrl,
     projectService: options.projectService,

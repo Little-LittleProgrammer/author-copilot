@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AnthropicCredentialResponseSchema,
+  AnthropicCredentialSetRequestSchema,
   AppErrorSchema,
   IPC_CHANNEL_NAMES,
   IPC_EVENT_CONTRACTS,
@@ -22,7 +24,7 @@ const taskId = "20000000-0000-4000-8000-000000000001";
 
 describe("IPC contracts", () => {
   it("keeps every declared channel in the validated whitelist", () => {
-    expect(IPC_CHANNEL_NAMES).toHaveLength(38);
+    expect(IPC_CHANNEL_NAMES).toHaveLength(41);
     for (const channel of IPC_CHANNEL_NAMES) {
       expect(IpcChannelSchema.parse(channel)).toBe(channel);
     }
@@ -80,6 +82,48 @@ describe("IPC contracts", () => {
         timestamp: "2026-07-13T00:00:00.000Z",
       }).success,
     ).toBe(true);
+  });
+
+  it("keeps Anthropic credentials write-only across the IPC contract", () => {
+    expect(
+      AnthropicCredentialSetRequestSchema.safeParse({ apiKey: "" }).success,
+    ).toBe(false);
+    expect(
+      AnthropicCredentialSetRequestSchema.safeParse({
+        apiKey: "sk-ant-valid\nInjected",
+      }).success,
+    ).toBe(false);
+    expect(
+      AnthropicCredentialSetRequestSchema.safeParse({
+        apiKey: "sk-ant-valid",
+        reveal: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      AnthropicCredentialResponseSchema.parse({
+        ok: true,
+        status: {
+          configured: true,
+          updatedAt: "2026-08-04T00:00:00.000Z",
+        },
+      }),
+    ).toEqual({
+      ok: true,
+      status: {
+        configured: true,
+        updatedAt: "2026-08-04T00:00:00.000Z",
+      },
+    });
+    expect(
+      AnthropicCredentialResponseSchema.safeParse({
+        ok: true,
+        status: {
+          configured: true,
+          updatedAt: "2026-08-04T00:00:00.000Z",
+          apiKey: "sk-ant-must-not-leak",
+        },
+      }).success,
+    ).toBe(false);
   });
 });
 

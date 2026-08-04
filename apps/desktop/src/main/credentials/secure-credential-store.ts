@@ -10,7 +10,8 @@ import {
 } from "node:fs/promises";
 import { dirname } from "node:path";
 
-const STORE_SCHEMA_VERSION = 1;
+const STORE_SCHEMA_VERSION = 2;
+const LEGACY_STORE_SCHEMA_VERSION = 1;
 const MAX_USERNAME_LENGTH = 256;
 const MAX_SECRET_LENGTH = 16 * 1024;
 
@@ -49,6 +50,13 @@ export interface HttpsCredentialStatus {
   readonly updatedAt: string | null;
 }
 
+export interface ApiKeyStatus {
+  readonly configured: boolean;
+  readonly updatedAt: string | null;
+}
+
+export type ApiKeyProvider = "anthropic";
+
 interface StoredCredential {
   readonly origin: string;
   readonly username: string;
@@ -56,9 +64,37 @@ interface StoredCredential {
   readonly updatedAt: string;
 }
 
+interface StoredApiKey {
+  readonly encryptedSecret: string;
+  readonly updatedAt: string;
+}
+
 interface CredentialStoreFile {
   readonly schemaVersion: typeof STORE_SCHEMA_VERSION;
   readonly entries: Readonly<Record<string, StoredCredential>>;
+  readonly apiKeys: Readonly<Partial<Record<ApiKeyProvider, StoredApiKey>>>;
+}
+
+function parseStoredApiKey(value: unknown): StoredApiKey {
+  if (typeof value !== "object" || value === null) {
+    throw new CredentialStoreError(
+      "invalid_store",
+      "The API key store entry is invalid.",
+    );
+  }
+  const entry = value as Record<string, unknown>;
+  if (
+    typeof entry.encryptedSecret !== "string" ||
+    !/^[A-Za-z0-9+/]+={0,2}$/u.test(entry.encryptedSecret) ||
+    typeof entry.updatedAt !== "string" ||
+    Number.isNaN(Date.parse(entry.updatedAt))
+  ) {
+    throw new CredentialStoreError(
+      "invalid_store",
+      "The API key store entry is invalid.",
+    );
+  }
+  return { encryptedSecret: entry.encryptedSecret, updatedAt: entry.updatedAt };
 }
 
 interface SecureCredentialStoreOptions {
@@ -142,7 +178,8 @@ function parseStore(contents: string): CredentialStoreFile {
   }
   const input = value as Record<string, unknown>;
   if (
-    input.schemaVersion !== STORE_SCHEMA_VERSION ||
+    (input.schemaVersion !== LEGACY_STORE_SCHEMA_VERSION &&
+      input.schemaVersion !== STORE_SCHEMA_VERSION) ||
     typeof input.entries !== "object" ||
     input.entries === null ||
     Array.isArray(input.entries)
@@ -164,7 +201,31 @@ function parseStore(contents: string): CredentialStoreFile {
       return [key, parsed];
     }),
   );
-  return { schemaVersion: STORE_SCHEMA_VERSION, entries };
+  let apiKeys: CredentialStoreFile["apiKeys"] = {};
+  if (input.schemaVersion === STORE_SCHEMA_VERSION) {
+    if (
+      typeof input.apiKeys !== "object" ||
+      input.apiKeys === null ||
+      Array.isArray(input.apiKeys)
+    ) {
+      throw new CredentialStoreError(
+        "invalid_store",
+        "The API key store is invalid.",
+      );
+    }
+    const values = input.apiKeys as Record<string, unknown>;
+    if (Object.keys(values).some((provider) => provider !== "anthropic")) {
+      throw new CredentialStoreError(
+        "invalid_store",
+        "The API key provider is invalid.",
+      );
+    }
+    apiKeys =
+      values.anthropic === undefined
+        ? {}
+        : { anthropic: parseStoredApiKey(values.anthropic) };
+  }
+  return { schemaVersion: STORE_SCHEMA_VERSION, entries, apiKeys };
 }
 
 export function normalizeHttpsOrigin(value: string): string {
@@ -220,6 +281,7 @@ export class SecureCredentialStore {
       await this.save({
         schemaVersion: STORE_SCHEMA_VERSION,
         entries: { ...store.entries, [credentialKey(origin)]: entry },
+        apiKeys: store.apiKeys,
       });
     });
   }
@@ -273,7 +335,71 @@ export class SecureCredentialStore {
       if (store.entries[key] === undefined) return false;
       const entries = { ...store.entries };
       delete entries[key];
-      await this.save({ schemaVersion: STORE_SCHEMA_VERSION, entries });
+      await this.save({
+        schemaVersion: STORE_SCHEMA_VERSION,
+        entries,
+        apiKeys: store.apiKeys,
+      });
+      return true;
+    });
+  }
+
+  public setApiKey(provider: ApiKeyProvider, apiKey: string): Promise<void> {
+    return this.exclusive(async () => {
+      this.assertEncryptionAvailable();
+      assertCredentialText(apiKey, `${provider} API key`, MAX_SECRET_LENGTH);
+      const store = await this.load();
+      await this.save({
+        ...store,
+        apiKeys: {
+          ...store.apiKeys,
+          [provider]: {
+            encryptedSecret: this.options.encryption
+              .encrypt(apiKey)
+              .toString("base64"),
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      });
+    });
+  }
+
+  public getApiKey(provider: ApiKeyProvider): Promise<string | null> {
+    return this.exclusive(async () => {
+      this.assertEncryptionAvailable();
+      const entry = (await this.load()).apiKeys[provider];
+      if (entry === undefined) return null;
+      try {
+        const apiKey = this.options.encryption.decrypt(
+          Buffer.from(entry.encryptedSecret, "base64"),
+        );
+        assertCredentialText(apiKey, `${provider} API key`, MAX_SECRET_LENGTH);
+        return apiKey;
+      } catch {
+        throw new CredentialStoreError(
+          "invalid_store",
+          "The API key cannot be decrypted on this device.",
+        );
+      }
+    });
+  }
+
+  public getApiKeyStatus(provider: ApiKeyProvider): Promise<ApiKeyStatus> {
+    return this.exclusive(async () => {
+      const entry = (await this.load()).apiKeys[provider];
+      return entry === undefined
+        ? { configured: false, updatedAt: null }
+        : { configured: true, updatedAt: entry.updatedAt };
+    });
+  }
+
+  public deleteApiKey(provider: ApiKeyProvider): Promise<boolean> {
+    return this.exclusive(async () => {
+      const store = await this.load();
+      if (store.apiKeys[provider] === undefined) return false;
+      const apiKeys = { ...store.apiKeys };
+      delete apiKeys[provider];
+      await this.save({ ...store, apiKeys });
       return true;
     });
   }
@@ -309,7 +435,7 @@ export class SecureCredentialStore {
       contents = await readFile(this.options.filePath, "utf8");
     } catch (error) {
       if (isNodeError(error, "ENOENT")) {
-        return { schemaVersion: STORE_SCHEMA_VERSION, entries: {} };
+        return { schemaVersion: STORE_SCHEMA_VERSION, entries: {}, apiKeys: {} };
       }
       throw error;
     }

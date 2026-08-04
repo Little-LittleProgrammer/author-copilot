@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  AnthropicCredentialDeleteRequestSchema,
+  AnthropicCredentialResponseSchema,
+  AnthropicCredentialSetRequestSchema,
+  AnthropicCredentialStatusRequestSchema,
+} from "./ai-credentials.js";
 
 import {
   KnowledgeIndexStatusRequestSchema,
@@ -75,6 +81,9 @@ import {
 
 export const IPC_INVOKE_CHANNELS = {
   runtimeGetInfo: "app:get-runtime-info",
+  anthropicCredentialGetStatus: "ai-credential:anthropic-status",
+  anthropicCredentialSet: "ai-credential:anthropic-set",
+  anthropicCredentialDelete: "ai-credential:anthropic-delete",
   projectCreate: "project:create",
   projectDeleteEntry: "project:delete-entry",
   projectUpdate: "project:update",
@@ -119,6 +128,9 @@ export const IPC_EVENT_CHANNELS = {
 
 export const IPC_INVOKE_CHANNEL_NAMES = [
   IPC_INVOKE_CHANNELS.runtimeGetInfo,
+  IPC_INVOKE_CHANNELS.anthropicCredentialGetStatus,
+  IPC_INVOKE_CHANNELS.anthropicCredentialSet,
+  IPC_INVOKE_CHANNELS.anthropicCredentialDelete,
   IPC_INVOKE_CHANNELS.projectCreate,
   IPC_INVOKE_CHANNELS.projectDeleteEntry,
   IPC_INVOKE_CHANNELS.projectUpdate,
@@ -178,6 +190,18 @@ export const IPC_INVOKE_CONTRACTS = {
   [IPC_INVOKE_CHANNELS.runtimeGetInfo]: {
     request: RuntimeInfoRequestSchema,
     response: RuntimeInfoSchema,
+  },
+  [IPC_INVOKE_CHANNELS.anthropicCredentialGetStatus]: {
+    request: AnthropicCredentialStatusRequestSchema,
+    response: AnthropicCredentialResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.anthropicCredentialSet]: {
+    request: AnthropicCredentialSetRequestSchema,
+    response: AnthropicCredentialResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.anthropicCredentialDelete]: {
+    request: AnthropicCredentialDeleteRequestSchema,
+    response: AnthropicCredentialResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.projectCreate]: {
     request: ProjectCreateRequestSchema,

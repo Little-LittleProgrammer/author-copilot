@@ -1,4 +1,6 @@
 import type {
+  AnthropicCredentialResponse,
+  AnthropicCredentialSetRequest,
   DocumentReadRequest,
   DocumentReadResponse,
   DocumentSaveRequest,
@@ -52,6 +54,15 @@ import type {
 export interface AuthorCopilotApi {
   readonly system: {
     readonly getRuntimeInfo: () => Promise<RuntimeInfo>;
+  };
+  readonly credentials: {
+    readonly anthropic: {
+      readonly getStatus: () => Promise<AnthropicCredentialResponse>;
+      readonly set: (
+        request: AnthropicCredentialSetRequest,
+      ) => Promise<AnthropicCredentialResponse>;
+      readonly delete: () => Promise<AnthropicCredentialResponse>;
+    };
   };
   readonly project: {
     readonly create: (

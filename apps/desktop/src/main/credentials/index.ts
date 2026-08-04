@@ -5,6 +5,8 @@ export {
   normalizeHttpsOrigin,
 } from "./secure-credential-store.js";
 export type {
+  ApiKeyProvider,
+  ApiKeyStatus,
   CredentialEncryption,
   HttpsCredential,
   HttpsCredentialStatus,

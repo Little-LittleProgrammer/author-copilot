@@ -91,6 +91,61 @@ describe("SecureCredentialStore", () => {
     });
   });
 
+  it("stores an Anthropic API key without plaintext or renderer-safe leakage", async () => {
+    const { filePath, store } = await fixture();
+    const apiKey = "sk-ant-api03-not-in-plaintext";
+
+    await store.setApiKey("anthropic", apiKey);
+
+    const contents = await readFile(filePath, "utf8");
+    expect(contents).not.toContain(apiKey);
+    await expect(store.getApiKeyStatus("anthropic")).resolves.toEqual({
+      configured: true,
+      updatedAt: expect.any(String),
+    });
+    await expect(store.getApiKey("anthropic")).resolves.toBe(apiKey);
+    await expect(store.deleteApiKey("anthropic")).resolves.toBe(true);
+    await expect(store.deleteApiKey("anthropic")).resolves.toBe(false);
+    await expect(store.getApiKeyStatus("anthropic")).resolves.toEqual({
+      configured: false,
+      updatedAt: null,
+    });
+  });
+
+  it("upgrades a legacy store without losing its HTTPS credential", async () => {
+    const { filePath, store } = await fixture();
+    const credential = {
+      origin: "https://example.com",
+      username: "writer",
+      secret: "legacy-secret",
+    };
+    await store.setHttpsCredential(credential);
+    const legacy = JSON.parse(await readFile(filePath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    legacy.schemaVersion = 1;
+    delete legacy.apiKeys;
+    await writeFile(filePath, `${JSON.stringify(legacy, null, 2)}\n`, "utf8");
+
+    await expect(store.getHttpsCredential(credential.origin)).resolves.toEqual(
+      credential,
+    );
+    await store.setApiKey("anthropic", "sk-ant-migrated");
+
+    const upgraded = JSON.parse(await readFile(filePath, "utf8")) as {
+      readonly schemaVersion: number;
+      readonly entries: Record<string, unknown>;
+      readonly apiKeys: Record<string, unknown>;
+    };
+    expect(upgraded.schemaVersion).toBe(2);
+    expect(Object.keys(upgraded.entries)).toHaveLength(1);
+    expect(upgraded.apiKeys).toHaveProperty("anthropic");
+    await expect(store.getHttpsCredential(credential.origin)).resolves.toEqual(
+      credential,
+    );
+  });
+
   it("rejects non-origin URLs and invalid credential text", async () => {
     const { store } = await fixture();
     for (const origin of [
@@ -126,6 +181,9 @@ describe("SecureCredentialStore", () => {
         secret: "secret",
       }),
     ).rejects.toMatchObject({ code: "encryption_unavailable" });
+    await expect(
+      store.setApiKey("anthropic", "sk-ant-unavailable"),
+    ).rejects.toMatchObject({ code: "encryption_unavailable" });
   });
 
   it("rejects corrupt and symbolic-link stores", async () => {
@@ -138,6 +196,9 @@ describe("SecureCredentialStore", () => {
     await writeFile(corrupt.filePath, "{}", "utf8");
     await expect(
       corrupt.store.getHttpsCredentialStatus("https://example.com"),
+    ).rejects.toMatchObject({ code: "invalid_store" });
+    await expect(
+      corrupt.store.getApiKeyStatus("anthropic"),
     ).rejects.toMatchObject({ code: "invalid_store" });
 
     const linked = await fixture();
@@ -152,6 +213,9 @@ describe("SecureCredentialStore", () => {
     await symlink(target, linked.filePath);
     await expect(
       linked.store.getHttpsCredentialStatus("https://example.com"),
+    ).rejects.toMatchObject({ code: "invalid_store" });
+    await expect(
+      linked.store.getApiKeyStatus("anthropic"),
     ).rejects.toMatchObject({ code: "invalid_store" });
   });
 });

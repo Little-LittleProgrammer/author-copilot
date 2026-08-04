@@ -4,6 +4,10 @@ import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, session } from "electron";
 import type { ProjectSummary } from "@author-copilot/contracts";
 
+import {
+  electronCredentialEncryption,
+  SecureCredentialStore,
+} from "./credentials/index.js";
 import { DesktopDomainEvents } from "./domain-events.js";
 import {
   GitService,
@@ -109,6 +113,14 @@ app.whenReady().then(async () => {
     registry: new RegistryStore(app.getPath("userData")),
     publishEvent: domainEvents.publish,
   });
+  const credentialStore = new SecureCredentialStore({
+    filePath: join(
+      app.getPath("userData"),
+      "credentials",
+      "secure-credentials.json",
+    ),
+    encryption: electronCredentialEncryption,
+  });
   const knowledgeService = new KnowledgeService({
     storageRoot: join(app.getPath("userData"), "knowledge-indexes"),
     projectService,
@@ -153,6 +165,7 @@ app.whenReady().then(async () => {
     installProductionCsp(session.defaultSession);
   }
   registerIpcHandlers(target.url, {
+    credentialStore,
     projectService,
     gitService,
     taskSnapshotService,
