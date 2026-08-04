@@ -92,7 +92,10 @@ beforeEach(() => {
 describe("Anthropic credential IPC", () => {
   it("returns status without exposing the API key and supports deletion", async () => {
     const { filePath, store } = await fixture();
-    registerAiCredentialIpcHandlers({ credentialStore: store, trustedRendererUrl });
+    registerAiCredentialIpcHandlers({
+      credentialStore: store,
+      trustedRendererUrl,
+    });
     const apiKey = "sk-ant-api03-ipc-secret";
 
     await expect(
@@ -127,12 +130,16 @@ describe("Anthropic credential IPC", () => {
 
   it("rejects malformed input without echoing it", async () => {
     const { store } = await fixture();
-    registerAiCredentialIpcHandlers({ credentialStore: store, trustedRendererUrl });
+    registerAiCredentialIpcHandlers({
+      credentialStore: store,
+      trustedRendererUrl,
+    });
     const malformed = "sk-ant-secret\nInjected";
 
-    const response = await handler(
-      IPC_INVOKE_CHANNELS.anthropicCredentialSet,
-    )(trustedEvent(), { apiKey: malformed, extra: true });
+    const response = await handler(IPC_INVOKE_CHANNELS.anthropicCredentialSet)(
+      trustedEvent(),
+      { apiKey: malformed, extra: true },
+    );
     expect(response).toEqual({
       ok: false,
       error: {
@@ -146,10 +153,11 @@ describe("Anthropic credential IPC", () => {
 
   it("fails closed for untrusted frames and invalid argument counts", async () => {
     const { store } = await fixture();
-    registerAiCredentialIpcHandlers({ credentialStore: store, trustedRendererUrl });
-    const getStatus = handler(
-      IPC_INVOKE_CHANNELS.anthropicCredentialGetStatus,
-    );
+    registerAiCredentialIpcHandlers({
+      credentialStore: store,
+      trustedRendererUrl,
+    });
+    const getStatus = handler(IPC_INVOKE_CHANNELS.anthropicCredentialGetStatus);
 
     await expect(getStatus(trustedEvent(), {}, {})).rejects.toThrow(
       "invalid argument count",
@@ -171,7 +179,10 @@ describe("Anthropic credential IPC", () => {
       ...testEncryption,
       isAvailable: () => false,
     });
-    registerAiCredentialIpcHandlers({ credentialStore: store, trustedRendererUrl });
+    registerAiCredentialIpcHandlers({
+      credentialStore: store,
+      trustedRendererUrl,
+    });
 
     await expect(
       handler(IPC_INVOKE_CHANNELS.anthropicCredentialSet)(trustedEvent(), {

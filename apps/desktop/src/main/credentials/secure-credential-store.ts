@@ -435,7 +435,11 @@ export class SecureCredentialStore {
       contents = await readFile(this.options.filePath, "utf8");
     } catch (error) {
       if (isNodeError(error, "ENOENT")) {
-        return { schemaVersion: STORE_SCHEMA_VERSION, entries: {}, apiKeys: {} };
+        return {
+          schemaVersion: STORE_SCHEMA_VERSION,
+          entries: {},
+          apiKeys: {},
+        };
       }
       throw error;
     }

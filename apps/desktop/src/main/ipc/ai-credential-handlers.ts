@@ -87,9 +87,8 @@ export function registerAiCredentialIpcHandlers(
       );
       try {
         AnthropicCredentialStatusRequestSchema.parse(args[0]);
-        const status = await options.credentialStore.getApiKeyStatus(
-          "anthropic",
-        );
+        const status =
+          await options.credentialStore.getApiKeyStatus("anthropic");
         return AnthropicCredentialResponseSchema.parse({ ok: true, status });
       } catch (error) {
         return AnthropicCredentialResponseSchema.parse({
@@ -112,9 +111,8 @@ export function registerAiCredentialIpcHandlers(
       try {
         const request = AnthropicCredentialSetRequestSchema.parse(args[0]);
         await options.credentialStore.setApiKey("anthropic", request.apiKey);
-        const status = await options.credentialStore.getApiKeyStatus(
-          "anthropic",
-        );
+        const status =
+          await options.credentialStore.getApiKeyStatus("anthropic");
         return AnthropicCredentialResponseSchema.parse({ ok: true, status });
       } catch (error) {
         return AnthropicCredentialResponseSchema.parse({
@@ -137,9 +135,8 @@ export function registerAiCredentialIpcHandlers(
       try {
         AnthropicCredentialDeleteRequestSchema.parse(args[0]);
         await options.credentialStore.deleteApiKey("anthropic");
-        const status = await options.credentialStore.getApiKeyStatus(
-          "anthropic",
-        );
+        const status =
+          await options.credentialStore.getApiKeyStatus("anthropic");
         return AnthropicCredentialResponseSchema.parse({ ok: true, status });
       } catch (error) {
         return AnthropicCredentialResponseSchema.parse({
