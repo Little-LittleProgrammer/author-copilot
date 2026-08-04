@@ -8,6 +8,7 @@ import {
   electronCredentialEncryption,
   SecureCredentialStore,
 } from "./credentials/index.js";
+import { createEphemeralE2eCredentialEncryption } from "./credentials/e2e-credential-encryption.js";
 import { DesktopDomainEvents } from "./domain-events.js";
 import {
   GitService,
@@ -119,7 +120,10 @@ app.whenReady().then(async () => {
       "credentials",
       "secure-credentials.json",
     ),
-    encryption: electronCredentialEncryption,
+    encryption:
+      e2eMode && process.env.AUTHOR_COPILOT_E2E_CREDENTIAL_ENCRYPTION === "1"
+        ? createEphemeralE2eCredentialEncryption()
+        : electronCredentialEncryption,
   });
   const knowledgeService = new KnowledgeService({
     storageRoot: join(app.getPath("userData"), "knowledge-indexes"),

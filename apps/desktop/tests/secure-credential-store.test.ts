@@ -8,6 +8,7 @@ import {
   SecureCredentialStore,
   normalizeHttpsOrigin,
 } from "../src/main/credentials/secure-credential-store.js";
+import { createEphemeralE2eCredentialEncryption } from "../src/main/credentials/e2e-credential-encryption.js";
 import type {
   CredentialEncryption,
   CredentialStoreError,
@@ -217,5 +218,21 @@ describe("SecureCredentialStore", () => {
     await expect(
       linked.store.getApiKeyStatus("anthropic"),
     ).rejects.toMatchObject({ code: "invalid_store" });
+  });
+});
+
+describe("ephemeral E2E credential encryption", () => {
+  it("encrypts and authenticates the test credential payload", () => {
+    const encryption = createEphemeralE2eCredentialEncryption();
+    const plaintext = "e2e-credential-secret";
+    const ciphertext = encryption.encrypt(plaintext);
+
+    expect(ciphertext.toString("utf8")).not.toContain(plaintext);
+    expect(encryption.decrypt(ciphertext)).toBe(plaintext);
+
+    const tampered = Buffer.from(ciphertext);
+    const lastIndex = tampered.length - 1;
+    tampered[lastIndex] = (tampered[lastIndex] ?? 0) ^ 1;
+    expect(() => encryption.decrypt(tampered)).toThrow();
   });
 });

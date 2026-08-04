@@ -686,7 +686,9 @@ test("configures and removes an encrypted Anthropic API key", async () => {
     "secure-credentials.json",
   );
   const apiKey = "sk-ant-api03-e2e-secret";
-  const application = await launchApplication(temporaryRoot);
+  const application = await launchApplication(temporaryRoot, {
+    AUTHOR_COPILOT_E2E_CREDENTIAL_ENCRYPTION: "1",
+  });
 
   try {
     const { center: page } = await signIn(application);
