@@ -1,4 +1,7 @@
 import {
+  AiChatCancelResponseSchema,
+  AiChatEventSchema,
+  AiChatStartResponseSchema,
   AnthropicCredentialResponseSchema,
   DocumentReadResponseSchema,
   DocumentSaveResponseSchema,
@@ -31,6 +34,9 @@ import {
   VersionDiffResponseSchema,
   VersionListResponseSchema,
   type AnthropicCredentialSetRequest,
+  type AiChatCancelRequest,
+  type AiChatEvent,
+  type AiChatStartRequest,
   type DocumentReadRequest,
   type DocumentSaveRequest,
   type KnowledgeIndexStatusRequest,
@@ -109,6 +115,30 @@ const api: AuthorCopilotApi = Object.freeze({
         );
         return AnthropicCredentialResponseSchema.parse(response);
       },
+    }),
+  }),
+  assistant: Object.freeze({
+    chat: Object.freeze({
+      start: async (request: AiChatStartRequest) => {
+        const response: unknown = await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.aiChatStart,
+          request,
+        );
+        return AiChatStartResponseSchema.parse(response);
+      },
+      cancel: async (request: AiChatCancelRequest) => {
+        const response: unknown = await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.aiChatCancel,
+          request,
+        );
+        return AiChatCancelResponseSchema.parse(response);
+      },
+      onEvent: (listener: (event: AiChatEvent) => void) =>
+        subscribe(
+          IPC_EVENT_CHANNELS.aiChatEvent,
+          (value) => AiChatEventSchema.parse(value),
+          listener,
+        ),
     }),
   }),
   project: Object.freeze({

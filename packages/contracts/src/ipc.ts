@@ -5,6 +5,13 @@ import {
   AnthropicCredentialSetRequestSchema,
   AnthropicCredentialStatusRequestSchema,
 } from "./ai-credentials.js";
+import {
+  AiChatCancelRequestSchema,
+  AiChatCancelResponseSchema,
+  AiChatEventSchema,
+  AiChatStartRequestSchema,
+  AiChatStartResponseSchema,
+} from "./ai-chat.js";
 
 import {
   KnowledgeIndexStatusRequestSchema,
@@ -84,6 +91,8 @@ export const IPC_INVOKE_CHANNELS = {
   anthropicCredentialGetStatus: "ai-credential:anthropic-status",
   anthropicCredentialSet: "ai-credential:anthropic-set",
   anthropicCredentialDelete: "ai-credential:anthropic-delete",
+  aiChatStart: "ai-chat:start",
+  aiChatCancel: "ai-chat:cancel",
   projectCreate: "project:create",
   projectDeleteEntry: "project:delete-entry",
   projectUpdate: "project:update",
@@ -119,6 +128,7 @@ export const IPC_INVOKE_CHANNELS = {
 } as const;
 
 export const IPC_EVENT_CHANNELS = {
+  aiChatEvent: "ai-chat:event",
   taskProgress: "task:progress",
   taskCancelled: "task:cancelled",
   tabStateChanged: "tabs:state-changed",
@@ -131,6 +141,8 @@ export const IPC_INVOKE_CHANNEL_NAMES = [
   IPC_INVOKE_CHANNELS.anthropicCredentialGetStatus,
   IPC_INVOKE_CHANNELS.anthropicCredentialSet,
   IPC_INVOKE_CHANNELS.anthropicCredentialDelete,
+  IPC_INVOKE_CHANNELS.aiChatStart,
+  IPC_INVOKE_CHANNELS.aiChatCancel,
   IPC_INVOKE_CHANNELS.projectCreate,
   IPC_INVOKE_CHANNELS.projectDeleteEntry,
   IPC_INVOKE_CHANNELS.projectUpdate,
@@ -166,6 +178,7 @@ export const IPC_INVOKE_CHANNEL_NAMES = [
 ] as const;
 
 export const IPC_EVENT_CHANNEL_NAMES = [
+  IPC_EVENT_CHANNELS.aiChatEvent,
   IPC_EVENT_CHANNELS.taskProgress,
   IPC_EVENT_CHANNELS.taskCancelled,
   IPC_EVENT_CHANNELS.tabStateChanged,
@@ -202,6 +215,14 @@ export const IPC_INVOKE_CONTRACTS = {
   [IPC_INVOKE_CHANNELS.anthropicCredentialDelete]: {
     request: AnthropicCredentialDeleteRequestSchema,
     response: AnthropicCredentialResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.aiChatStart]: {
+    request: AiChatStartRequestSchema,
+    response: AiChatStartResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.aiChatCancel]: {
+    request: AiChatCancelRequestSchema,
+    response: AiChatCancelResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.projectCreate]: {
     request: ProjectCreateRequestSchema,
@@ -334,6 +355,7 @@ export const IPC_INVOKE_CONTRACTS = {
 } as const;
 
 export const IPC_EVENT_CONTRACTS = {
+  [IPC_EVENT_CHANNELS.aiChatEvent]: AiChatEventSchema,
   [IPC_EVENT_CHANNELS.taskProgress]: TaskProgressEventSchema,
   [IPC_EVENT_CHANNELS.taskCancelled]: TaskCancelledEventSchema,
   [IPC_EVENT_CHANNELS.tabStateChanged]: TabStateChangedEventSchema,

@@ -5,6 +5,12 @@ import { app, BrowserWindow, session } from "electron";
 import type { ProjectSummary } from "@author-copilot/contracts";
 
 import {
+  AiContextAssembler,
+  AiOrchestrator,
+  AnthropicClaudeTransport,
+} from "./ai/index.js";
+
+import {
   electronCredentialEncryption,
   SecureCredentialStore,
 } from "./credentials/index.js";
@@ -37,6 +43,7 @@ import {
 let mainWindow: BrowserWindow | undefined;
 let tabManager: TabManager | undefined;
 let quitRequested = false;
+let aiOrchestrator: AiOrchestrator | undefined;
 const smokeMode = process.env.AUTHOR_COPILOT_ELECTRON_SMOKE === "1";
 const e2eMode = !app.isPackaged && process.env.AUTHOR_COPILOT_E2E === "1";
 
@@ -130,6 +137,19 @@ app.whenReady().then(async () => {
     projectService,
   });
   domainEvents.subscribe(knowledgeService.handleDocumentSaved);
+  aiOrchestrator = new AiOrchestrator({
+    contextAssembler: new AiContextAssembler({
+      projectService,
+      knowledgeService,
+    }),
+    credentialStore,
+    transport: new AnthropicClaudeTransport({
+      ...(e2eMode &&
+      process.env.AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL !== undefined
+        ? { baseURL: process.env.AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL }
+        : {}),
+    }),
+  });
   const preloadPath = join(import.meta.dirname, "../preload/index.cjs");
   const developmentGitExecutable = process.env.AUTHOR_COPILOT_GIT_EXECUTABLE;
   const gitRuntime = resolveGitRuntime({
@@ -169,6 +189,7 @@ app.whenReady().then(async () => {
     installProductionCsp(session.defaultSession);
   }
   registerIpcHandlers(target.url, {
+    aiOrchestrator,
     credentialStore,
     projectService,
     gitService,
@@ -215,4 +236,5 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   quitRequested = true;
+  aiOrchestrator?.cancelAll("shutdown");
 });

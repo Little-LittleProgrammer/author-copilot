@@ -6,8 +6,10 @@ import {
 import { app, ipcMain, type IpcMainInvokeEvent } from "electron";
 
 import type { SecureCredentialStore } from "./credentials/index.js";
+import type { AiOrchestrator } from "./ai/index.js";
 import { assertTrustedIpcRequest } from "./ipc-policy.js";
 import { registerAiCredentialIpcHandlers } from "./ipc/ai-credential-handlers.js";
+import { registerAiChatIpcHandlers } from "./ipc/ai-chat-handlers.js";
 import { registerProjectIpcHandlers } from "./ipc/project-handlers.js";
 import { registerKnowledgeIpcHandlers } from "./ipc/knowledge-handlers.js";
 import { registerTabIpcHandlers } from "./ipc/tab-handlers.js";
@@ -20,6 +22,7 @@ import type { KnowledgeService } from "./knowledge/index.js";
 import type { TabManager } from "./tabs/index.js";
 
 export interface IpcHandlerOptions {
+  readonly aiOrchestrator: AiOrchestrator;
   readonly credentialStore: SecureCredentialStore;
   readonly projectService: ProjectService;
   readonly gitService: GitService;
@@ -66,6 +69,10 @@ export function registerIpcHandlers(
   registerAiCredentialIpcHandlers({
     trustedRendererUrl,
     credentialStore: options.credentialStore,
+  });
+  registerAiChatIpcHandlers({
+    trustedRendererUrl,
+    orchestrator: options.aiOrchestrator,
   });
   registerProjectIpcHandlers({
     trustedRendererUrl,

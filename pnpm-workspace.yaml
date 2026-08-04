@@ -3,6 +3,7 @@ packages:
   - packages/*
 
 catalog:
+  "@anthropic-ai/sdk": "0.111.0"
   "@nestjs/cli": "11.0.16"
   "@nestjs/common": "11.1.28"
   "@nestjs/core": "11.1.28"

@@ -1,7 +1,9 @@
 import type { JSX } from "react";
+import type { AiContextSelection } from "@author-copilot/contracts";
 import { Button } from "@/components/ui/button.js";
 import type { MessageKey } from "../../i18n/index.js";
 import { KnowledgePanel } from "../assistant/KnowledgePanel.js";
+import { ChatPanel } from "../assistant/ChatPanel.js";
 import type {
   DocumentSnapshot,
   ProjectSummary,
@@ -26,8 +28,12 @@ interface EditorWorkspaceProps {
   readonly onOpenKnowledgeSource: (relativePath: string) => void;
   readonly onRecoveryRestored: () => void;
   readonly onSave: () => void;
+  readonly onSelectionChange: (
+    selection: AiContextSelection | undefined,
+  ) => void;
   readonly onTabChange: (tab: WorkspaceTab) => void;
   readonly saving: boolean;
+  readonly selection: AiContextSelection | undefined;
   readonly tab: WorkspaceTab;
   readonly t: (key: MessageKey) => string;
   readonly versionNotice: string | undefined;
@@ -50,8 +56,10 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
     onOpenKnowledgeSource,
     onRecoveryRestored,
     onSave,
+    onSelectionChange,
     onTabChange,
     saving,
+    selection,
     tab,
     t,
     versionNotice,
@@ -160,35 +168,68 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
               value={content}
               placeholder={t("documentPlaceholder")}
               onChange={(event) => onChange(event.target.value)}
+              onSelect={(event) => {
+                const target = event.currentTarget;
+                if (target.selectionStart === target.selectionEnd) {
+                  onSelectionChange(undefined);
+                  return;
+                }
+                const startLine = target.value
+                  .slice(0, target.selectionStart)
+                  .split("\n").length;
+                const inclusiveEnd = Math.max(
+                  target.selectionStart,
+                  target.selectionEnd - 1,
+                );
+                const endLine = target.value
+                  .slice(0, inclusiveEnd)
+                  .split("\n").length;
+                onSelectionChange({ startLine, endLine });
+              }}
             />
           )
         ) : tab === "assistant" ? (
           <div className="assistant-workspace">
             {activeProject === undefined ? null : (
-              <KnowledgePanel
-                onOpenSource={onOpenKnowledgeSource}
-                projectId={activeProject.id}
-                t={t}
-              />
+              <>
+                <ChatPanel
+                  content={content}
+                  documentPath={document?.path}
+                  onOpenSource={onOpenKnowledgeSource}
+                  projectId={activeProject.id}
+                  selection={selection}
+                  t={t}
+                />
+                <aside className="assistant-sidebar">
+                  <KnowledgePanel
+                    onOpenSource={onOpenKnowledgeSource}
+                    projectId={activeProject.id}
+                    t={t}
+                  />
+                  <section
+                    className="ai-context-section"
+                    aria-label={t("aiContext")}
+                  >
+                    <div className="ai-context-heading">
+                      <strong>{t("aiContext")}</strong>
+                      <span>{aiContext.length}</span>
+                    </div>
+                    {aiContext.length === 0 ? (
+                      <p>{t("aiContextEmpty")}</p>
+                    ) : (
+                      <ul className="ai-context-list">
+                        {aiContext.map((node) => (
+                          <li key={node.path}>
+                            <span>{node.name}</span>
+                            <small>{t(roleLabels[node.role])}</small>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                </aside>
+              </>
             )}
-            <section className="ai-context-section" aria-label={t("aiContext")}>
-              <div className="ai-context-heading">
-                <strong>{t("aiContext")}</strong>
-                <span>{aiContext.length}</span>
-              </div>
-              {aiContext.length === 0 ? (
-                <p>{t("aiContextEmpty")}</p>
-              ) : (
-                <ul className="ai-context-list">
-                  {aiContext.map((node) => (
-                    <li key={node.path}>
-                      <span>{node.name}</span>
-                      <small>{t(roleLabels[node.role])}</small>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
           </div>
         ) : activeProject === undefined ? null : (
           <VersionHistoryPanel

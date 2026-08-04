@@ -28,18 +28,24 @@ export const AiContextSelectionSchema = z
     "Selection start line must not be after its end line.",
   );
 
+export type AiContextSelection = z.infer<typeof AiContextSelectionSchema>;
+
+export const AiCurrentDocumentContextSchema = z.strictObject({
+  relativePath: RelativeProjectPathSchema,
+  content: z.string().max(AI_CONTEXT_MAX_DOCUMENT_CHARACTERS),
+  selection: AiContextSelectionSchema.optional(),
+});
+
+export const AiInstructionSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(AI_CONTEXT_MAX_INSTRUCTION_CHARACTERS);
+
 export const AiContextAssemblyRequestSchema = z.strictObject({
   projectId: z.uuid(),
-  currentDocument: z.strictObject({
-    relativePath: RelativeProjectPathSchema,
-    content: z.string().max(AI_CONTEXT_MAX_DOCUMENT_CHARACTERS),
-    selection: AiContextSelectionSchema.optional(),
-  }),
-  instruction: z
-    .string()
-    .trim()
-    .min(1)
-    .max(AI_CONTEXT_MAX_INSTRUCTION_CHARACTERS),
+  currentDocument: AiCurrentDocumentContextSchema,
+  instruction: AiInstructionSchema,
   permissions: AiContextPermissionsSchema,
   retrievalLimit: z.number().int().min(1).max(20).default(5),
 });
@@ -81,11 +87,7 @@ export const AiKnowledgeContextSectionSchema = z.strictObject({
 
 export const AiRequestContextSectionSchema = z.strictObject({
   kind: z.literal("request"),
-  instruction: z
-    .string()
-    .trim()
-    .min(1)
-    .max(AI_CONTEXT_MAX_INSTRUCTION_CHARACTERS),
+  instruction: AiInstructionSchema,
   permissions: AiContextPermissionsSchema,
 });
 

@@ -1,4 +1,9 @@
 import type {
+  AiChatCancelRequest,
+  AiChatCancelResponse,
+  AiChatEvent,
+  AiChatStartRequest,
+  AiChatStartResponse,
   AnthropicCredentialResponse,
   AnthropicCredentialSetRequest,
   DocumentReadRequest,
@@ -62,6 +67,17 @@ export interface AuthorCopilotApi {
         request: AnthropicCredentialSetRequest,
       ) => Promise<AnthropicCredentialResponse>;
       readonly delete: () => Promise<AnthropicCredentialResponse>;
+    };
+  };
+  readonly assistant: {
+    readonly chat: {
+      readonly start: (
+        request: AiChatStartRequest,
+      ) => Promise<AiChatStartResponse>;
+      readonly cancel: (
+        request: AiChatCancelRequest,
+      ) => Promise<AiChatCancelResponse>;
+      readonly onEvent: (listener: (event: AiChatEvent) => void) => () => void;
     };
   };
   readonly project: {

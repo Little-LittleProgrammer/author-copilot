@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
 import {
   lstat,
   mkdir,
@@ -632,6 +633,130 @@ test("initializes and searches the local whole-work index with source navigation
     await expect(page.getByTestId("document-editor")).toHaveValue(/白塔钟声/u);
   } finally {
     await application.close();
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("streams a BYOK Claude answer and opens its local source", async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
+  const receivedKeys: string[] = [];
+  const server = createServer((request, response) => {
+    receivedKeys.push(String(request.headers["x-api-key"] ?? ""));
+    response.writeHead(200, {
+      "content-type": "text/event-stream",
+      connection: "close",
+    });
+    const events = [
+      {
+        type: "message_start",
+        message: {
+          id: "msg_e2e",
+          type: "message",
+          role: "assistant",
+          model: "claude-sonnet-4-6",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 0 },
+        },
+      },
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "" },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "林舟记得" },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "白塔钟声。[1]" },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "end_turn", stop_sequence: null },
+        usage: { output_tokens: 4 },
+      },
+      { type: "message_stop" },
+    ];
+    response.end(
+      events
+        .map(
+          (event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+        )
+        .join(""),
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("Claude E2E server did not expose a port.");
+  }
+  const apiKey = "sk-ant-api03-e2e-chat-secret";
+  const application = await launchApplication(temporaryRoot, {
+    AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL: `http://127.0.0.1:${address.port}`,
+    AUTHOR_COPILOT_E2E_CREDENTIAL_ENCRYPTION: "1",
+  });
+
+  try {
+    const { center } = await signIn(application);
+    await center.getByRole("button", { name: /Claude API Key/u }).click();
+    await center.getByTestId("anthropic-api-key").fill(apiKey);
+    await center.getByTestId("anthropic-credential-save").click();
+    await expect(center.getByTestId("anthropic-credential-status")).toHaveText(
+      /已配置|Configured/u,
+    );
+    await center.getByRole("button", { name: /关闭|Close/u }).click();
+
+    await center.getByRole("button", { name: /新建小说|New novel/u }).click();
+    await center.getByTestId("project-name").fill("Claude 来源对话");
+    await center.getByTestId("project-dialog-submit").click();
+    const page = await rendererPage(application, "project");
+    await page.getByRole("button", { name: "01-正文", exact: true }).click();
+    await page
+      .getByTestId("document-editor")
+      .fill("# 雨夜\n\n白塔钟声响起，林舟在旧站台等候。\n");
+    await page.getByTestId("save-document").click();
+    await expect(
+      page.getByText(/已保存|Saved/u, { exact: true }),
+    ).toBeVisible();
+
+    await page.getByRole("tab", { name: /AI 对话|AI chat/u }).click();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page
+      .getByRole("button", { name: /初始化|Initialize/u, exact: true })
+      .click();
+    await expect(page.getByText(/可用|Ready/u, { exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
+    await page.getByTestId("ai-chat-input").fill("白塔钟声");
+    await page.getByTestId("ai-chat-send").click();
+    await expect(page.getByTestId("ai-chat-panel")).toContainText(
+      "林舟记得白塔钟声。[1]",
+    );
+    await expect(
+      page.getByText(/使用当前文档和全书来源|full-book sources/u),
+    ).toBeVisible();
+    const source = page.getByRole("button", { name: /\[1\].*01-正文/u });
+    await expect(source).toBeVisible();
+    await page.screenshot({
+      path: "test-results/m5-3-streaming-chat.png",
+      fullPage: true,
+    });
+    await source.click();
+    await expect(page.getByTestId("document-editor")).toHaveValue(/白塔钟声/u);
+    expect(receivedKeys).toEqual([apiKey]);
+  } finally {
+    await application.close();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) =>
+        error === undefined ? resolve() : reject(error),
+      ),
+    );
     await rm(temporaryRoot, { recursive: true, force: true });
   }
 });

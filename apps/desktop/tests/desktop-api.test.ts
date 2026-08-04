@@ -19,4 +19,21 @@ describe("AuthorCopilotApi", () => {
       "set",
     ]);
   });
+
+  it("exposes AI chat only through the typed preload surface", () => {
+    const publicMethods: Record<
+      keyof AuthorCopilotApi["assistant"]["chat"],
+      true
+    > = {
+      start: true,
+      cancel: true,
+      onEvent: true,
+    };
+
+    expect(Object.keys(publicMethods).sort()).toEqual([
+      "cancel",
+      "onEvent",
+      "start",
+    ]);
+  });
 });

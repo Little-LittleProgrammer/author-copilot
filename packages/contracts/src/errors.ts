@@ -11,6 +11,7 @@ export const AppErrorCodeSchema = z.enum([
   "GIT_FAILED",
   "INDEX_UNAVAILABLE",
   "AI_UNAVAILABLE",
+  "NETWORK_UNAVAILABLE",
   "RATE_LIMITED",
   "CANCELLED",
   "TIMEOUT",

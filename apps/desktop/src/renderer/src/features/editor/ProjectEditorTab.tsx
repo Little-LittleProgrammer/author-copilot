@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 
-import type { RuntimeInfo } from "@author-copilot/contracts";
+import type {
+  AiContextSelection,
+  RuntimeInfo,
+} from "@author-copilot/contracts";
 
 import type { MessageKey } from "../../i18n/index.js";
 import { ProjectSidebar } from "../project/ProjectSidebar.js";
@@ -64,6 +67,7 @@ export function ProjectEditorTab({
   const [versionDialogOpen, setVersionDialogOpen] = useState(false);
   const [error, setError] = useState<string>();
   const [tab, setTab] = useState<WorkspaceTab>("content");
+  const [selection, setSelection] = useState<AiContextSelection>();
   const [aiContextPaths, setAiContextPaths] = useState<ReadonlySet<string>>(
     () => loadAiContext(project.id),
   );
@@ -126,6 +130,7 @@ export function ProjectEditorTab({
         .then((snapshot) => {
           setDocument(snapshot);
           setContent(snapshot.content);
+          setSelection(undefined);
           setTab("content");
         })
         .catch((reason: unknown) =>
@@ -378,8 +383,10 @@ export function ProjectEditorTab({
           onOpenKnowledgeSource={openKnowledgeSource}
           onRecoveryRestored={reloadAfterRepositoryChange}
           onSave={save}
+          onSelectionChange={setSelection}
           onTabChange={setTab}
           saving={saving}
+          selection={selection}
           tab={tab}
           t={t}
           versionNotice={versionNotice}
