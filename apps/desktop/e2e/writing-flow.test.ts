@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import {
   lstat,
@@ -750,6 +750,180 @@ test("streams a BYOK Claude answer and opens its local source", async () => {
     await source.click();
     await expect(page.getByTestId("document-editor")).toHaveValue(/白塔钟声/u);
     expect(receivedKeys).toEqual([apiKey]);
+  } finally {
+    await application.close();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) =>
+        error === undefined ? resolve() : reject(error),
+      ),
+    );
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("reviews a validated Claude proposal without changing project files", async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
+  const projectTitle = "Claude 提案审阅";
+  const content = "雨夜，她开门。";
+  const documentPath = join(
+    temporaryRoot,
+    projectTitle,
+    "第一卷",
+    "第一章",
+    "01-正文.md",
+  );
+  const baselineHash = createHash("sha256").update(content).digest("hex");
+  let requestBody = "";
+  const server = createServer((request, response) => {
+    request.setEncoding("utf8");
+    request.on("data", (chunk: string) => {
+      requestBody += chunk;
+    });
+    request.on("end", () => {
+      const proposal = {
+        summary: "加强雨夜开场",
+        files: [
+          {
+            relativePath: "第一卷/第一章/01-正文.md",
+            baselineHash,
+            edits: [
+              {
+                changeId: "opening",
+                startOffset: 0,
+                endOffset: 2,
+                expectedText: "雨夜",
+                replacementText: "暴雨之夜",
+              },
+              {
+                changeId: "action",
+                startOffset: 4,
+                endOffset: 6,
+                expectedText: "开门",
+                replacementText: "推门而入",
+              },
+            ],
+          },
+        ],
+      };
+      const events = [
+        {
+          type: "message_start",
+          message: {
+            id: "msg_proposal",
+            type: "message",
+            role: "assistant",
+            model: "claude-sonnet-4-6",
+            content: [],
+            stop_reason: null,
+            stop_sequence: null,
+            usage: { input_tokens: 1, output_tokens: 0 },
+          },
+        },
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "tool_use",
+            id: "toolu_proposal",
+            name: "propose_project_changes",
+            input: {},
+          },
+        },
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: {
+            type: "input_json_delta",
+            partial_json: JSON.stringify(proposal),
+          },
+        },
+        { type: "content_block_stop", index: 0 },
+        {
+          type: "message_delta",
+          delta: { stop_reason: "tool_use", stop_sequence: null },
+          usage: { output_tokens: 10 },
+        },
+        { type: "message_stop" },
+      ];
+      response.writeHead(200, {
+        "content-type": "text/event-stream",
+        connection: "close",
+      });
+      response.end(
+        events
+          .map(
+            (event) =>
+              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+          )
+          .join(""),
+      );
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert(address !== null && typeof address !== "string");
+  const application = await launchApplication(temporaryRoot, {
+    AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL: `http://127.0.0.1:${address.port}`,
+    AUTHOR_COPILOT_E2E_CREDENTIAL_ENCRYPTION: "1",
+  });
+
+  try {
+    const { center } = await signIn(application);
+    await center.getByRole("button", { name: /Claude API Key/u }).click();
+    await center
+      .getByTestId("anthropic-api-key")
+      .fill("sk-ant-api03-proposal-e2e");
+    await center.getByTestId("anthropic-credential-save").click();
+    await center.getByRole("button", { name: /关闭|Close/u }).click();
+
+    await center.getByRole("button", { name: /新建小说|New novel/u }).click();
+    await center.getByTestId("project-name").fill(projectTitle);
+    await center.getByTestId("project-dialog-submit").click();
+    const page = await rendererPage(application, "project");
+    await page.getByRole("button", { name: "01-正文", exact: true }).click();
+    await page.getByTestId("document-editor").fill(content);
+    await page.getByTestId("save-document").click();
+    await expect(
+      page.getByText(/已保存|Saved/u, { exact: true }),
+    ).toBeVisible();
+
+    await page.getByRole("tab", { name: /AI 对话|AI chat/u }).click();
+    await page.getByTestId("ai-chat-input").fill("加强开场的紧张感");
+    await page.getByTestId("ai-proposal-create").click();
+
+    const review = page.getByTestId("proposal-review");
+    await expect(review).toBeVisible();
+    await expect(review).toContainText("加强雨夜开场");
+    await expect(page.getByTestId("proposal-accepted-count")).toContainText(
+      "2/2",
+    );
+    await expect(page.getByTestId("proposal-change-opening")).toContainText(
+      "-雨夜",
+    );
+    await page
+      .getByTestId("proposal-change-opening")
+      .getByRole("button")
+      .click();
+    await expect(page.getByTestId("proposal-accepted-count")).toContainText(
+      "1/2",
+    );
+    await page.getByRole("button", { name: /接受此文件|Accept file/u }).click();
+    await expect(page.getByTestId("proposal-accepted-count")).toContainText(
+      "2/2",
+    );
+    await page.getByRole("button", { name: /拒绝此文件|Reject file/u }).click();
+    await expect(page.getByTestId("proposal-accepted-count")).toContainText(
+      "0/2",
+    );
+    await page.screenshot({
+      path: "test-results/m5-6-proposal-review.png",
+      fullPage: true,
+    });
+
+    expect(await readFile(documentPath, "utf8")).toBe(content);
+    expect(JSON.parse(requestBody)).toMatchObject({
+      tool_choice: { type: "tool", name: "propose_project_changes" },
+    });
   } finally {
     await application.close();
     await new Promise<void>((resolve, reject) =>

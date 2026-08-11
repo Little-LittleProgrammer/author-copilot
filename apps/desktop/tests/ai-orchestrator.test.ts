@@ -31,6 +31,7 @@ const context: AiAssembledContext = {
       kind: "current",
       contextKind: "document",
       relativePath: "第一卷/第一章/正文.md",
+      baselineHash: "a".repeat(64),
       startLine: 1,
       endLine: 1,
       text: "雨夜。",
@@ -94,6 +95,9 @@ function orchestrator(
           options.apiKey === undefined ? "sk-ant-test" : options.apiKey,
         ),
     },
+    patchValidator: {
+      validate: vi.fn(),
+    },
     transport,
     createId: () => runId,
     now: () => new Date("2026-08-04T00:00:00.000Z"),
@@ -127,6 +131,103 @@ describe("AI orchestrator", () => {
       ["ai.chat.delta", 1],
       ["ai.chat.completed", 2],
     ]);
+  });
+
+  it("validates a forced tool proposal and emits review data without writes", async () => {
+    const events: AiChatEvent[] = [];
+    const contextAssembler = {
+      assemble: vi.fn().mockResolvedValue(context),
+    };
+    const validate = vi.fn().mockResolvedValue({
+      summary: "收紧开场",
+      files: [
+        {
+          relativePath: "第一卷/第一章/正文.md",
+          baselineHash: "a".repeat(64),
+          proposedHash: "b".repeat(64),
+          originalContent: "雨夜。",
+          proposedContent: "暴雨。",
+          edits: [
+            {
+              changeId: "opening",
+              startOffset: 0,
+              endOffset: 2,
+              expectedText: "雨夜",
+              replacementText: "暴雨",
+            },
+          ],
+        },
+      ],
+    });
+    const service = new AiOrchestrator({
+      contextAssembler: contextAssembler as unknown as AiContextAssembler,
+      credentialStore: { getApiKey: vi.fn().mockResolvedValue("sk-ant-test") },
+      patchValidator: { validate },
+      transport: {
+        stream: async ({ tool }) => {
+          expect(tool?.name).toBe("propose_project_changes");
+          await tool?.onInput({ summary: "raw proposal" });
+        },
+      },
+      createId: () => runId,
+      now: () => new Date("2026-08-04T00:00:00.000Z"),
+    });
+
+    await service.start({ ...request, mode: "proposal" }, (event) =>
+      events.push(event),
+    );
+    await vi.waitFor(() => expect(events).toHaveLength(1));
+
+    expect(validate).toHaveBeenCalledWith(projectId, {
+      summary: "raw proposal",
+    });
+    expect(contextAssembler.assemble).toHaveBeenCalledWith(
+      expect.objectContaining({
+        permissions: expect.objectContaining({ proposeChanges: true }),
+      }),
+    );
+    expect(events[0]).toMatchObject({
+      type: "ai.proposal.ready",
+      review: {
+        summary: "收紧开场",
+        files: [
+          {
+            relativePath: "第一卷/第一章/正文.md",
+            changes: [{ changeId: "opening" }],
+          },
+        ],
+      },
+    });
+  });
+
+  it("normalizes invalid proposal tool input without leaking contents", async () => {
+    const events: AiChatEvent[] = [];
+    const service = new AiOrchestrator({
+      contextAssembler: {
+        assemble: vi.fn().mockResolvedValue(context),
+      } as unknown as AiContextAssembler,
+      credentialStore: { getApiKey: vi.fn().mockResolvedValue("sk-ant-test") },
+      patchValidator: {
+        validate: vi.fn().mockRejectedValue(new Error("secret manuscript")),
+      },
+      transport: {
+        stream: async ({ tool }) => {
+          await tool?.onInput({ manuscript: "secret manuscript" });
+        },
+      },
+      createId: () => runId,
+      now: () => new Date("2026-08-04T00:00:00.000Z"),
+    });
+
+    await service.start({ ...request, mode: "proposal" }, (event) =>
+      events.push(event),
+    );
+    await vi.waitFor(() => expect(events).toHaveLength(1));
+    expect(events[0]).toMatchObject({
+      type: "ai.chat.failed",
+      error: { code: "VALIDATION_FAILED" },
+    });
+    expect(JSON.stringify(events[0])).not.toContain("secret manuscript");
   });
 
   it("rejects a missing credential and concurrent runs without leaking keys", async () => {

@@ -5,6 +5,8 @@ import { ContentHashSchema, RelativeProjectPathSchema } from "./project.js";
 export const AI_PATCH_MAX_FILES = 20;
 export const AI_PATCH_MAX_EDITS_PER_FILE = 100;
 export const AI_PATCH_MAX_TEXT_CHARACTERS = 200_000;
+export const AI_PATCH_MAX_DIFF_CHARACTERS =
+  AI_PATCH_MAX_TEXT_CHARACTERS * 2 + 512;
 
 export const AiPatchChangeIdSchema = z
   .string()
@@ -41,3 +43,33 @@ export const AiPatchProposalSchema = z.strictObject({
 });
 
 export type AiPatchProposal = z.infer<typeof AiPatchProposalSchema>;
+
+export const AiPatchReviewChangeSchema = z.strictObject({
+  changeId: AiPatchChangeIdSchema,
+  originalStartLine: z.number().int().positive(),
+  originalLineCount: z.number().int().nonnegative(),
+  proposedStartLine: z.number().int().positive(),
+  proposedLineCount: z.number().int().nonnegative(),
+  patch: z.string().min(1).max(AI_PATCH_MAX_DIFF_CHARACTERS),
+});
+
+export type AiPatchReviewChange = z.infer<typeof AiPatchReviewChangeSchema>;
+
+export const AiPatchReviewFileSchema = z.strictObject({
+  relativePath: RelativeProjectPathSchema,
+  baselineHash: ContentHashSchema,
+  proposedHash: ContentHashSchema,
+  changes: z
+    .array(AiPatchReviewChangeSchema)
+    .min(1)
+    .max(AI_PATCH_MAX_EDITS_PER_FILE),
+});
+
+export type AiPatchReviewFile = z.infer<typeof AiPatchReviewFileSchema>;
+
+export const AiPatchReviewSchema = z.strictObject({
+  summary: z.string().trim().min(1).max(2_000),
+  files: z.array(AiPatchReviewFileSchema).min(1).max(AI_PATCH_MAX_FILES),
+});
+
+export type AiPatchReview = z.infer<typeof AiPatchReviewSchema>;

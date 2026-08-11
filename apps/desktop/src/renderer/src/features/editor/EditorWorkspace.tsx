@@ -1,9 +1,13 @@
 import type { JSX } from "react";
-import type { AiContextSelection } from "@author-copilot/contracts";
+import type {
+  AiContextSelection,
+  AiPatchReview,
+} from "@author-copilot/contracts";
 import { Button } from "@/components/ui/button.js";
 import type { MessageKey } from "../../i18n/index.js";
 import { KnowledgePanel } from "../assistant/KnowledgePanel.js";
 import { ChatPanel } from "../assistant/ChatPanel.js";
+import { ChangeReviewPanel } from "../change-review/ChangeReviewPanel.js";
 import type {
   DocumentSnapshot,
   ProjectSummary,
@@ -22,15 +26,22 @@ interface EditorWorkspaceProps {
   readonly error: string | undefined;
   readonly loading: boolean;
   readonly onChange: (content: string) => void;
+  readonly onAcceptAllProposalChanges: () => void;
   readonly onDiscard: () => void;
   readonly onCreateVersion: () => void;
   readonly onReload: () => void;
   readonly onOpenKnowledgeSource: (relativePath: string) => void;
+  readonly onProposalReady: (review: AiPatchReview) => void;
+  readonly onRejectProposal: () => void;
   readonly onRecoveryRestored: () => void;
   readonly onSave: () => void;
   readonly onSelectionChange: (
     selection: AiContextSelection | undefined,
   ) => void;
+  readonly onToggleProposalChange: (changeId: string) => void;
+  readonly onToggleProposalFile: (relativePath: string) => void;
+  readonly proposalAcceptedChangeIds: ReadonlySet<string>;
+  readonly proposalReview: AiPatchReview | undefined;
   readonly onTabChange: (tab: WorkspaceTab) => void;
   readonly saving: boolean;
   readonly selection: AiContextSelection | undefined;
@@ -50,16 +61,23 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
     error,
     loading,
     onChange,
+    onAcceptAllProposalChanges,
     onDiscard,
     onCreateVersion,
     onReload,
     onOpenKnowledgeSource,
+    onProposalReady,
+    onRejectProposal,
     onRecoveryRestored,
     onSave,
     onSelectionChange,
+    onToggleProposalChange,
+    onToggleProposalFile,
     onTabChange,
     saving,
     selection,
+    proposalAcceptedChangeIds,
+    proposalReview,
     tab,
     t,
     versionNotice,
@@ -193,9 +211,11 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
             {activeProject === undefined ? null : (
               <>
                 <ChatPanel
+                  canPropose={!dirty}
                   content={content}
                   documentPath={document?.path}
                   onOpenSource={onOpenKnowledgeSource}
+                  onProposalReady={onProposalReady}
                   projectId={activeProject.id}
                   selection={selection}
                   t={t}
@@ -231,7 +251,18 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
               </>
             )}
           </div>
-        ) : activeProject === undefined ? null : (
+        ) : activeProject === undefined ? null : proposalReview !==
+          undefined ? (
+          <ChangeReviewPanel
+            acceptedChangeIds={proposalAcceptedChangeIds}
+            onAcceptAll={onAcceptAllProposalChanges}
+            onRejectProposal={onRejectProposal}
+            onToggleChange={onToggleProposalChange}
+            onToggleFile={onToggleProposalFile}
+            review={proposalReview}
+            t={t}
+          />
+        ) : (
           <VersionHistoryPanel
             dirty={dirty}
             onRepositoryChanged={onRecoveryRestored}

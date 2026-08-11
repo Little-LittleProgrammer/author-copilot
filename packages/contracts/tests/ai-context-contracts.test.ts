@@ -50,6 +50,7 @@ describe("AI context contracts", () => {
         kind: "current",
         contextKind: "document",
         relativePath: "第一卷/第一章/01-正文.md",
+        baselineHash: "a".repeat(64),
         startLine: 1,
         endLine: 1,
         text: "雨夜。",

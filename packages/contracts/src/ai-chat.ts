@@ -5,6 +5,7 @@ import {
   AiInstructionSchema,
 } from "./ai-context.js";
 import { AppErrorSchema } from "./errors.js";
+import { AiPatchReviewSchema } from "./ai-patch.js";
 import {
   KnowledgeIndexStatusSchema,
   KnowledgeSearchHitSchema,
@@ -22,6 +23,7 @@ export type AiChatHistoryMessage = z.infer<typeof AiChatHistoryMessageSchema>;
 
 export const AiChatStartRequestSchema = z.strictObject({
   projectId: z.uuid(),
+  mode: z.enum(["chat", "proposal"]).optional(),
   currentDocument: AiCurrentDocumentContextSchema,
   instruction: AiInstructionSchema,
   history: z
@@ -80,6 +82,11 @@ export const AiChatCompletedEventSchema = AiChatEventBaseSchema.extend({
   type: z.literal("ai.chat.completed"),
 });
 
+export const AiProposalReadyEventSchema = AiChatEventBaseSchema.extend({
+  type: z.literal("ai.proposal.ready"),
+  review: AiPatchReviewSchema,
+});
+
 export const AiChatFailedEventSchema = AiChatEventBaseSchema.extend({
   type: z.literal("ai.chat.failed"),
   error: AppErrorSchema,
@@ -92,6 +99,7 @@ export const AiChatCancelledEventSchema = AiChatEventBaseSchema.extend({
 
 export const AiChatEventSchema = z.discriminatedUnion("type", [
   AiChatDeltaEventSchema,
+  AiProposalReadyEventSchema,
   AiChatCompletedEventSchema,
   AiChatFailedEventSchema,
   AiChatCancelledEventSchema,

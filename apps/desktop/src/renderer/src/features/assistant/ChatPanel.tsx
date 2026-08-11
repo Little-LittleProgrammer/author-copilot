@@ -12,6 +12,7 @@ import type {
   AiChatHistoryMessage,
   AiChatSource,
   AiContextSelection,
+  AiPatchReview,
 } from "@author-copilot/contracts";
 import { AI_CONTEXT_MAX_INSTRUCTION_CHARACTERS } from "@author-copilot/contracts";
 import { BookOpen, Send, Square, UserRound, WandSparkles } from "lucide-react";
@@ -22,9 +23,11 @@ import type { MessageKey } from "../../i18n/index.js";
 import { getAssistantApi } from "./assistant-api.js";
 
 interface ChatPanelProps {
+  readonly canPropose: boolean;
   readonly content: string;
   readonly documentPath: string | undefined;
   readonly onOpenSource: (relativePath: string) => void;
+  readonly onProposalReady: (review: AiPatchReview) => void;
   readonly projectId: string;
   readonly selection: AiContextSelection | undefined;
   readonly t: (key: MessageKey) => string;
@@ -41,9 +44,11 @@ interface ChatMessage {
 }
 
 export function ChatPanel({
+  canPropose,
   content,
   documentPath,
   onOpenSource,
+  onProposalReady,
   projectId,
   selection,
   t,
@@ -58,34 +63,50 @@ export function ChatPanel({
   const queuedEvents = useRef<AiChatEvent[]>([]);
   const lastSequence = useRef(new Map<string, number>());
 
-  const applyEvent = useCallback((event: AiChatEvent): void => {
-    const previousSequence = lastSequence.current.get(event.runId) ?? -1;
-    if (event.sequence <= previousSequence) return;
-    lastSequence.current.set(event.runId, event.sequence);
-    if (event.type !== "ai.chat.delta") {
-      activeRun.current = null;
-      setActiveRunId(null);
-    }
-    setMessages((current) =>
-      current.map((message) => {
-        if (message.runId !== event.runId) return message;
-        if (event.type === "ai.chat.delta") {
-          return { ...message, content: message.content + event.text };
-        }
-        if (event.type === "ai.chat.completed") {
-          return { ...message, status: "complete" };
-        }
-        if (event.type === "ai.chat.cancelled") {
-          return { ...message, status: "cancelled" };
-        }
-        return {
-          ...message,
-          status: "failed",
-          error: event.error.message,
-        };
-      }),
-    );
-  }, []);
+  const applyEvent = useCallback(
+    (event: AiChatEvent): void => {
+      const previousSequence = lastSequence.current.get(event.runId) ?? -1;
+      if (event.sequence <= previousSequence) return;
+      lastSequence.current.set(event.runId, event.sequence);
+      if (event.type !== "ai.chat.delta") {
+        activeRun.current = null;
+        setActiveRunId(null);
+      }
+      if (event.type === "ai.proposal.ready") {
+        onProposalReady(event.review);
+      }
+      setMessages((current) =>
+        current.map((message) => {
+          if (message.runId !== event.runId) return message;
+          if (event.type === "ai.chat.delta") {
+            return { ...message, content: message.content + event.text };
+          }
+          if (event.type === "ai.chat.completed") {
+            return { ...message, status: "complete" };
+          }
+          if (event.type === "ai.proposal.ready") {
+            return {
+              ...message,
+              status: "complete",
+              content:
+                message.content.length > 0
+                  ? message.content
+                  : event.review.summary,
+            };
+          }
+          if (event.type === "ai.chat.cancelled") {
+            return { ...message, status: "cancelled" };
+          }
+          return {
+            ...message,
+            status: "failed",
+            error: event.error.message,
+          };
+        }),
+      );
+    },
+    [onProposalReady],
+  );
 
   useEffect(() => {
     const remove = api.onEvent((event) => {
@@ -99,78 +120,84 @@ export function ChatPanel({
     };
   }, [api, applyEvent]);
 
-  const send = useCallback(async (): Promise<void> => {
-    const normalized = instruction.trim();
-    if (
-      normalized.length === 0 ||
-      documentPath === undefined ||
-      activeRun.current !== null
-    ) {
-      return;
-    }
-    setStarting(true);
-    setStartError(undefined);
-    try {
-      const history: AiChatHistoryMessage[] = messages.flatMap((message) => {
-        if (
-          message.content.trim().length === 0 ||
-          (message.role === "assistant" && message.status !== "complete")
-        ) {
-          return [];
-        }
-        return [{ role: message.role, content: message.content }];
-      });
-      const result = await api.start({
-        projectId,
-        currentDocument: {
-          relativePath: documentPath,
-          content,
-          ...(selection === undefined ? {} : { selection }),
-        },
-        instruction: normalized,
-        history: history.slice(-20),
-        retrievalLimit: 5,
-      });
-      activeRun.current = result.runId;
-      setActiveRunId(result.runId);
-      setMessages((current) => [
-        ...current,
-        { id: crypto.randomUUID(), role: "user", content: normalized },
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          runId: result.runId,
-          context: result.context,
-          status: "streaming",
-          content: "",
-        },
-      ]);
-      setInstruction("");
-      const ready = queuedEvents.current
-        .filter((event) => event.runId === result.runId)
-        .sort((left, right) => left.sequence - right.sequence);
-      queuedEvents.current = queuedEvents.current.filter(
-        (event) => event.runId !== result.runId,
-      );
-      for (const event of ready) applyEvent(event);
-    } catch (reason) {
-      setStartError(
-        reason instanceof Error ? reason.message : t("aiChatStartFailed"),
-      );
-    } finally {
-      setStarting(false);
-    }
-  }, [
-    api,
-    applyEvent,
-    content,
-    documentPath,
-    instruction,
-    messages,
-    projectId,
-    selection,
-    t,
-  ]);
+  const send = useCallback(
+    async (mode: "chat" | "proposal"): Promise<void> => {
+      const normalized = instruction.trim();
+      if (
+        normalized.length === 0 ||
+        documentPath === undefined ||
+        activeRun.current !== null
+      ) {
+        return;
+      }
+      setStarting(true);
+      setStartError(undefined);
+      try {
+        const history: AiChatHistoryMessage[] = messages.flatMap((message) => {
+          if (
+            message.content.trim().length === 0 ||
+            (message.role === "assistant" && message.status !== "complete")
+          ) {
+            return [];
+          }
+          return [{ role: message.role, content: message.content }];
+        });
+        const result = await api.start({
+          projectId,
+          mode,
+          currentDocument: {
+            relativePath: documentPath,
+            content,
+            ...(mode === "chat" && selection !== undefined
+              ? { selection }
+              : {}),
+          },
+          instruction: normalized,
+          history: history.slice(-20),
+          retrievalLimit: 5,
+        });
+        activeRun.current = result.runId;
+        setActiveRunId(result.runId);
+        setMessages((current) => [
+          ...current,
+          { id: crypto.randomUUID(), role: "user", content: normalized },
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            runId: result.runId,
+            context: result.context,
+            status: "streaming",
+            content: "",
+          },
+        ]);
+        setInstruction("");
+        const ready = queuedEvents.current
+          .filter((event) => event.runId === result.runId)
+          .sort((left, right) => left.sequence - right.sequence);
+        queuedEvents.current = queuedEvents.current.filter(
+          (event) => event.runId !== result.runId,
+        );
+        for (const event of ready) applyEvent(event);
+      } catch (reason) {
+        setStartError(
+          reason instanceof Error ? reason.message : t("aiChatStartFailed"),
+        );
+      } finally {
+        setStarting(false);
+      }
+    },
+    [
+      api,
+      applyEvent,
+      content,
+      documentPath,
+      instruction,
+      messages,
+      projectId,
+      selection,
+      t,
+    ],
+  );
 
   const cancel = useCallback(async (): Promise<void> => {
     const runId = activeRun.current;
@@ -248,7 +275,7 @@ export function ChatPanel({
         className="chat-composer"
         onSubmit={(event) => {
           event.preventDefault();
-          void send();
+          void send("chat");
         }}
       >
         {startError !== undefined ? (
@@ -272,7 +299,7 @@ export function ChatPanel({
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
-              void send();
+              void send("chat");
             }
           }}
         />
@@ -294,19 +321,38 @@ export function ChatPanel({
               {t("cancel")}
             </Button>
           ) : (
-            <Button
-              data-testid="ai-chat-send"
-              type="submit"
-              size="sm"
-              disabled={
-                starting ||
-                documentPath === undefined ||
-                instruction.trim().length === 0
-              }
-            >
-              <Send size={13} />
-              {starting ? t("aiChatStarting") : t("aiChatSend")}
-            </Button>
+            <div className="chat-submit-actions">
+              <Button
+                data-testid="ai-proposal-create"
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={
+                  starting ||
+                  !canPropose ||
+                  documentPath === undefined ||
+                  instruction.trim().length === 0
+                }
+                title={!canPropose ? t("aiProposalSaveFirst") : undefined}
+                onClick={() => void send("proposal")}
+              >
+                <WandSparkles size={13} />
+                {t("aiProposalCreate")}
+              </Button>
+              <Button
+                data-testid="ai-chat-send"
+                type="submit"
+                size="sm"
+                disabled={
+                  starting ||
+                  documentPath === undefined ||
+                  instruction.trim().length === 0
+                }
+              >
+                <Send size={13} />
+                {starting ? t("aiChatStarting") : t("aiChatSend")}
+              </Button>
+            </div>
           )}
         </div>
       </form>

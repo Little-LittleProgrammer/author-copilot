@@ -54,11 +54,15 @@ function currentSection(
 ): AiAssembledContext["sections"][0] {
   const lines = document.content.split("\n");
   const selection = document.selection;
+  const baselineHash = createHash("sha256")
+    .update(document.content)
+    .digest("hex");
   if (selection === undefined) {
     return {
       kind: "current",
       contextKind: "document",
       relativePath: document.relativePath,
+      baselineHash,
       startLine: 1,
       endLine: Math.max(1, lines.length),
       text: document.content,
@@ -74,6 +78,7 @@ function currentSection(
     kind: "current",
     contextKind: "selection",
     relativePath: document.relativePath,
+    baselineHash,
     startLine: selection.startLine,
     endLine: selection.endLine,
     text: lines.slice(selection.startLine - 1, selection.endLine).join("\n"),
@@ -195,3 +200,4 @@ export class AiContextAssembler {
     }
   }
 }
+import { createHash } from "node:crypto";

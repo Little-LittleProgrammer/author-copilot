@@ -4,7 +4,7 @@ import {
   KnowledgeIndexStatusSchema,
   KnowledgeSearchHitSchema,
 } from "./index-status.js";
-import { RelativeProjectPathSchema } from "./project.js";
+import { ContentHashSchema, RelativeProjectPathSchema } from "./project.js";
 
 export const AI_CONTEXT_MAX_DOCUMENT_CHARACTERS = 200_000;
 export const AI_CONTEXT_MAX_INSTRUCTION_CHARACTERS = 4_000;
@@ -58,6 +58,7 @@ export const AiCurrentContextSectionSchema = z.strictObject({
   kind: z.literal("current"),
   contextKind: z.enum(["document", "selection"]),
   relativePath: RelativeProjectPathSchema,
+  baselineHash: ContentHashSchema,
   startLine: z.number().int().positive(),
   endLine: z.number().int().positive(),
   text: z.string().max(AI_CONTEXT_MAX_DOCUMENT_CHARACTERS),

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 
 import type {
   AiContextSelection,
+  AiPatchReview,
   RuntimeInfo,
 } from "@author-copilot/contracts";
 
@@ -68,6 +69,10 @@ export function ProjectEditorTab({
   const [error, setError] = useState<string>();
   const [tab, setTab] = useState<WorkspaceTab>("content");
   const [selection, setSelection] = useState<AiContextSelection>();
+  const [proposalReview, setProposalReview] = useState<AiPatchReview>();
+  const [acceptedProposalChanges, setAcceptedProposalChanges] = useState<
+    ReadonlySet<string>
+  >(new Set());
   const [aiContextPaths, setAiContextPaths] = useState<ReadonlySet<string>>(
     () => loadAiContext(project.id),
   );
@@ -349,6 +354,59 @@ export function ProjectEditorTab({
     [t],
   );
 
+  const openProposalReview = useCallback((review: AiPatchReview): void => {
+    setProposalReview(review);
+    setAcceptedProposalChanges(
+      new Set(
+        review.files.flatMap((file) =>
+          file.changes.map((change) => change.changeId),
+        ),
+      ),
+    );
+    setTab("review");
+  }, []);
+
+  const toggleProposalChange = useCallback((changeId: string): void => {
+    setAcceptedProposalChanges((current) => {
+      const next = new Set(current);
+      if (next.has(changeId)) next.delete(changeId);
+      else next.add(changeId);
+      return next;
+    });
+  }, []);
+
+  const toggleProposalFile = useCallback(
+    (relativePath: string): void => {
+      const file = proposalReview?.files.find(
+        (candidate) => candidate.relativePath === relativePath,
+      );
+      if (file === undefined) return;
+      setAcceptedProposalChanges((current) => {
+        const next = new Set(current);
+        const allAccepted = file.changes.every((change) =>
+          next.has(change.changeId),
+        );
+        for (const change of file.changes) {
+          if (allAccepted) next.delete(change.changeId);
+          else next.add(change.changeId);
+        }
+        return next;
+      });
+    },
+    [proposalReview],
+  );
+
+  const acceptAllProposalChanges = useCallback((): void => {
+    if (proposalReview === undefined) return;
+    setAcceptedProposalChanges(
+      new Set(
+        proposalReview.files.flatMap((file) =>
+          file.changes.map((change) => change.changeId),
+        ),
+      ),
+    );
+  }, [proposalReview]);
+
   return (
     <div className="project-editor-tab">
       <div className="workspace">
@@ -379,11 +437,21 @@ export function ProjectEditorTab({
             if (document !== undefined) setContent(document.content);
           }}
           onCreateVersion={() => setVersionDialogOpen(true)}
+          onAcceptAllProposalChanges={acceptAllProposalChanges}
+          onProposalReady={openProposalReview}
+          onRejectProposal={() => {
+            setProposalReview(undefined);
+            setAcceptedProposalChanges(new Set());
+          }}
           onReload={reload}
           onOpenKnowledgeSource={openKnowledgeSource}
           onRecoveryRestored={reloadAfterRepositoryChange}
           onSave={save}
           onSelectionChange={setSelection}
+          onToggleProposalChange={toggleProposalChange}
+          onToggleProposalFile={toggleProposalFile}
+          proposalAcceptedChangeIds={acceptedProposalChanges}
+          proposalReview={proposalReview}
           onTabChange={setTab}
           saving={saving}
           selection={selection}

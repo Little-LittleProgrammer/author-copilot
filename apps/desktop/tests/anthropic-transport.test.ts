@@ -98,6 +98,90 @@ describe("Anthropic transport", () => {
     expect(chunks).toEqual(["她推开", "门。"]);
   });
 
+  it("forces and returns exactly one structured proposal tool call", async () => {
+    let requestBody = "";
+    const baseURL = await loopback((request, response) => {
+      request.setEncoding("utf8");
+      request.on("data", (chunk: string) => {
+        requestBody += chunk;
+      });
+      request.on("end", () => {
+        response.writeHead(200, {
+          "content-type": "text/event-stream",
+          connection: "close",
+        });
+        const input = JSON.stringify({ summary: "修改开场", files: [] });
+        const events = [
+          {
+            type: "message_start",
+            message: {
+              id: "msg_tool",
+              type: "message",
+              role: "assistant",
+              model: "claude-sonnet-4-6",
+              content: [],
+              stop_reason: null,
+              stop_sequence: null,
+              usage: { input_tokens: 1, output_tokens: 0 },
+            },
+          },
+          {
+            type: "content_block_start",
+            index: 0,
+            content_block: {
+              type: "tool_use",
+              id: "toolu_test",
+              name: "propose_project_changes",
+              input: {},
+            },
+          },
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "input_json_delta", partial_json: input },
+          },
+          { type: "content_block_stop", index: 0 },
+          {
+            type: "message_delta",
+            delta: { stop_reason: "tool_use", stop_sequence: null },
+            usage: { output_tokens: 10 },
+          },
+          { type: "message_stop" },
+        ];
+        response.end(
+          events
+            .map(
+              (event) =>
+                `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+            )
+            .join(""),
+        );
+      });
+    });
+    const onInput = vi.fn();
+
+    await new AnthropicClaudeTransport({ baseURL }).stream({
+      apiKey: "sk-ant-loopback",
+      messages: [{ role: "user", content: "修改" }],
+      signal: new AbortController().signal,
+      system: "test",
+      timeoutMs: 1_000,
+      onText: vi.fn(),
+      tool: {
+        name: "propose_project_changes",
+        description: "Create a proposal",
+        inputSchema: { type: "object", properties: {} },
+        onInput: async (input) => onInput(input),
+      },
+    });
+
+    expect(JSON.parse(requestBody)).toMatchObject({
+      tool_choice: { type: "tool", name: "propose_project_changes" },
+      tools: [{ name: "propose_project_changes" }],
+    });
+    expect(onInput).toHaveBeenCalledWith({ summary: "修改开场", files: [] });
+  });
+
   it("surfaces 429 and connection failures for normalization", async () => {
     const baseURL = await loopback((_request, response) => {
       response.writeHead(429, { "content-type": "application/json" });

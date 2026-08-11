@@ -5,6 +5,7 @@ import {
   type AiAssembledContext,
   type AiChatContextMetadata,
   type AiChatEvent,
+  type AiPatchReview,
   type AiChatStartRequest,
   type AiChatStartResponse,
   type AppError,
@@ -23,10 +24,13 @@ import { AiContextAssemblyError } from "./context-assembler.js";
 import { AiChatServiceError, normalizeClaudeError } from "./errors.js";
 import {
   AUTHOR_COPILOT_SYSTEM_PROMPT,
+  AI_PATCH_TOOL,
   contextSources,
   providerMessages,
 } from "./prompt.js";
 import type { ClaudeTransport } from "./anthropic-transport.js";
+import { createAiPatchReview } from "./patch-review.js";
+import type { AiPatchValidator } from "./patch-validator.js";
 
 type AiChatStartSuccess = Extract<AiChatStartResponse, { readonly ok: true }>;
 type AbortReason = "shutdown" | "timeout" | "user";
@@ -44,6 +48,7 @@ export interface AiOrchestratorOptions {
   readonly contextAssembler: AiContextAssembler;
   readonly credentialStore: Pick<SecureCredentialStore, "getApiKey">;
   readonly transport: ClaudeTransport;
+  readonly patchValidator: Pick<AiPatchValidator, "validate">;
   readonly createId?: () => string;
   readonly now?: () => Date;
   readonly timeoutMs?: number;
@@ -143,7 +148,7 @@ export class AiOrchestrator {
           readCurrentDocument: true,
           readProjectStructure: true,
           retrieveKnowledge: true,
-          proposeChanges: false,
+          proposeChanges: request.mode === "proposal",
         },
         retrievalLimit: request.retrievalLimit,
       });
@@ -195,6 +200,7 @@ export class AiOrchestrator {
       run.controller.abort();
     }, this.timeoutMs);
     try {
+      let proposalReview: AiPatchReview | undefined;
       await this.options.transport.stream({
         apiKey,
         messages: providerMessages(context, request.history),
@@ -205,9 +211,45 @@ export class AiOrchestrator {
           if (run.controller.signal.aborted || text.length === 0) return;
           this.emit(run, { type: "ai.chat.delta", text });
         },
+        ...(request.mode === "proposal"
+          ? {
+              tool: {
+                ...AI_PATCH_TOOL,
+                onInput: async (input: unknown) => {
+                  try {
+                    const validated =
+                      await this.options.patchValidator.validate(
+                        run.projectId,
+                        input,
+                      );
+                    proposalReview = createAiPatchReview(validated);
+                  } catch {
+                    throw new AiChatServiceError({
+                      code: "VALIDATION_FAILED",
+                      message:
+                        "Claude returned a proposal that could not be validated against the current project.",
+                      retryable: true,
+                    });
+                  }
+                },
+              },
+            }
+          : {}),
       });
-      if (run.controller.signal.aborted) this.emitAbort(run);
-      else this.emit(run, { type: "ai.chat.completed" });
+      if (run.controller.signal.aborted) {
+        this.emitAbort(run);
+      } else if (request.mode === "proposal") {
+        if (proposalReview === undefined) {
+          throw new AiChatServiceError({
+            code: "AI_UNAVAILABLE",
+            message: "Claude did not return a reviewable proposal.",
+            retryable: true,
+          });
+        }
+        this.emit(run, { type: "ai.proposal.ready", review: proposalReview });
+      } else {
+        this.emit(run, { type: "ai.chat.completed" });
+      }
     } catch (error) {
       if (run.controller.signal.aborted) this.emitAbort(run);
       else this.emitFailure(run, normalizeClaudeError(error));
@@ -244,6 +286,7 @@ export class AiOrchestrator {
     event:
       | { readonly type: "ai.chat.delta"; readonly text: string }
       | { readonly type: "ai.chat.completed" }
+      | { readonly type: "ai.proposal.ready"; readonly review: AiPatchReview }
       | { readonly type: "ai.chat.failed"; readonly error: AppError }
       | {
           readonly type: "ai.chat.cancelled";

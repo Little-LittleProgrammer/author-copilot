@@ -7,6 +7,7 @@ import type { ProjectSummary } from "@author-copilot/contracts";
 import {
   AiContextAssembler,
   AiOrchestrator,
+  AiPatchValidator,
   AnthropicClaudeTransport,
 } from "./ai/index.js";
 
@@ -143,6 +144,7 @@ app.whenReady().then(async () => {
       knowledgeService,
     }),
     credentialStore,
+    patchValidator: new AiPatchValidator({ projectService }),
     transport: new AnthropicClaudeTransport({
       ...(e2eMode &&
       process.env.AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL !== undefined

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AI_PATCH_MAX_EDITS_PER_FILE,
   AiPatchProposalSchema,
+  AiPatchReviewSchema,
 } from "../src/index.js";
 
 const hash = "a".repeat(64);
@@ -111,5 +112,30 @@ describe("AI patch contracts", () => {
         ],
       }).success,
     ).toBe(false);
+  });
+
+  it("accepts review-safe per-change diffs", () => {
+    expect(
+      AiPatchReviewSchema.parse({
+        summary: "修改正文",
+        files: [
+          {
+            relativePath: "正文.md",
+            baselineHash: hash,
+            proposedHash: "b".repeat(64),
+            changes: [
+              {
+                changeId: "change-1",
+                originalStartLine: 1,
+                originalLineCount: 1,
+                proposedStartLine: 1,
+                proposedLineCount: 1,
+                patch: "@@ -1,1 +1,1 @@\n-雨夜\n+夜雨",
+              },
+            ],
+          },
+        ],
+      }),
+    ).toMatchObject({ files: [{ changes: [{ changeId: "change-1" }] }] });
   });
 });

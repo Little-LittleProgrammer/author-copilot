@@ -1,5 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
+import type {
+  MessageParam,
+  Tool,
+  ToolUseBlock,
+} from "@anthropic-ai/sdk/resources/messages";
+
+export interface ClaudeToolRequest {
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: Tool.InputSchema;
+  readonly onInput: (input: unknown) => Promise<void>;
+}
 
 export interface ClaudeStreamRequest {
   readonly apiKey: string;
@@ -8,6 +19,7 @@ export interface ClaudeStreamRequest {
   readonly system: string;
   readonly timeoutMs: number;
   readonly onText: (text: string) => void;
+  readonly tool?: ClaudeToolRequest;
 }
 
 export interface ClaudeTransport {
@@ -43,6 +55,18 @@ export class AnthropicClaudeTransport implements ClaudeTransport {
       messages: [...request.messages],
       model: this.model,
       system: request.system,
+      ...(request.tool === undefined
+        ? {}
+        : {
+            tools: [
+              {
+                name: request.tool.name,
+                description: request.tool.description,
+                input_schema: request.tool.inputSchema,
+              },
+            ],
+            tool_choice: { type: "tool" as const, name: request.tool.name },
+          }),
     });
     const abort = (): void => stream.abort();
     if (request.signal.aborted) abort();
@@ -57,6 +81,17 @@ export class AnthropicClaudeTransport implements ClaudeTransport {
         ) {
           request.onText(event.delta.text);
         }
+      }
+      if (request.tool !== undefined) {
+        const message = await stream.finalMessage();
+        const toolUses = message.content.filter(
+          (block): block is ToolUseBlock =>
+            block.type === "tool_use" && block.name === request.tool?.name,
+        );
+        if (toolUses.length !== 1) {
+          throw new Error("Claude did not return exactly one patch proposal.");
+        }
+        await request.tool.onInput(toolUses[0]?.input);
       }
     } finally {
       request.signal.removeEventListener("abort", abort);

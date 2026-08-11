@@ -17,6 +17,10 @@ const permissions = {
   proposeChanges: false,
 } as const;
 
+function hash(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
+}
+
 const readyStatus: KnowledgeIndexStatusResult = {
   projectId,
   status: "ready",
@@ -133,6 +137,7 @@ describe("AiContextAssembler", () => {
       kind: "current",
       contextKind: "selection",
       relativePath,
+      baselineHash: hash(request().currentDocument.content),
       startLine: 3,
       endLine: 4,
       text: "雨夜里，林舟回到车站。\n铜钥匙仍在长椅下。",
@@ -295,3 +300,4 @@ describe("AiContextAssembler", () => {
     });
   });
 });
+import { createHash } from "node:crypto";

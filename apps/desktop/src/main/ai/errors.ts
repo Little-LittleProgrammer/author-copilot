@@ -18,6 +18,7 @@ export class AiChatServiceError extends Error {
 }
 
 export function normalizeClaudeError(error: unknown): AppError {
+  if (error instanceof AiChatServiceError) return error.appError;
   if (error instanceof RateLimitError) {
     return {
       code: "RATE_LIMITED",
