@@ -1624,6 +1624,15 @@ input[type="search"]::-webkit-search-cancel-button {
   gap: 14px;
   padding: 18px;
 }
+.proposal-apply-error {
+  margin: 12px 18px 0;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--alert), transparent 55%);
+  border-radius: 6px;
+  color: var(--alert);
+  background: var(--alert-bg);
+  font-size: 10px;
+}
 .proposal-file {
   overflow: hidden;
   border: 1px solid var(--line);

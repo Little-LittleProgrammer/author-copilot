@@ -4,4 +4,5 @@ export * from "./context-assembler.js";
 export * from "./errors.js";
 export * from "./patch-validator.js";
 export * from "./patch-review.js";
+export * from "./patch-application.js";
 export * from "./prompt.js";

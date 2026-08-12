@@ -7,9 +7,11 @@ import { app, ipcMain, type IpcMainInvokeEvent } from "electron";
 
 import type { SecureCredentialStore } from "./credentials/index.js";
 import type { AiOrchestrator } from "./ai/index.js";
+import type { AiPatchApplicationService } from "./ai/index.js";
 import { assertTrustedIpcRequest } from "./ipc-policy.js";
 import { registerAiCredentialIpcHandlers } from "./ipc/ai-credential-handlers.js";
 import { registerAiChatIpcHandlers } from "./ipc/ai-chat-handlers.js";
+import { registerAiProposalIpcHandlers } from "./ipc/ai-proposal-handlers.js";
 import { registerProjectIpcHandlers } from "./ipc/project-handlers.js";
 import { registerKnowledgeIpcHandlers } from "./ipc/knowledge-handlers.js";
 import { registerTabIpcHandlers } from "./ipc/tab-handlers.js";
@@ -23,6 +25,7 @@ import type { TabManager } from "./tabs/index.js";
 
 export interface IpcHandlerOptions {
   readonly aiOrchestrator: AiOrchestrator;
+  readonly patchApplication: AiPatchApplicationService;
   readonly credentialStore: SecureCredentialStore;
   readonly projectService: ProjectService;
   readonly gitService: GitService;
@@ -73,6 +76,10 @@ export function registerIpcHandlers(
   registerAiChatIpcHandlers({
     trustedRendererUrl,
     orchestrator: options.aiOrchestrator,
+  });
+  registerAiProposalIpcHandlers({
+    trustedRendererUrl,
+    patchApplication: options.patchApplication,
   });
   registerProjectIpcHandlers({
     trustedRendererUrl,

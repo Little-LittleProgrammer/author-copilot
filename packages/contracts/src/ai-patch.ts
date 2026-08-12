@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { AppErrorSchema } from "./errors.js";
 import { ContentHashSchema, RelativeProjectPathSchema } from "./project.js";
 
 export const AI_PATCH_MAX_FILES = 20;
@@ -68,8 +69,79 @@ export const AiPatchReviewFileSchema = z.strictObject({
 export type AiPatchReviewFile = z.infer<typeof AiPatchReviewFileSchema>;
 
 export const AiPatchReviewSchema = z.strictObject({
+  proposalId: z.uuid(),
   summary: z.string().trim().min(1).max(2_000),
   files: z.array(AiPatchReviewFileSchema).min(1).max(AI_PATCH_MAX_FILES),
 });
 
 export type AiPatchReview = z.infer<typeof AiPatchReviewSchema>;
+
+export const AiPatchApplyRequestSchema = z.strictObject({
+  projectId: z.uuid(),
+  proposalId: z.uuid(),
+  acceptedChangeIds: z
+    .array(AiPatchChangeIdSchema)
+    .min(1)
+    .max(AI_PATCH_MAX_FILES * AI_PATCH_MAX_EDITS_PER_FILE)
+    .refine(
+      (changeIds) => new Set(changeIds).size === changeIds.length,
+      "Accepted patch change IDs must be unique.",
+    ),
+});
+
+export type AiPatchApplyRequest = z.infer<typeof AiPatchApplyRequestSchema>;
+
+export const AiPatchDiscardRequestSchema = z.strictObject({
+  projectId: z.uuid(),
+  proposalId: z.uuid(),
+});
+
+export type AiPatchDiscardRequest = z.infer<typeof AiPatchDiscardRequestSchema>;
+
+export const AiPatchDiscardResponseSchema = z.strictObject({
+  discarded: z.boolean(),
+});
+
+export type AiPatchDiscardResponse = z.infer<
+  typeof AiPatchDiscardResponseSchema
+>;
+
+export const AiPatchAppliedDocumentSchema = z.strictObject({
+  relativePath: RelativeProjectPathSchema,
+  hash: ContentHashSchema,
+});
+
+const AiPatchAppliedDocumentsSchema = z
+  .array(AiPatchAppliedDocumentSchema)
+  .min(1)
+  .max(AI_PATCH_MAX_FILES);
+
+const AiPatchVersionSchema = z.strictObject({
+  commitId: z.string().regex(/^[a-f0-9]{40,64}$/u),
+  shortCommitId: z.string().regex(/^[a-f0-9]{7,12}$/u),
+  changedFiles: z.number().int().positive(),
+  createdAt: z.iso.datetime(),
+});
+
+export const AiPatchApplyResponseSchema = z.discriminatedUnion("ok", [
+  z.discriminatedUnion("status", [
+    z.strictObject({
+      ok: z.literal(true),
+      status: z.literal("versioned"),
+      documents: AiPatchAppliedDocumentsSchema,
+      version: AiPatchVersionSchema,
+    }),
+    z.strictObject({
+      ok: z.literal(true),
+      status: z.literal("version_failed"),
+      documents: AiPatchAppliedDocumentsSchema,
+      versionError: AppErrorSchema,
+    }),
+  ]),
+  z.strictObject({
+    ok: z.literal(false),
+    error: AppErrorSchema,
+  }),
+]);
+
+export type AiPatchApplyResponse = z.infer<typeof AiPatchApplyResponseSchema>;

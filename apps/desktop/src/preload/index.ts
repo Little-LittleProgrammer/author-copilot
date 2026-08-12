@@ -2,6 +2,8 @@ import {
   AiChatCancelResponseSchema,
   AiChatEventSchema,
   AiChatStartResponseSchema,
+  AiPatchApplyResponseSchema,
+  AiPatchDiscardResponseSchema,
   AnthropicCredentialResponseSchema,
   DocumentReadResponseSchema,
   DocumentSaveResponseSchema,
@@ -37,6 +39,8 @@ import {
   type AiChatCancelRequest,
   type AiChatEvent,
   type AiChatStartRequest,
+  type AiPatchApplyRequest,
+  type AiPatchDiscardRequest,
   type DocumentReadRequest,
   type DocumentSaveRequest,
   type KnowledgeIndexStatusRequest,
@@ -139,6 +143,22 @@ const api: AuthorCopilotApi = Object.freeze({
           (value) => AiChatEventSchema.parse(value),
           listener,
         ),
+    }),
+    proposal: Object.freeze({
+      apply: async (request: AiPatchApplyRequest) => {
+        const response: unknown = await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.aiProposalApply,
+          request,
+        );
+        return AiPatchApplyResponseSchema.parse(response);
+      },
+      discard: async (request: AiPatchDiscardRequest) => {
+        const response: unknown = await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.aiProposalDiscard,
+          request,
+        );
+        return AiPatchDiscardResponseSchema.parse(response);
+      },
     }),
   }),
   project: Object.freeze({

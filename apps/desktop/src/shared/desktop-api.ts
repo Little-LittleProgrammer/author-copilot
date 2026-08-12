@@ -4,6 +4,10 @@ import type {
   AiChatEvent,
   AiChatStartRequest,
   AiChatStartResponse,
+  AiPatchApplyRequest,
+  AiPatchApplyResponse,
+  AiPatchDiscardRequest,
+  AiPatchDiscardResponse,
   AnthropicCredentialResponse,
   AnthropicCredentialSetRequest,
   DocumentReadRequest,
@@ -78,6 +82,14 @@ export interface AuthorCopilotApi {
         request: AiChatCancelRequest,
       ) => Promise<AiChatCancelResponse>;
       readonly onEvent: (listener: (event: AiChatEvent) => void) => () => void;
+    };
+    readonly proposal: {
+      readonly apply: (
+        request: AiPatchApplyRequest,
+      ) => Promise<AiPatchApplyResponse>;
+      readonly discard: (
+        request: AiPatchDiscardRequest,
+      ) => Promise<AiPatchDiscardResponse>;
     };
   };
   readonly project: {

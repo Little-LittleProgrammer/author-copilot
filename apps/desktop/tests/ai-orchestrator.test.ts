@@ -8,12 +8,14 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AiChatServiceError,
   AiOrchestrator,
+  createAiPatchReview,
   type ClaudeTransport,
 } from "../src/main/ai/index.js";
 import type { AiContextAssembler } from "../src/main/ai/context-assembler.js";
 
 const projectId = "10000000-0000-4000-8000-000000000001";
 const runId = "20000000-0000-4000-8000-000000000001";
+const proposalId = "30000000-0000-4000-8000-000000000001";
 const request: AiChatStartRequest = {
   projectId,
   currentDocument: {
@@ -98,6 +100,10 @@ function orchestrator(
     patchValidator: {
       validate: vi.fn(),
     },
+    patchApplication: {
+      createReview: (_projectId, proposal) =>
+        createAiPatchReview(proposal, proposalId),
+    },
     transport,
     createId: () => runId,
     now: () => new Date("2026-08-04T00:00:00.000Z"),
@@ -163,6 +169,10 @@ describe("AI orchestrator", () => {
       contextAssembler: contextAssembler as unknown as AiContextAssembler,
       credentialStore: { getApiKey: vi.fn().mockResolvedValue("sk-ant-test") },
       patchValidator: { validate },
+      patchApplication: {
+        createReview: (_projectId, proposal) =>
+          createAiPatchReview(proposal, proposalId),
+      },
       transport: {
         stream: async ({ tool }) => {
           expect(tool?.name).toBe("propose_project_changes");
@@ -209,6 +219,10 @@ describe("AI orchestrator", () => {
       credentialStore: { getApiKey: vi.fn().mockResolvedValue("sk-ant-test") },
       patchValidator: {
         validate: vi.fn().mockRejectedValue(new Error("secret manuscript")),
+      },
+      patchApplication: {
+        createReview: (_projectId, proposal) =>
+          createAiPatchReview(proposal, proposalId),
       },
       transport: {
         stream: async ({ tool }) => {

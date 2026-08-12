@@ -24,7 +24,7 @@ const taskId = "20000000-0000-4000-8000-000000000001";
 
 describe("IPC contracts", () => {
   it("keeps every declared channel in the validated whitelist", () => {
-    expect(IPC_CHANNEL_NAMES).toHaveLength(44);
+    expect(IPC_CHANNEL_NAMES).toHaveLength(46);
     for (const channel of IPC_CHANNEL_NAMES) {
       expect(IpcChannelSchema.parse(channel)).toBe(channel);
     }

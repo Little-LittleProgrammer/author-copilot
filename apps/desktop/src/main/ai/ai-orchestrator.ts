@@ -29,7 +29,7 @@ import {
   providerMessages,
 } from "./prompt.js";
 import type { ClaudeTransport } from "./anthropic-transport.js";
-import { createAiPatchReview } from "./patch-review.js";
+import type { AiPatchApplicationService } from "./patch-application.js";
 import type { AiPatchValidator } from "./patch-validator.js";
 
 type AiChatStartSuccess = Extract<AiChatStartResponse, { readonly ok: true }>;
@@ -49,6 +49,7 @@ export interface AiOrchestratorOptions {
   readonly credentialStore: Pick<SecureCredentialStore, "getApiKey">;
   readonly transport: ClaudeTransport;
   readonly patchValidator: Pick<AiPatchValidator, "validate">;
+  readonly patchApplication: Pick<AiPatchApplicationService, "createReview">;
   readonly createId?: () => string;
   readonly now?: () => Date;
   readonly timeoutMs?: number;
@@ -222,7 +223,10 @@ export class AiOrchestrator {
                         run.projectId,
                         input,
                       );
-                    proposalReview = createAiPatchReview(validated);
+                    proposalReview = this.options.patchApplication.createReview(
+                      run.projectId,
+                      validated,
+                    );
                   } catch {
                     throw new AiChatServiceError({
                       code: "VALIDATION_FAILED",

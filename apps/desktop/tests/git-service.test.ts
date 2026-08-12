@@ -76,6 +76,56 @@ describe("GitService", () => {
     );
   });
 
+  it("creates an AI version for exact paths without committing other changes", async () => {
+    const root = await temporaryRoot();
+    const projectRoot = join(root, "AI 精确版本");
+    await mkdir(projectRoot);
+    const acceptedPath = join(projectRoot, "接受.md");
+    const unrelatedPath = join(projectRoot, "用户草稿.md");
+    await writeFile(acceptedPath, "初稿\n", "utf8");
+    await writeFile(unrelatedPath, "用户初稿\n", "utf8");
+    const service = createService(projectRoot, join(root, "disabled-hooks"));
+    await service.createVersion(projectId, "基线");
+    await writeFile(acceptedPath, "AI 修改\n", "utf8");
+    await writeFile(unrelatedPath, "用户未提交修改\n", "utf8");
+
+    const result = await service.createVersionForPaths(
+      projectId,
+      "AI: 修改开场",
+      ["接受.md"],
+    );
+
+    expect(result.created).toBe(true);
+    const committed = await execFileAsync(
+      "git",
+      [
+        "-C",
+        projectRoot,
+        "-c",
+        "core.quotepath=false",
+        "show",
+        "--format=",
+        "--name-only",
+        "HEAD",
+      ],
+      { encoding: "utf8" },
+    );
+    expect(committed.stdout.trim()).toBe("接受.md");
+    const status = await execFileAsync(
+      "git",
+      [
+        "-C",
+        projectRoot,
+        "-c",
+        "core.quotepath=false",
+        "status",
+        "--porcelain=v1",
+      ],
+      { encoding: "utf8" },
+    );
+    expect(status.stdout).toContain("用户草稿.md");
+  });
+
   it("creates a nested repository instead of using an ancestor repository", async () => {
     const root = await temporaryRoot();
     await execFileAsync("git", ["init", "--initial-branch=main", root]);

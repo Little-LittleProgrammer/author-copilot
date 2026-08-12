@@ -7,6 +7,7 @@ import type { ProjectSummary } from "@author-copilot/contracts";
 import {
   AiContextAssembler,
   AiOrchestrator,
+  AiPatchApplicationService,
   AiPatchValidator,
   AnthropicClaudeTransport,
 } from "./ai/index.js";
@@ -118,9 +119,11 @@ async function createMainWindow(options: MainWindowOptions): Promise<void> {
 app.whenReady().then(async () => {
   const target = rendererTarget();
   const domainEvents = new DesktopDomainEvents();
+  const gitOperationQueue = new ProjectOperationQueue();
   const projectService = new ProjectService({
     registry: new RegistryStore(app.getPath("userData")),
     publishEvent: domainEvents.publish,
+    operationQueue: gitOperationQueue,
   });
   const credentialStore = new SecureCredentialStore({
     filePath: join(
@@ -138,20 +141,6 @@ app.whenReady().then(async () => {
     projectService,
   });
   domainEvents.subscribe(knowledgeService.handleDocumentSaved);
-  aiOrchestrator = new AiOrchestrator({
-    contextAssembler: new AiContextAssembler({
-      projectService,
-      knowledgeService,
-    }),
-    credentialStore,
-    patchValidator: new AiPatchValidator({ projectService }),
-    transport: new AnthropicClaudeTransport({
-      ...(e2eMode &&
-      process.env.AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL !== undefined
-        ? { baseURL: process.env.AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL }
-        : {}),
-    }),
-  });
   const preloadPath = join(import.meta.dirname, "../preload/index.cjs");
   const developmentGitExecutable = process.env.AUTHOR_COPILOT_GIT_EXECUTABLE;
   const gitRuntime = resolveGitRuntime({
@@ -163,7 +152,6 @@ app.whenReady().then(async () => {
       ? {}
       : { developmentOverride: developmentGitExecutable }),
   });
-  const gitOperationQueue = new ProjectOperationQueue();
   const gitIsolationDirectory = join(
     app.getPath("userData"),
     "git-hooks-disabled",
@@ -185,6 +173,25 @@ app.whenReady().then(async () => {
     hasRecoverableTask: (projectId) =>
       taskSnapshotService.hasRecoverableTaskWhileProjectLocked(projectId),
   });
+  const patchApplication = new AiPatchApplicationService({
+    projectService,
+    gitService,
+  });
+  aiOrchestrator = new AiOrchestrator({
+    contextAssembler: new AiContextAssembler({
+      projectService,
+      knowledgeService,
+    }),
+    credentialStore,
+    patchValidator: new AiPatchValidator({ projectService }),
+    patchApplication,
+    transport: new AnthropicClaudeTransport({
+      ...(e2eMode &&
+      process.env.AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL !== undefined
+        ? { baseURL: process.env.AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL }
+        : {}),
+    }),
+  });
 
   denyAllPermissions(session.defaultSession);
   if (!target.isDevelopment) {
@@ -192,6 +199,7 @@ app.whenReady().then(async () => {
   }
   registerIpcHandlers(target.url, {
     aiOrchestrator,
+    patchApplication,
     credentialStore,
     projectService,
     gitService,

@@ -69,8 +69,10 @@ function reviewFile(
 
 export function createAiPatchReview(
   proposal: ValidatedAiPatchProposal,
+  proposalId: string,
 ): AiPatchReview {
   return AiPatchReviewSchema.parse({
+    proposalId,
     summary: proposal.summary,
     files: proposal.files.map(reviewFile),
   });

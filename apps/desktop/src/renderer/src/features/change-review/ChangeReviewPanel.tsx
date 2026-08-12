@@ -7,7 +7,10 @@ import type { MessageKey } from "../../i18n/index.js";
 
 interface ChangeReviewPanelProps {
   readonly acceptedChangeIds: ReadonlySet<string>;
+  readonly applying: boolean;
+  readonly applyError: string | undefined;
   readonly onAcceptAll: () => void;
+  readonly onApply: () => void;
   readonly onRejectProposal: () => void;
   readonly onToggleChange: (changeId: string) => void;
   readonly onToggleFile: (relativePath: string) => void;
@@ -23,7 +26,10 @@ function diffLineClass(line: string): string {
 
 export function ChangeReviewPanel({
   acceptedChangeIds,
+  applying,
+  applyError,
   onAcceptAll,
+  onApply,
   onRejectProposal,
   onToggleChange,
   onToggleFile,
@@ -53,6 +59,7 @@ export function ChangeReviewPanel({
             size="sm"
             variant="outline"
             onClick={onAcceptAll}
+            disabled={applying}
           >
             <Check size={13} />
             {t("changeReviewAll")}
@@ -60,7 +67,18 @@ export function ChangeReviewPanel({
           <Button
             type="button"
             size="sm"
+            disabled={applying || acceptedChangeIds.size === 0}
+            data-testid="proposal-apply"
+            onClick={onApply}
+          >
+            <Check size={13} />
+            {t(applying ? "aiProposalApplying" : "aiProposalApply")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
             variant="outline"
+            disabled={applying}
             onClick={onRejectProposal}
           >
             <X size={13} />
@@ -68,6 +86,12 @@ export function ChangeReviewPanel({
           </Button>
         </div>
       </header>
+
+      {applyError !== undefined ? (
+        <p className="proposal-apply-error" role="alert">
+          {applyError}
+        </p>
+      ) : null}
 
       <div className="proposal-files">
         {review.files.map((file) => {
@@ -89,6 +113,7 @@ export function ChangeReviewPanel({
                   type="button"
                   size="sm"
                   variant="ghost"
+                  disabled={applying}
                   onClick={() => onToggleFile(file.relativePath)}
                 >
                   {allAccepted
@@ -110,6 +135,7 @@ export function ChangeReviewPanel({
                         <button
                           type="button"
                           aria-pressed={accepted}
+                          disabled={applying}
                           onClick={() => onToggleChange(change.changeId)}
                         >
                           {accepted ? <Check size={13} /> : <X size={13} />}

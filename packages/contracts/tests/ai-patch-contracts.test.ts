@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   AI_PATCH_MAX_EDITS_PER_FILE,
+  AiPatchApplyRequestSchema,
+  AiPatchApplyResponseSchema,
   AiPatchProposalSchema,
   AiPatchReviewSchema,
 } from "../src/index.js";
@@ -117,6 +119,7 @@ describe("AI patch contracts", () => {
   it("accepts review-safe per-change diffs", () => {
     expect(
       AiPatchReviewSchema.parse({
+        proposalId: "30000000-0000-4000-8000-000000000001",
         summary: "修改正文",
         files: [
           {
@@ -137,5 +140,27 @@ describe("AI patch contracts", () => {
         ],
       }),
     ).toMatchObject({ files: [{ changes: [{ changeId: "change-1" }] }] });
+  });
+
+  it("validates accepted changes and the Git failure outcome", () => {
+    expect(
+      AiPatchApplyRequestSchema.safeParse({
+        projectId: "10000000-0000-4000-8000-000000000001",
+        proposalId: "30000000-0000-4000-8000-000000000001",
+        acceptedChangeIds: ["change-1", "change-1"],
+      }).success,
+    ).toBe(false);
+    expect(
+      AiPatchApplyResponseSchema.parse({
+        ok: true,
+        status: "version_failed",
+        documents: [{ relativePath: "正文.md", hash }],
+        versionError: {
+          code: "GIT_FAILED",
+          message: "Git failed",
+          retryable: true,
+        },
+      }),
+    ).toMatchObject({ status: "version_failed" });
   });
 });

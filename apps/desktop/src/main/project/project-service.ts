@@ -40,6 +40,8 @@ import type { RegistryStore } from "./registry-store.js";
 import { buildProjectStructure } from "./structure.js";
 import type {
   ConfirmImportOptions,
+  AppliedBatchDocument,
+  DocumentBatchWrite,
   ImportPreview,
   ProjectEventPublisher,
   ProjectDocument,
@@ -51,10 +53,13 @@ import type {
   RegisteredProject,
   SaveDocumentResult,
 } from "./types.js";
+import { ProjectOperationQueue } from "../git/project-operation-queue.js";
 
 export interface ProjectServiceOptions {
   readonly registry: RegistryStore;
   readonly publishEvent?: ProjectEventPublisher;
+  readonly writeDocument?: typeof atomicWriteFile;
+  readonly operationQueue?: ProjectOperationQueue;
 }
 
 function hashContent(content: string | Buffer): string {
@@ -248,12 +253,15 @@ async function readMetadata(rootPath: string): Promise<{
 export class ProjectService {
   private readonly registry: RegistryStore;
   private readonly publishEvent: ProjectEventPublisher | undefined;
+  private readonly writeDocument: typeof atomicWriteFile;
+  private readonly operationQueue: ProjectOperationQueue;
   private readonly documentQueues = new Map<string, Promise<void>>();
-  private readonly projectQueues = new Map<string, Promise<void>>();
 
   constructor(options: ProjectServiceOptions) {
     this.registry = options.registry;
     this.publishEvent = options.publishEvent;
+    this.writeDocument = options.writeDocument ?? atomicWriteFile;
+    this.operationQueue = options.operationQueue ?? new ProjectOperationQueue();
   }
 
   async createProject(
@@ -513,41 +521,153 @@ export class ProjectService {
     expectedHash: string,
   ): Promise<SaveDocumentResult> {
     const lockKey = `${projectId}\0${relativePath}`;
-    return this.withDocumentLock(lockKey, async () => {
+    return this.withProjectLock(projectId, () =>
+      this.withDocumentLock(lockKey, async () => {
+        const project = await this.requireProject(projectId);
+        const documentPath = await authorizeExistingDocument(
+          project.rootPath,
+          relativePath,
+        );
+        const beforeSave = await this.readDocument(projectId, relativePath);
+        if (beforeSave.hash !== expectedHash) {
+          throw new DocumentConflictError(expectedHash, beforeSave.hash);
+        }
+
+        await this.writeDocument(
+          documentPath,
+          content,
+          beforeSave.mode,
+          async () => {
+            const currentHash = hashContent(await readFile(documentPath));
+            if (currentHash !== expectedHash) {
+              throw new DocumentConflictError(expectedHash, currentHash);
+            }
+          },
+        );
+
+        const savedStats = await stat(documentPath);
+        const result = {
+          hash: hashContent(content),
+          mtimeMs: savedStats.mtimeMs,
+        };
+        this.publishDocumentSaved({
+          type: "document-saved",
+          projectId,
+          relativePath: relativePath.replaceAll("\\", "/"),
+          ...result,
+        });
+        return result;
+      }),
+    );
+  }
+
+  async applyDocumentBatch<T>(
+    projectId: string,
+    writes: readonly DocumentBatchWrite[],
+    afterWrite: (documents: readonly AppliedBatchDocument[]) => Promise<T>,
+  ): Promise<{
+    readonly documents: readonly AppliedBatchDocument[];
+    readonly afterWriteResult: T;
+  }> {
+    return this.withProjectLock(projectId, async () => {
+      if (writes.length === 0 || writes.length > 20) {
+        throw new ProjectServiceError("The document batch size is invalid.");
+      }
       const project = await this.requireProject(projectId);
-      const documentPath = await authorizeExistingDocument(
-        project.rootPath,
-        relativePath,
-      );
-      const beforeSave = await this.readDocument(projectId, relativePath);
-      if (beforeSave.hash !== expectedHash) {
-        throw new DocumentConflictError(expectedHash, beforeSave.hash);
+      const pathKeys = new Set<string>();
+      const prepared = [] as {
+        relativePath: string;
+        absolutePath: string;
+        content: string;
+        expectedHash: string;
+        originalContent: string;
+        mode: number;
+      }[];
+
+      for (const write of writes) {
+        const relativePath = write.relativePath.replaceAll("\\", "/");
+        const pathKey = relativePath.toLocaleLowerCase("en-US");
+        if (pathKeys.has(pathKey)) {
+          throw new ProjectServiceError(
+            "A document batch may write each path only once.",
+          );
+        }
+        pathKeys.add(pathKey);
+        const absolutePath = await authorizeExistingDocument(
+          project.rootPath,
+          relativePath,
+        );
+        const current = await this.readDocument(projectId, relativePath);
+        if (current.hash !== write.expectedHash) {
+          throw new DocumentConflictError(write.expectedHash, current.hash);
+        }
+        prepared.push({
+          relativePath,
+          absolutePath,
+          content: write.content,
+          expectedHash: write.expectedHash,
+          originalContent: current.content,
+          mode: current.mode,
+        });
       }
 
-      await atomicWriteFile(
-        documentPath,
-        content,
-        beforeSave.mode,
-        async () => {
-          const currentHash = hashContent(await readFile(documentPath));
-          if (currentHash !== expectedHash) {
-            throw new DocumentConflictError(expectedHash, currentHash);
-          }
-        },
-      );
+      const written: typeof prepared = [];
+      try {
+        for (const document of prepared) {
+          await this.writeDocument(
+            document.absolutePath,
+            document.content,
+            document.mode,
+            async () => {
+              const currentHash = hashContent(
+                await readFile(document.absolutePath),
+              );
+              if (currentHash !== document.expectedHash) {
+                throw new DocumentConflictError(
+                  document.expectedHash,
+                  currentHash,
+                );
+              }
+            },
+          );
+          written.push(document);
+        }
+      } catch (error) {
+        for (const document of [...written].reverse()) {
+          await this.writeDocument(
+            document.absolutePath,
+            document.originalContent,
+            document.mode,
+            async () => {
+              const appliedHash = hashContent(document.content);
+              const currentHash = hashContent(
+                await readFile(document.absolutePath),
+              );
+              if (currentHash !== appliedHash) {
+                throw new DocumentConflictError(appliedHash, currentHash);
+              }
+            },
+          );
+        }
+        throw error;
+      }
 
-      const savedStats = await stat(documentPath);
-      const result = {
-        hash: hashContent(content),
-        mtimeMs: savedStats.mtimeMs,
-      };
-      this.publishDocumentSaved({
-        type: "document-saved",
-        projectId,
-        relativePath: relativePath.replaceAll("\\", "/"),
-        ...result,
-      });
-      return result;
+      const documents = await Promise.all(
+        prepared.map(async (document): Promise<AppliedBatchDocument> => ({
+          relativePath: document.relativePath,
+          hash: hashContent(document.content),
+          mtimeMs: (await stat(document.absolutePath)).mtimeMs,
+        })),
+      );
+      const afterWriteResult = await afterWrite(documents);
+      for (const document of documents) {
+        this.publishDocumentSaved({
+          type: "document-saved",
+          projectId,
+          ...document,
+        });
+      }
+      return { documents, afterWriteResult };
     });
   }
 
@@ -661,21 +781,6 @@ export class ProjectService {
     projectId: string,
     operation: () => Promise<T>,
   ): Promise<T> {
-    const predecessor = this.projectQueues.get(projectId) ?? Promise.resolve();
-    let release = (): void => undefined;
-    const current = new Promise<void>((resolveLock) => {
-      release = resolveLock;
-    });
-    const queued = predecessor.then(() => current);
-    this.projectQueues.set(projectId, queued);
-    await predecessor;
-    try {
-      return await operation();
-    } finally {
-      release();
-      if (this.projectQueues.get(projectId) === queued) {
-        this.projectQueues.delete(projectId);
-      }
-    }
+    return this.operationQueue.run(projectId, operation);
   }
 }

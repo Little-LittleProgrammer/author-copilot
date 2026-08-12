@@ -3,6 +3,7 @@ import type {
   AiChatEvent,
   AiChatStartRequest,
   AiChatStartResponse,
+  AiPatchApplyResponse,
   AppError,
 } from "@author-copilot/contracts";
 
@@ -11,6 +12,28 @@ export class AssistantApiError extends Error {
     super(error.message);
     this.name = "AssistantApiError";
   }
+}
+
+export function getProposalApi(): {
+  readonly apply: (
+    projectId: string,
+    proposalId: string,
+    acceptedChangeIds: readonly string[],
+  ) => Promise<AiPatchApplyResponse>;
+  readonly discard: (projectId: string, proposalId: string) => Promise<boolean>;
+} {
+  const raw = window.authorCopilot.assistant.proposal;
+  return {
+    apply: (projectId, proposalId, acceptedChangeIds) =>
+      raw.apply({
+        projectId,
+        proposalId,
+        acceptedChangeIds: [...acceptedChangeIds],
+      }),
+    async discard(projectId, proposalId) {
+      return (await raw.discard({ projectId, proposalId })).discarded;
+    },
+  };
 }
 
 export function getAssistantApi(): {

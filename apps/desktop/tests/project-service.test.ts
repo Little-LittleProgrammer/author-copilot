@@ -27,6 +27,7 @@ import {
   SymbolicLinkNotAllowedError,
   type ProjectMetadata,
 } from "../src/main/project/index.js";
+import { atomicWriteFile } from "../src/main/project/file-utils.js";
 
 const temporaryRoots: string[] = [];
 
@@ -139,6 +140,98 @@ describe("ProjectService templates and registry", () => {
       (await service.getStructure(project.projectId)).nodes[0],
     ).toMatchObject({ kind: "act", name: "第一幕" });
     expect(await service.list()).toHaveLength(1);
+  });
+});
+
+describe("ProjectService atomic document batches", () => {
+  it("writes multiple documents before invoking the completion callback", async () => {
+    const { projects, userData } = await fixture();
+    const publish = vi.fn();
+    const service = new ProjectService({
+      registry: new RegistryStore(userData),
+      publishEvent: publish,
+    });
+    const project = await service.createProject(projects, "批量写作", "novel");
+    const first = "第一卷/第一章/01-正文.md";
+    const secondPath = join(project.rootPath, "第一卷", "第一章", "02-正文.md");
+    await writeFile(secondPath, "第二章", "utf8");
+    const [firstSnapshot, secondSnapshot] = await Promise.all([
+      service.readDocument(project.projectId, first),
+      service.readDocument(project.projectId, "第一卷/第一章/02-正文.md"),
+    ]);
+
+    const result = await service.applyDocumentBatch(
+      project.projectId,
+      [
+        {
+          relativePath: first,
+          content: "第一章",
+          expectedHash: firstSnapshot.hash,
+        },
+        {
+          relativePath: "第一卷/第一章/02-正文.md",
+          content: "第二章修改",
+          expectedHash: secondSnapshot.hash,
+        },
+      ],
+      async (documents) => {
+        expect(await readFile(secondPath, "utf8")).toBe("第二章修改");
+        return documents.length;
+      },
+    );
+
+    expect(result.afterWriteResult).toBe(2);
+    expect(await service.readDocument(project.projectId, first)).toMatchObject({
+      content: "第一章",
+    });
+    await vi.waitFor(() => expect(publish).toHaveBeenCalledTimes(2));
+  });
+
+  it("rolls back earlier files when a later atomic replacement fails", async () => {
+    const { projects, userData } = await fixture();
+    let writes = 0;
+    const service = new ProjectService({
+      registry: new RegistryStore(userData),
+      writeDocument: async (...args) => {
+        writes += 1;
+        if (writes === 2) throw new Error("second write failed");
+        await atomicWriteFile(...args);
+      },
+    });
+    const project = await service.createProject(projects, "回滚写作", "novel");
+    const first = "第一卷/第一章/01-正文.md";
+    const second = "第一卷/第一章/02-正文.md";
+    await writeFile(join(project.rootPath, second), "第二章", "utf8");
+    const [firstSnapshot, secondSnapshot] = await Promise.all([
+      service.readDocument(project.projectId, first),
+      service.readDocument(project.projectId, second),
+    ]);
+
+    await expect(
+      service.applyDocumentBatch(
+        project.projectId,
+        [
+          {
+            relativePath: first,
+            content: "第一章修改",
+            expectedHash: firstSnapshot.hash,
+          },
+          {
+            relativePath: second,
+            content: "第二章修改",
+            expectedHash: secondSnapshot.hash,
+          },
+        ],
+        async () => undefined,
+      ),
+    ).rejects.toThrow("second write failed");
+    expect((await service.readDocument(project.projectId, first)).content).toBe(
+      "",
+    );
+    expect(
+      (await service.readDocument(project.projectId, second)).content,
+    ).toBe("第二章");
+    expect(writes).toBe(3);
   });
 });
 

@@ -27,6 +27,7 @@ interface EditorWorkspaceProps {
   readonly loading: boolean;
   readonly onChange: (content: string) => void;
   readonly onAcceptAllProposalChanges: () => void;
+  readonly onApplyProposal: () => void;
   readonly onDiscard: () => void;
   readonly onCreateVersion: () => void;
   readonly onReload: () => void;
@@ -41,6 +42,8 @@ interface EditorWorkspaceProps {
   readonly onToggleProposalChange: (changeId: string) => void;
   readonly onToggleProposalFile: (relativePath: string) => void;
   readonly proposalAcceptedChangeIds: ReadonlySet<string>;
+  readonly proposalApplying: boolean;
+  readonly proposalApplyError: string | undefined;
   readonly proposalReview: AiPatchReview | undefined;
   readonly onTabChange: (tab: WorkspaceTab) => void;
   readonly saving: boolean;
@@ -48,6 +51,7 @@ interface EditorWorkspaceProps {
   readonly tab: WorkspaceTab;
   readonly t: (key: MessageKey) => string;
   readonly versionNotice: string | undefined;
+  readonly versionWarning: boolean;
   readonly versionRefreshKey: number;
 }
 
@@ -62,6 +66,7 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
     loading,
     onChange,
     onAcceptAllProposalChanges,
+    onApplyProposal,
     onDiscard,
     onCreateVersion,
     onReload,
@@ -77,10 +82,13 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
     saving,
     selection,
     proposalAcceptedChangeIds,
+    proposalApplying,
+    proposalApplyError,
     proposalReview,
     tab,
     t,
     versionNotice,
+    versionWarning,
     versionRefreshKey,
   } = props;
   const tabs: readonly { id: WorkspaceTab; label: MessageKey }[] = [
@@ -108,7 +116,10 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
         </div>
         <div className="editor-status" aria-live="polite">
           {versionNotice !== undefined ? (
-            <span className="max-w-40 overflow-hidden text-ellipsis whitespace-nowrap text-primary">
+            <span
+              className={`max-w-52 overflow-hidden text-ellipsis whitespace-nowrap ${versionWarning ? "text-destructive" : "text-primary"}`}
+              title={versionNotice}
+            >
               {versionNotice}
             </span>
           ) : dirty ? (
@@ -255,7 +266,10 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
           undefined ? (
           <ChangeReviewPanel
             acceptedChangeIds={proposalAcceptedChangeIds}
+            applying={proposalApplying}
+            applyError={proposalApplyError}
             onAcceptAll={onAcceptAllProposalChanges}
+            onApply={onApplyProposal}
             onRejectProposal={onRejectProposal}
             onToggleChange={onToggleProposalChange}
             onToggleFile={onToggleProposalFile}

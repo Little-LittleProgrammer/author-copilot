@@ -12,6 +12,12 @@ import {
   AiChatStartRequestSchema,
   AiChatStartResponseSchema,
 } from "./ai-chat.js";
+import {
+  AiPatchApplyRequestSchema,
+  AiPatchApplyResponseSchema,
+  AiPatchDiscardRequestSchema,
+  AiPatchDiscardResponseSchema,
+} from "./ai-patch.js";
 
 import {
   KnowledgeIndexStatusRequestSchema,
@@ -93,6 +99,8 @@ export const IPC_INVOKE_CHANNELS = {
   anthropicCredentialDelete: "ai-credential:anthropic-delete",
   aiChatStart: "ai-chat:start",
   aiChatCancel: "ai-chat:cancel",
+  aiProposalApply: "ai-proposal:apply",
+  aiProposalDiscard: "ai-proposal:discard",
   projectCreate: "project:create",
   projectDeleteEntry: "project:delete-entry",
   projectUpdate: "project:update",
@@ -143,6 +151,8 @@ export const IPC_INVOKE_CHANNEL_NAMES = [
   IPC_INVOKE_CHANNELS.anthropicCredentialDelete,
   IPC_INVOKE_CHANNELS.aiChatStart,
   IPC_INVOKE_CHANNELS.aiChatCancel,
+  IPC_INVOKE_CHANNELS.aiProposalApply,
+  IPC_INVOKE_CHANNELS.aiProposalDiscard,
   IPC_INVOKE_CHANNELS.projectCreate,
   IPC_INVOKE_CHANNELS.projectDeleteEntry,
   IPC_INVOKE_CHANNELS.projectUpdate,
@@ -223,6 +233,14 @@ export const IPC_INVOKE_CONTRACTS = {
   [IPC_INVOKE_CHANNELS.aiChatCancel]: {
     request: AiChatCancelRequestSchema,
     response: AiChatCancelResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.aiProposalApply]: {
+    request: AiPatchApplyRequestSchema,
+    response: AiPatchApplyResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.aiProposalDiscard]: {
+    request: AiPatchDiscardRequestSchema,
+    response: AiPatchDiscardResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.projectCreate]: {
     request: ProjectCreateRequestSchema,

@@ -68,6 +68,16 @@ export interface SaveDocumentResult {
   readonly mtimeMs: number;
 }
 
+export interface DocumentBatchWrite {
+  readonly relativePath: string;
+  readonly content: string;
+  readonly expectedHash: string;
+}
+
+export interface AppliedBatchDocument extends SaveDocumentResult {
+  readonly relativePath: string;
+}
+
 export interface DocumentSavedEvent {
   readonly type: "document-saved";
   readonly projectId: string;

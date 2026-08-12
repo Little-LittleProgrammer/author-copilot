@@ -196,6 +196,103 @@ export class GitService {
     });
   }
 
+  public async createVersionForPaths(
+    projectId: string,
+    message: string,
+    relativePaths: readonly string[],
+  ): Promise<CreateVersionResult> {
+    return this.withProjectLock(projectId, () =>
+      this.createVersionForPathsWhileProjectLocked(
+        projectId,
+        message,
+        relativePaths,
+      ),
+    );
+  }
+
+  public async createVersionForPathsWhileProjectLocked(
+    projectId: string,
+    message: string,
+    relativePaths: readonly string[],
+  ): Promise<CreateVersionResult> {
+    if (
+      relativePaths.length === 0 ||
+      relativePaths.length > 20 ||
+      new Set(relativePaths).size !== relativePaths.length ||
+      relativePaths.some(
+        (path) =>
+          path.length === 0 ||
+          path.startsWith("-") ||
+          path.startsWith("/") ||
+          path.startsWith("\\") ||
+          /^[a-zA-Z]:[\\/]/u.test(path) ||
+          path
+            .replaceAll("\\", "/")
+            .split("/")
+            .some(
+              (segment) =>
+                segment === "" || segment === "." || segment === "..",
+            ),
+      )
+    ) {
+      throw new GitServiceError(
+        "git_failed",
+        "The AI version path list is invalid.",
+        false,
+      );
+    }
+    {
+      const rootPath = await this.resolveProjectRoot(projectId);
+      await this.prepareIsolationFiles();
+      await this.ensureRepository(rootPath);
+      await this.assertNoExternalFilters(rootPath);
+      const paths = relativePaths.map((path) => path.replaceAll("\\", "/"));
+      await this.run(rootPath, ["add", "--all", "--", ...paths]);
+      const staged = await this.run(rootPath, [
+        "diff",
+        "--cached",
+        "--name-only",
+        "-z",
+        "--",
+        ...paths,
+      ]);
+      const changedFiles = outputLines(staged.stdout).length;
+      if (changedFiles === 0) return { created: false };
+      await this.run(rootPath, [
+        "-c",
+        "commit.gpgSign=false",
+        "-c",
+        "user.name=Author Copilot",
+        "-c",
+        "user.email=author-copilot@local",
+        "commit",
+        "--no-verify",
+        "--only",
+        "-m",
+        message,
+        "--",
+        ...paths,
+      ]);
+      const commitId = (
+        await this.run(rootPath, ["rev-parse", "HEAD"])
+      ).stdout.trim();
+      const createdAt = new Date(
+        (
+          await this.run(rootPath, ["show", "-s", "--format=%cI", "HEAD"])
+        ).stdout.trim(),
+      ).toISOString();
+      return {
+        created: true,
+        version: {
+          changedFiles,
+          commitId,
+          shortCommitId: commitId.slice(0, 8),
+          createdAt,
+        },
+      };
+    }
+  }
+
   public async listVersions(
     projectId: string,
     limit: number,

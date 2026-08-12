@@ -36,4 +36,16 @@ describe("AuthorCopilotApi", () => {
       "start",
     ]);
   });
+
+  it("exposes proposal mutation only through apply and discard", () => {
+    const publicMethods: Record<
+      keyof AuthorCopilotApi["assistant"]["proposal"],
+      true
+    > = {
+      apply: true,
+      discard: true,
+    };
+
+    expect(Object.keys(publicMethods).sort()).toEqual(["apply", "discard"]);
+  });
 });

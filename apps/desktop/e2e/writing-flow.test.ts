@@ -761,7 +761,7 @@ test("streams a BYOK Claude answer and opens its local source", async () => {
   }
 });
 
-test("reviews a validated Claude proposal without changing project files", async () => {
+test("reviews and applies selected Claude changes into a Git version", async () => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
   const projectTitle = "Claude 提案审阅";
   const content = "雨夜，她开门。";
@@ -911,9 +911,12 @@ test("reviews a validated Claude proposal without changing project files", async
     await expect(page.getByTestId("proposal-accepted-count")).toContainText(
       "2/2",
     );
-    await page.getByRole("button", { name: /拒绝此文件|Reject file/u }).click();
+    await page
+      .getByTestId("proposal-change-action")
+      .getByRole("button")
+      .click();
     await expect(page.getByTestId("proposal-accepted-count")).toContainText(
-      "0/2",
+      "1/2",
     );
     await page.screenshot({
       path: "test-results/m5-6-proposal-review.png",
@@ -921,6 +924,17 @@ test("reviews a validated Claude proposal without changing project files", async
     });
 
     expect(await readFile(documentPath, "utf8")).toBe(content);
+    await page.getByTestId("proposal-apply").click();
+    await expect(page.getByTestId("document-editor")).toHaveValue(
+      "暴雨之夜，她开门。",
+    );
+    expect(await readFile(documentPath, "utf8")).toBe("暴雨之夜，她开门。");
+    const latestVersion = await execFileAsync(
+      "git",
+      ["-C", join(temporaryRoot, projectTitle), "log", "-1", "--format=%s"],
+      { encoding: "utf8" },
+    );
+    expect(latestVersion.stdout.trim()).toBe("AI: 加强雨夜开场");
     expect(JSON.parse(requestBody)).toMatchObject({
       tool_choice: { type: "tool", name: "propose_project_changes" },
     });

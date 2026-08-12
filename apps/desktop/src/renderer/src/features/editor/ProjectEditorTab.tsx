@@ -17,6 +17,7 @@ import {
 } from "../project/types.js";
 import { VersionDialog } from "../version/VersionDialog.js";
 import type { VersionResult } from "../version/version-api.js";
+import { getProposalApi } from "../assistant/assistant-api.js";
 import { EditorWorkspace, type WorkspaceTab } from "./EditorWorkspace.js";
 
 interface ProjectEditorTabProps {
@@ -64,12 +65,15 @@ export function ProjectEditorTab({
   const [loading, setLoading] = useState(() => getProjectApi() !== undefined);
   const [saving, setSaving] = useState(false);
   const [versionNotice, setVersionNotice] = useState<string>();
+  const [versionWarning, setVersionWarning] = useState(false);
   const [versionRefreshKey, setVersionRefreshKey] = useState(0);
   const [versionDialogOpen, setVersionDialogOpen] = useState(false);
   const [error, setError] = useState<string>();
   const [tab, setTab] = useState<WorkspaceTab>("content");
   const [selection, setSelection] = useState<AiContextSelection>();
   const [proposalReview, setProposalReview] = useState<AiPatchReview>();
+  const [proposalApplying, setProposalApplying] = useState(false);
+  const [proposalApplyError, setProposalApplyError] = useState<string>();
   const [acceptedProposalChanges, setAcceptedProposalChanges] = useState<
     ReadonlySet<string>
   >(new Set());
@@ -349,6 +353,7 @@ export function ProjectEditorTab({
           ? `${t("versionSaved")} ${result.shortCommitId ?? ""}`.trim()
           : t("versionNoChanges"),
       );
+      setVersionWarning(false);
       if (result.created) setVersionRefreshKey((value) => value + 1);
     },
     [t],
@@ -356,6 +361,7 @@ export function ProjectEditorTab({
 
   const openProposalReview = useCallback((review: AiPatchReview): void => {
     setProposalReview(review);
+    setProposalApplyError(undefined);
     setAcceptedProposalChanges(
       new Set(
         review.files.flatMap((file) =>
@@ -407,6 +413,63 @@ export function ProjectEditorTab({
     );
   }, [proposalReview]);
 
+  const rejectProposal = useCallback((): void => {
+    const review = proposalReview;
+    setProposalReview(undefined);
+    setAcceptedProposalChanges(new Set());
+    setProposalApplyError(undefined);
+    if (review !== undefined) {
+      void getProposalApi().discard(project.id, review.proposalId);
+    }
+  }, [project.id, proposalReview]);
+
+  const applyProposal = useCallback(async (): Promise<void> => {
+    if (proposalReview === undefined || acceptedProposalChanges.size === 0) {
+      return;
+    }
+    setProposalApplying(true);
+    setProposalApplyError(undefined);
+    try {
+      const result = await getProposalApi().apply(
+        project.id,
+        proposalReview.proposalId,
+        [...acceptedProposalChanges],
+      );
+      if (!result.ok) {
+        setProposalApplyError(result.error.message);
+        return;
+      }
+      setProposalReview(undefined);
+      setAcceptedProposalChanges(new Set());
+      if (result.status === "versioned") {
+        setVersionNotice(
+          `${t("aiProposalApplied")} ${result.version.shortCommitId}`,
+        );
+        setVersionWarning(false);
+        setVersionRefreshKey((value) => value + 1);
+      } else {
+        setVersionNotice(
+          `${t("aiProposalVersionFailed")} ${result.versionError.message}`,
+        );
+        setVersionWarning(true);
+      }
+      reloadAfterRepositoryChange();
+      setTab("content");
+    } catch (reason) {
+      setProposalApplyError(
+        reason instanceof Error ? reason.message : t("errorGeneric"),
+      );
+    } finally {
+      setProposalApplying(false);
+    }
+  }, [
+    acceptedProposalChanges,
+    project.id,
+    proposalReview,
+    reloadAfterRepositoryChange,
+    t,
+  ]);
+
   return (
     <div className="project-editor-tab">
       <div className="workspace">
@@ -438,11 +501,9 @@ export function ProjectEditorTab({
           }}
           onCreateVersion={() => setVersionDialogOpen(true)}
           onAcceptAllProposalChanges={acceptAllProposalChanges}
+          onApplyProposal={() => void applyProposal()}
           onProposalReady={openProposalReview}
-          onRejectProposal={() => {
-            setProposalReview(undefined);
-            setAcceptedProposalChanges(new Set());
-          }}
+          onRejectProposal={rejectProposal}
           onReload={reload}
           onOpenKnowledgeSource={openKnowledgeSource}
           onRecoveryRestored={reloadAfterRepositoryChange}
@@ -451,6 +512,8 @@ export function ProjectEditorTab({
           onToggleProposalChange={toggleProposalChange}
           onToggleProposalFile={toggleProposalFile}
           proposalAcceptedChangeIds={acceptedProposalChanges}
+          proposalApplying={proposalApplying}
+          proposalApplyError={proposalApplyError}
           proposalReview={proposalReview}
           onTabChange={setTab}
           saving={saving}
@@ -458,6 +521,7 @@ export function ProjectEditorTab({
           tab={tab}
           t={t}
           versionNotice={versionNotice}
+          versionWarning={versionWarning}
           versionRefreshKey={versionRefreshKey}
         />
       </div>
