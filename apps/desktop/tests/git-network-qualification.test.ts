@@ -78,6 +78,19 @@ function portableSshPath(value: string): string {
   return process.platform === "win32" ? value.replaceAll("\\", "/") : value;
 }
 
+function generateParseableEd25519KeyPair() {
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const keyPair = sshUtils.generateKeyPairSync("ed25519");
+    const privateKey = sshUtils.parseKey(keyPair.private);
+    const publicKey = sshUtils.parseKey(keyPair.public);
+    if (!(privateKey instanceof Error) && !(publicKey instanceof Error)) {
+      return keyPair;
+    }
+  }
+
+  throw new Error("ssh2 repeatedly generated malformed ed25519 test keys.");
+}
+
 async function git(
   cwd: string,
   args: readonly string[],
@@ -308,10 +321,10 @@ describe("bundled Git network qualification", () => {
 
   it("requires the confirmed SSH host key and explicitly authorized private key", async () => {
     const fixture = await createGitFixture();
-    const hostKey = sshUtils.generateKeyPairSync("ed25519");
-    const wrongHostKey = sshUtils.generateKeyPairSync("ed25519");
-    const clientKey = sshUtils.generateKeyPairSync("ed25519");
-    const wrongClientKey = sshUtils.generateKeyPairSync("ed25519");
+    const hostKey = generateParseableEd25519KeyPair();
+    const wrongHostKey = generateParseableEd25519KeyPair();
+    const clientKey = generateParseableEd25519KeyPair();
+    const wrongClientKey = generateParseableEd25519KeyPair();
     const parsedClientKey = sshUtils.parseKey(clientKey.public);
     if (parsedClientKey instanceof Error) throw parsedClientKey;
     const connections = new Set<Connection>();
