@@ -1,0 +1,222 @@
+{
+  "schema_version": 1,
+  "classification": "smoke-only",
+  "adapter": "sqlite-fts5",
+  "adapter_config": {
+    "tokenizer": "trigram"
+  },
+  "benchmark_parameters": {
+    "top_k": 5,
+    "query_repetitions": 20,
+    "chunk_max_characters": 900
+  },
+  "fixture": {
+    "fixture_version": 1,
+    "project_id": "fixture-project-001",
+    "documents": 7,
+    "queries": 10,
+    "sha256": "ff4d20bf0f71aad34ef64d80accd0bd2c6ba259b4aeab474ce1dde7fcf7a9184"
+  },
+  "dataset": {
+    "characters": 2532,
+    "documents": 7,
+    "chunks": 9,
+    "labeled_queries": 10
+  },
+  "metrics": {
+    "first_index_ms": 1.716,
+    "index_size_bytes": 49152,
+    "single_file_incremental_ms": 0.64,
+    "single_file_incremental_verified": true,
+    "query_latency_ms": {
+      "samples": 200,
+      "p50": 0.036,
+      "p95": 0.122
+    },
+    "recall_at_5": 0.818182,
+    "source_path_range_accuracy": 1.0,
+    "quality_denominator_sources": 11,
+    "source_accuracy_denominator_recalled_sources": 9,
+    "query_results": [
+      {
+        "id": "zh-exact-platform",
+        "case": "exact",
+        "expected_sources": 1,
+        "recalled_sources": 1,
+        "correct_source_ranges": 1,
+        "top_5": [
+          {
+            "source_path": "zh/第一卷/第一章/01-雨夜重逢.md",
+            "start_line": 1,
+            "end_line": 5,
+            "score": 2.407985018176355,
+            "snippet": "# 归来\n\n林澈撑着一把靛蓝色雨伞，在[北站第] ... "
+          }
+        ]
+      },
+      {
+        "id": "zh-exact-key",
+        "case": "short-chapter",
+        "expected_sources": 1,
+        "recalled_sources": 1,
+        "correct_source_ranges": 1,
+        "top_5": [
+          {
+            "source_path": "zh/第一卷/第一章/01-雨夜重逢.md",
+            "start_line": 1,
+            "end_line": 5,
+            "score": 2.407985018176355,
+            "snippet": " ... 林澈一枚刻着[燕子纹样的黄铜钥匙]，并说钥匙属于 ... "
+          }
+        ]
+      },
+      {
+        "id": "zh-cross-file-compass",
+        "case": "cross-file",
+        "expected_sources": 2,
+        "recalled_sources": 2,
+        "correct_source_ranges": 2,
+        "top_5": [
+          {
+            "source_path": "zh/第二卷/第一章/01-盐井.md",
+            "start_line": 1,
+            "end_line": 5,
+            "score": 1.6175882854567807,
+            "snippet": "# 盐井\n\n盐井守门人也保存着一枚[银色罗盘]， ... "
+          },
+          {
+            "source_path": "zh/第一卷/第二章/01-观星台.md",
+            "start_line": 1,
+            "end_line": 5,
+            "score": 1.579947356693605,
+            "snippet": "# 归来\n\n废弃观星台的旋梯下藏着一枚[银色罗] ... "
+          }
+        ]
+      },
+      {
+        "id": "zh-duplicate-title",
+        "case": "duplicate-title",
+        "expected_sources": 1,
+        "recalled_sources": 1,
+        "correct_source_ranges": 1,
+        "top_5": [
+          {
+            "source_path": "zh/第一卷/第二章/01-观星台.md",
+            "start_line": 1,
+            "end_line": 5,
+            "score": 2.4945819199791455,
+            "snippet": " ... 盘背面看见日期：[九月十七日]。\n\n窗边的白色山 ... "
+          }
+        ]
+      },
+      {
+        "id": "zh-short",
+        "case": "short-chapter",
+        "expected_sources": 1,
+        "recalled_sources": 1,
+        "correct_source_ranges": 1,
+        "top_5": [
+          {
+            "source_path": "zh/第二卷/第二章/01-短信.md",
+            "start_line": 1,
+            "end_line": 3,
+            "score": 2.789647830490697,
+            "snippet": "# 短讯\n\n顾遥只写了一句：[黎明前不要开东门] ... "
+          }
+        ]
+      },
+      {
+        "id": "zh-near-synonym",
+        "case": "near-synonym",
+        "expected_sources": 1,
+        "recalled_sources": 0,
+        "correct_source_ranges": 0,
+        "top_5": []
+      },
+      {
+        "id": "en-exact-compass",
+        "case": "exact",
+        "expected_sources": 1,
+        "recalled_sources": 1,
+        "correct_source_ranges": 1,
+        "top_5": [
+          {
+            "source_path": "en/book-one/chapter-01/01-arrival.md",
+            "start_line": 1,
+            "end_line": 5,
+            "score": 9.407999932629568,
+            "snippet": " ... the [brass] [compass] bene ... "
+          }
+        ]
+      },
+      {
+        "id": "en-duplicate-title",
+        "case": "duplicate-title",
+        "expected_sources": 1,
+        "recalled_sources": 1,
+        "correct_source_ranges": 1,
+        "top_5": [
+          {
+            "source_path": "en/book-two/chapter-03/01-return.md",
+            "start_line": 1,
+            "end_line": 5,
+            "score": 6.398874741070926,
+            "snippet": " ...  a [cobalt] [notebook] int ... "
+          }
+        ]
+      },
+      {
+        "id": "en-long-chapter",
+        "case": "long-chapter",
+        "expected_sources": 1,
+        "recalled_sources": 1,
+        "correct_source_ranges": 1,
+        "top_5": [
+          {
+            "source_path": "en/book-two/chapter-04/01-long-ledger.md",
+            "start_line": 25,
+            "end_line": 47,
+            "score": 4.289857626704267,
+            "snippet": "[Ledger] [entry] 12 record ... "
+          },
+          {
+            "source_path": "en/book-two/chapter-04/01-long-ledger.md",
+            "start_line": 1,
+            "end_line": 23,
+            "score": 4.288300324597885,
+            "snippet": " ... [Ledger] [entry] 02 record ... "
+          },
+          {
+            "source_path": "en/book-two/chapter-04/01-long-ledger.md",
+            "start_line": 49,
+            "end_line": 49,
+            "score": 3.5535183393810015,
+            "snippet": "[Ledger] [entry] 24 record ... "
+          }
+        ]
+      },
+      {
+        "id": "en-near-synonym",
+        "case": "near-synonym",
+        "expected_sources": 1,
+        "recalled_sources": 0,
+        "correct_source_ranges": 0,
+        "top_5": []
+      }
+    ]
+  },
+  "environment": {
+    "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "python": "3.14.6",
+    "sqlite": "3.53.4"
+  },
+  "formal_exit_gate": {
+    "corpus_characters": [100000, 1000000, 5000000],
+    "minimum_validated_queries": 100,
+    "source_path_range_accuracy": 1.0,
+    "recall_at_5_minimum": 0.8,
+    "one_million_character_query_p95_ms_maximum": 300,
+    "satisfied_by_this_report": false
+  }
+}

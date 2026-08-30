@@ -1,0 +1,100 @@
+{
+  "name": "@author-copilot/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Secure Electron desktop shell for Author Copilot",
+  "author": "Author Copilot contributors",
+  "type": "module",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "build": "electron-vite build",
+    "clean": "rm -rf out release coverage",
+    "dev": "electron-vite dev",
+    "lint": "eslint --config eslint.config.ts .",
+    "package": "pnpm package:prepare && pnpm runtime:fetch && pnpm build && electron-builder",
+    "package:mac:arm64": "pnpm package:prepare && pnpm runtime:fetch:mac:arm64 && pnpm build && electron-builder --mac --arm64",
+    "package:mac:x64": "pnpm package:prepare && pnpm runtime:fetch:mac:x64 && pnpm build && electron-builder --mac --x64",
+    "package:prepare": "pnpm --workspace-root turbo run build --filter=@author-copilot/desktop^...",
+    "package:win:arm64": "pnpm package:prepare && pnpm runtime:fetch:win:arm64 && pnpm build && electron-builder --win --arm64",
+    "package:win:x64": "pnpm package:prepare && pnpm runtime:fetch:win:x64 && pnpm build && electron-builder --win --x64",
+    "runtime:fetch": "node ../../tooling/scripts/fetch-git-runtime.ts",
+    "runtime:fetch:mac:arm64": "node ../../tooling/scripts/fetch-git-runtime.ts --platform=darwin --arch=arm64",
+    "runtime:fetch:mac:x64": "node ../../tooling/scripts/fetch-git-runtime.ts --platform=darwin --arch=x64",
+    "runtime:fetch:win:arm64": "node ../../tooling/scripts/fetch-git-runtime.ts --platform=win32 --arch=arm64",
+    "runtime:fetch:win:x64": "node ../../tooling/scripts/fetch-git-runtime.ts --platform=win32 --arch=x64",
+    "knowledge:qualify-runtime": "node ./scripts/knowledge-runtime-qualification.ts",
+    "runtime:qualify-network": "vitest run tests/git-network-qualification.test.ts",
+    "runtime:qualify-services": "vitest run tests/bundled-git-qualification.test.ts",
+    "runtime:verify": "node ../../tooling/scripts/verify-git-runtime.ts",
+    "smoke": "pnpm build && node ./scripts/electron-smoke.ts",
+    "test": "vitest run",
+    "test:e2e": "pnpm build && playwright test --config playwright.config.ts",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.e2e.json --noEmit && tsc -p tsconfig.web.json --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "catalog:",
+    "@author-copilot/contracts": "workspace:*",
+    "@author-copilot/project-schema": "workspace:*",
+    "@radix-ui/react-dialog": "catalog:",
+    "@radix-ui/react-label": "catalog:",
+    "@radix-ui/react-slot": "catalog:",
+    "class-variance-authority": "catalog:",
+    "clsx": "catalog:",
+    "lucide-react": "catalog:",
+    "radix-ui": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tailwind-merge": "catalog:",
+    "tw-animate-css": "catalog:"
+  },
+  "devDependencies": {
+    "@author-copilot/config-eslint": "workspace:*",
+    "@author-copilot/config-typescript": "workspace:*",
+    "@playwright/test": "catalog:",
+    "@swc/core": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/ssh2": "catalog:",
+    "@vitejs/plugin-react-swc": "catalog:",
+    "electron": "catalog:",
+    "electron-builder": "catalog:",
+    "electron-vite": "catalog:",
+    "eslint": "catalog:",
+    "rolldown": "catalog:",
+    "selfsigned": "catalog:",
+    "ssh2": "catalog:",
+    "tailwindcss": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "build": {
+    "appId": "com.authorcopilot.desktop",
+    "productName": "Author Copilot",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/git",
+        "to": "git",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true
+    },
+    "win": {
+      "verifyUpdateCodeSignature": true
+    }
+  }
+}

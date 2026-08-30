@@ -1,0 +1,41 @@
+{
+  "name": "@author-copilot/spike-claude-sdk-electron",
+  "version": "0.0.0",
+  "description": "M0 packaging and contract spike for the Anthropic SDKs in Electron",
+  "private": true,
+  "author": "Author Copilot contributors",
+  "type": "module",
+  "main": "src/main.mjs",
+  "scripts": {
+    "test": "node --test",
+    "smoke:electron": "electron . --smoke",
+    "package:mac:arm64": "electron-builder --dir --mac --arm64"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "catalog:",
+    "@anthropic-ai/sdk": "catalog:"
+  },
+  "devDependencies": {
+    "@electron/get": "catalog:",
+    "electron": "catalog:",
+    "electron-builder": "catalog:"
+  },
+  "build": {
+    "appId": "com.authorcopilot.spike.claude-sdk",
+    "productName": "Author Copilot Claude SDK Spike",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        "dir"
+      ],
+      "identity": null
+    }
+  }
+}
