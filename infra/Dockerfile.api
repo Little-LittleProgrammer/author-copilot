@@ -1,0 +1,7 @@
+FROM node:24.16.0-bookworm-slim
+WORKDIR /app
+RUN npm install --global pnpm@11.7.0
+COPY . .
+RUN pnpm install --frozen-lockfile && pnpm --filter @author-copilot/contracts build && pnpm --filter @author-copilot/api build
+EXPOSE 9191
+CMD ["node", "apps/api/dist/main.js"]

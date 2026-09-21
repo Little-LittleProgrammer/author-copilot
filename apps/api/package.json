@@ -1,0 +1,40 @@
+{
+  "name": "@author-copilot/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf coverage dist *.tsbuildinfo",
+    "dev": "nest start --watch --path tsconfig.build.json",
+    "lint": "eslint src test --max-warnings=0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dev:credit": "pnpm build && node --env-file-if-exists=.env dist/platform/dev-credit.js"
+  },
+  "dependencies": {
+    "@nestjs/common": "catalog:",
+    "@nestjs/core": "catalog:",
+    "@nestjs/platform-express": "catalog:",
+    "class-transformer": "catalog:",
+    "class-validator": "catalog:",
+    "reflect-metadata": "catalog:",
+    "rxjs": "catalog:",
+    "mongodb": "catalog:",
+    "redis": "catalog:",
+    "nodemailer": "catalog:",
+    "jose": "catalog:",
+    "zod": "catalog:",
+    "@author-copilot/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@author-copilot/config-eslint": "workspace:*",
+    "@author-copilot/config-typescript": "workspace:*",
+    "@nestjs/cli": "catalog:",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "@types/nodemailer": "catalog:"
+  }
+}
