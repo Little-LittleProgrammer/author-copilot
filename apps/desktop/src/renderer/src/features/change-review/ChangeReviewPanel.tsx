@@ -8,6 +8,7 @@ import type { MessageKey } from "../../i18n/index.js";
 interface ChangeReviewPanelProps {
   readonly acceptedChangeIds: ReadonlySet<string>;
   readonly applying: boolean;
+  readonly applyBlocked: boolean;
   readonly applyError: string | undefined;
   readonly onAcceptAll: () => void;
   readonly onApply: () => void;
@@ -27,6 +28,7 @@ function diffLineClass(line: string): string {
 export function ChangeReviewPanel({
   acceptedChangeIds,
   applying,
+  applyBlocked,
   applyError,
   onAcceptAll,
   onApply,
@@ -67,7 +69,8 @@ export function ChangeReviewPanel({
           <Button
             type="button"
             size="sm"
-            disabled={applying || acceptedChangeIds.size === 0}
+            disabled={applying || applyBlocked || acceptedChangeIds.size === 0}
+            title={applyBlocked ? t("renameSaveFirst") : undefined}
             data-testid="proposal-apply"
             onClick={onApply}
           >
@@ -87,6 +90,7 @@ export function ChangeReviewPanel({
         </div>
       </header>
 
+      {applyBlocked ? <p role="status">{t("renameSaveFirst")}</p> : null}
       {applyError !== undefined ? (
         <p className="proposal-apply-error" role="alert">
           {applyError}

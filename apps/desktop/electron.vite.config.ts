@@ -22,7 +22,7 @@ export default defineConfig({
   },
   preload: {
     plugins: [
-      externalizeDepsPlugin({ exclude: ["@author-copilot/contracts"] }),
+      externalizeDepsPlugin({ exclude: ["@author-copilot/contracts", "zod"] }),
     ],
     build: {
       rolldownOptions: {

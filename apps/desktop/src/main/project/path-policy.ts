@@ -24,6 +24,8 @@ export function validateProjectEntryName(name: string): string {
     normalized.length === 0 ||
     normalized === "." ||
     normalized === ".." ||
+    normalized.toLowerCase() === ".git" ||
+    normalized.toLowerCase() === PROJECT_METADATA_FILE_NAME.toLowerCase() ||
     normalized.length > 252 ||
     /[<>:"/\\|?*\0]/u.test(normalized) ||
     /[. ]$/u.test(normalized)

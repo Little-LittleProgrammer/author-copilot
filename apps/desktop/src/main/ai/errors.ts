@@ -64,6 +64,13 @@ export function normalizeClaudeError(error: unknown): AppError {
       retryable: false,
     };
   }
+  if (error instanceof APIError && error.status === 402)
+    return {
+      code: "AI_UNAVAILABLE",
+      message:
+        "账户额度不足以完成本次请求 / Insufficient balance for this request.",
+      retryable: false,
+    };
   if (error instanceof APIError) {
     return {
       code: "AI_UNAVAILABLE",

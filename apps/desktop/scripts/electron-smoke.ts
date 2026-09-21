@@ -71,10 +71,12 @@ function capture(chunk: Buffer): void {
 child.stdout.on("data", capture);
 child.stderr.on("data", capture);
 child.on("error", (error) => finish(error));
-child.on("exit", (code) => {
-  if (!output.includes(marker)) {
+child.on("close", (code, signal) => {
+  if (!output.includes(marker) || code !== 0 || signal !== null) {
     finish(
-      new Error(`Electron exited with code ${String(code)} before readiness`),
+      new Error(
+        `Electron smoke failed: ready=${output.includes(marker)}, code=${String(code)}, signal=${String(signal)}`,
+      ),
     );
     return;
   }

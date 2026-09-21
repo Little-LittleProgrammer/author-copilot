@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
+  chmod,
   lstat,
   mkdir,
   mkdtemp,
@@ -16,6 +17,7 @@ import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { GitService } from "../src/main/git/git-service.js";
 import { TaskSnapshotService } from "../src/main/git/task-snapshot-service.js";
 import type { TaskSnapshotError } from "../src/main/git/task-snapshot-service.js";
 
@@ -101,6 +103,267 @@ afterEach(async () => {
 });
 
 describe("TaskSnapshotService", () => {
+  it("keeps an isolated result version without committing prior dirty content or touching HEAD/index", async () => {
+    const fx = await fixture();
+    await commitFiles(fx.projectRoot, { "[ab].md": "base", "a.md": "other" });
+    await writeFile(join(fx.projectRoot, "[ab].md"), "staged");
+    await git(fx.projectRoot, ["--literal-pathspecs", "add", "--", "[ab].md"]);
+    await writeFile(join(fx.projectRoot, "[ab].md"), "user draft");
+    await writeFile(join(fx.projectRoot, "a.md"), "unrelated dirty");
+    const indexBefore = await readFile(join(fx.projectRoot, ".git", "index"));
+    const headBefore = await git(fx.projectRoot, ["rev-parse", "HEAD"]);
+    await fx.service.createTaskSnapshot(projectId, fx.taskId);
+    await fx.service.writeTaskFile(
+      projectId,
+      fx.taskId,
+      "[ab].md",
+      "user draft + Agent",
+    );
+    const { review } = await fx.service.getTaskReview(projectId, fx.taskId);
+    expect(review.files).toEqual([
+      {
+        path: "[ab].md",
+        before: "user draft",
+        after: "user draft + Agent",
+        truncated: false,
+      },
+    ]);
+    const commit = await fx.service.retainTaskSnapshot(
+      projectId,
+      fx.taskId,
+      review.reviewDigest,
+    );
+    expect(commit).not.toBeNull();
+    expect(await git(fx.projectRoot, ["rev-parse", "HEAD"])).toEqual(
+      headBefore,
+    );
+    expect(await readFile(join(fx.projectRoot, ".git", "index"))).toEqual(
+      indexBefore,
+    );
+    expect(
+      (await git(fx.projectRoot, ["show", `${commit}^:[ab].md`])).toString(),
+    ).toBe("user draft");
+    expect(
+      (await git(fx.projectRoot, ["show", `${commit}:[ab].md`])).toString(),
+    ).toBe("user draft + Agent");
+    expect(
+      (
+        await git(fx.projectRoot, [
+          "diff-tree",
+          "--no-commit-id",
+          "--name-only",
+          "-r",
+          String(commit),
+        ])
+      )
+        .toString()
+        .trim(),
+    ).toBe("[ab].md");
+    expect(await readFile(join(fx.projectRoot, "a.md"), "utf8")).toBe(
+      "unrelated dirty",
+    );
+    expect(await fx.service.listRecoveries(projectId)).toEqual([]);
+    // An IPC response lost after committing can be retried without another version.
+    expect(
+      await fx.service.retainTaskSnapshot(
+        projectId,
+        fx.taskId,
+        review.reviewDigest,
+      ),
+    ).toBe(commit);
+    const history = new GitService({
+      gitExecutable: "git",
+      hooksDirectory: join(fx.projectRoot, "..", "hooks"),
+      resolveProjectRoot: async () => fx.projectRoot,
+    });
+    expect(
+      (await history.listVersions(projectId, 20)).map((v) => v.commitId),
+    ).toContain(commit);
+    expect(
+      (await history.getVersionDiff(projectId, String(commit))).patch,
+    ).toBeDefined();
+  });
+
+  it("retains files and snapshot on Git failure and retries only the result version", async () => {
+    const fx = await fixture();
+    await commitFiles(fx.projectRoot, { "scene.md": "before" });
+    await fx.service.createTaskSnapshot(projectId, fx.taskId);
+    await fx.service.writeTaskFile(projectId, fx.taskId, "scene.md", "after");
+    const { review } = await fx.service.getTaskReview(projectId, fx.taskId);
+    const refDirectory = join(
+      fx.projectRoot,
+      ".git",
+      "refs",
+      "author-copilot",
+      "tasks",
+    );
+    await mkdir(refDirectory, { recursive: true });
+    await writeFile(
+      join(refDirectory, `${fx.taskId}.lock`),
+      "simulate Git lock failure",
+    );
+    await expect(
+      fx.service.retainTaskSnapshot(projectId, fx.taskId, review.reviewDigest),
+    ).rejects.toThrow();
+    expect(await readFile(join(fx.projectRoot, "scene.md"), "utf8")).toBe(
+      "after",
+    );
+    expect(await fx.service.listRecoveries(projectId)).toHaveLength(1);
+    await rm(join(refDirectory, `${fx.taskId}.lock`));
+    expect(
+      await fx.service.retainTaskSnapshot(
+        projectId,
+        fx.taskId,
+        review.reviewDigest,
+      ),
+    ).toMatch(/^[a-f0-9]{40,64}$/u);
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "never executes repository hooks while creating Agent result refs",
+    async () => {
+      const fx = await fixture();
+      await commitFiles(fx.projectRoot, { "scene.md": "before" });
+      const hook = join(
+        fx.projectRoot,
+        ".git",
+        "hooks",
+        "reference-transaction",
+      );
+      await writeFile(hook, "#!/bin/sh\nprintf ran > hook-was-run\n");
+      await chmod(hook, 0o755);
+      await fx.service.createTaskSnapshot(projectId, fx.taskId);
+      await fx.service.writeTaskFile(projectId, fx.taskId, "scene.md", "after");
+      const { review } = await fx.service.getTaskReview(projectId, fx.taskId);
+      await fx.service.retainTaskSnapshot(
+        projectId,
+        fx.taskId,
+        review.reviewDigest,
+      );
+      await expect(
+        readFile(join(fx.projectRoot, "hook-was-run")),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+    },
+  );
+
+  it("rejects a stale review without losing subsequent edits", async () => {
+    const fx = await fixture();
+    await commitFiles(fx.projectRoot, { "scene.md": "before" });
+    await fx.service.createTaskSnapshot(projectId, fx.taskId);
+    await fx.service.writeTaskFile(projectId, fx.taskId, "scene.md", "Agent");
+    const { review } = await fx.service.getTaskReview(projectId, fx.taskId);
+    await writeFile(join(fx.projectRoot, "scene.md"), "Agent + user");
+    await expect(
+      fx.service.retainTaskSnapshot(projectId, fx.taskId, review.reviewDigest),
+    ).rejects.toMatchObject({ code: "task_conflict" });
+    expect(await readFile(join(fx.projectRoot, "scene.md"), "utf8")).toBe(
+      "Agent + user",
+    );
+    const refreshed = await fx.service.getTaskReview(projectId, fx.taskId);
+    await fx.service.retainTaskSnapshot(
+      projectId,
+      fx.taskId,
+      refreshed.review.reviewDigest,
+    );
+  });
+
+  it("creates a result version in an unborn repository and closes an empty task", async () => {
+    const fx = await fixture();
+    await fx.service.createTaskSnapshot(projectId, fx.taskId);
+    await fx.service.writeTaskFile(
+      projectId,
+      fx.taskId,
+      "new.md",
+      "new scene",
+      null,
+    );
+    const { review } = await fx.service.getTaskReview(projectId, fx.taskId);
+    const commit = await fx.service.retainTaskSnapshot(
+      projectId,
+      fx.taskId,
+      review.reviewDigest,
+    );
+    expect(commit).toMatch(/^[a-f0-9]{40,64}$/u);
+    const nextId = randomUUID();
+    await fx.service.createTaskSnapshot(projectId, nextId);
+    const empty = await fx.service.getTaskReview(projectId, nextId);
+    expect(
+      await fx.service.retainTaskSnapshot(
+        projectId,
+        nextId,
+        empty.review.reviewDigest,
+      ),
+    ).toBeNull();
+  });
+
+  it("rechecks authorization at the atomic replacement boundary", async () => {
+    const fx = await fixture();
+    await commitFiles(fx.projectRoot, { "scene.md": "original" });
+    await fx.service.createTaskSnapshot(projectId, fx.taskId);
+    let checks = 0;
+    const assertAuthorized = (): void => {
+      checks += 1;
+      if (checks > 1) throw new Error("capability revoked");
+    };
+    await expect(
+      fx.service.writeTaskFile(
+        projectId,
+        fx.taskId,
+        "scene.md",
+        "agent",
+        createHash("sha256").update("original").digest("hex"),
+        assertAuthorized,
+      ),
+    ).rejects.toThrow("capability revoked");
+    expect(checks).toBe(2);
+    expect(await readFile(join(fx.projectRoot, "scene.md"), "utf8")).toBe(
+      "original",
+    );
+    expect(
+      (await fx.service.restoreTaskSnapshot(projectId, fx.taskId)).status,
+    ).toBe("complete");
+  });
+
+  it("uses optimistic hashes to prevent overwriting concurrent file changes", async () => {
+    const fx = await fixture();
+    await commitFiles(fx.projectRoot, { "scene.md": "baseline\n" });
+    await fx.service.createTaskSnapshot(projectId, fx.taskId);
+    const baselineHash = createHash("sha256")
+      .update("baseline\n")
+      .digest("hex");
+    await writeFile(join(fx.projectRoot, "scene.md"), "external edit\n");
+
+    await expect(
+      fx.service.writeTaskFile(
+        projectId,
+        fx.taskId,
+        "scene.md",
+        "agent edit\n",
+        baselineHash,
+      ),
+    ).rejects.toMatchObject({ code: "task_conflict" });
+    await expect(
+      readFile(join(fx.projectRoot, "scene.md"), "utf8"),
+    ).resolves.toBe("external edit\n");
+
+    await fx.service.writeTaskFile(
+      projectId,
+      fx.taskId,
+      "new.md",
+      "created\n",
+      null,
+    );
+    await expect(
+      fx.service.writeTaskFile(
+        projectId,
+        fx.taskId,
+        "new.md",
+        "replace\n",
+        null,
+      ),
+    ).rejects.toMatchObject({ code: "task_conflict" });
+  });
+
   it("restores the exact dirty task-start state without changing the index", async () => {
     const fx = await fixture();
     await commitFiles(fx.projectRoot, {

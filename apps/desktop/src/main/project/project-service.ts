@@ -60,6 +60,7 @@ export interface ProjectServiceOptions {
   readonly publishEvent?: ProjectEventPublisher;
   readonly writeDocument?: typeof atomicWriteFile;
   readonly operationQueue?: ProjectOperationQueue;
+  readonly assertCanMutate?: (projectId: string) => void;
 }
 
 function hashContent(content: string | Buffer): string {
@@ -257,7 +258,7 @@ export class ProjectService {
   private readonly operationQueue: ProjectOperationQueue;
   private readonly documentQueues = new Map<string, Promise<void>>();
 
-  constructor(options: ProjectServiceOptions) {
+  constructor(private readonly options: ProjectServiceOptions) {
     this.registry = options.registry;
     this.publishEvent = options.publishEvent;
     this.writeDocument = options.writeDocument ?? atomicWriteFile;
@@ -411,19 +412,7 @@ export class ProjectService {
 
   async getProjectRoot(projectId: string): Promise<string> {
     const project = await this.requireProject(projectId);
-    const canonicalRoot = await realpath(project.rootPath);
-    if (canonicalRoot !== project.rootPath) {
-      throw new InvalidProjectPathError(
-        "The registered project root no longer resolves to its original path.",
-      );
-    }
-    const rootStats = await stat(canonicalRoot);
-    if (!rootStats.isDirectory()) {
-      throw new InvalidProjectPathError(
-        "The registered project root is not a directory.",
-      );
-    }
-    return canonicalRoot;
+    return project.rootPath;
   }
 
   async getStructure(projectId: string): Promise<ProjectStructure> {
@@ -723,6 +712,15 @@ export class ProjectService {
     if (project === undefined) {
       throw new ProjectNotFoundError(`Project ${projectId} is not registered.`);
     }
+    const canonicalRoot = await realpath(project.rootPath);
+    if (
+      canonicalRoot !== project.rootPath ||
+      !(await lstat(project.rootPath)).isDirectory()
+    ) {
+      throw new InvalidProjectPathError(
+        "The registered project root no longer resolves to its original directory.",
+      );
+    }
     return project;
   }
 
@@ -781,6 +779,9 @@ export class ProjectService {
     projectId: string,
     operation: () => Promise<T>,
   ): Promise<T> {
-    return this.operationQueue.run(projectId, operation);
+    return this.operationQueue.run(projectId, () => {
+      this.options.assertCanMutate?.(projectId);
+      return operation();
+    });
   }
 }

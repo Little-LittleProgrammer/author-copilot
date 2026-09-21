@@ -1,4 +1,9 @@
-import type { JSX } from "react";
+import { AiConnectionSelector } from "../assistant/AiSettingsDialog.js";
+import { AgentPanel } from "../assistant/AgentPanel.js";
+import { useState, type JSX } from "react";
+import { X } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog.js";
+import { WritingEditor } from "./WritingEditor.js";
 import type {
   AiContextSelection,
   AiPatchReview,
@@ -15,9 +20,8 @@ import type {
 } from "../project/types.js";
 import { VersionHistoryPanel } from "../version/VersionHistoryPanel.js";
 
-export type WorkspaceTab = "assistant" | "content" | "review";
-
 interface EditorWorkspaceProps {
+  readonly onAgentBusyChange: (busy: boolean) => void;
   readonly activeProject: ProjectSummary | undefined;
   readonly aiContext: readonly StructureNode[];
   readonly content: string;
@@ -34,7 +38,9 @@ interface EditorWorkspaceProps {
   readonly onOpenKnowledgeSource: (relativePath: string) => void;
   readonly onProposalReady: (review: AiPatchReview) => void;
   readonly onRejectProposal: () => void;
-  readonly onRecoveryRestored: () => void;
+  readonly onRecoveryRestored: () => Promise<void>;
+  readonly onRepositoryBusyChange: (busy: boolean) => void;
+  readonly repositoryBusy: boolean;
   readonly onSave: () => void;
   readonly onSelectionChange: (
     selection: AiContextSelection | undefined,
@@ -45,10 +51,10 @@ interface EditorWorkspaceProps {
   readonly proposalApplying: boolean;
   readonly proposalApplyError: string | undefined;
   readonly proposalReview: AiPatchReview | undefined;
-  readonly onTabChange: (tab: WorkspaceTab) => void;
+  readonly onProposalOpenChange: (open: boolean) => void;
   readonly saving: boolean;
   readonly selection: AiContextSelection | undefined;
-  readonly tab: WorkspaceTab;
+  readonly proposalOpen: boolean;
   readonly t: (key: MessageKey) => string;
   readonly versionNotice: string | undefined;
   readonly versionWarning: boolean;
@@ -74,28 +80,30 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
     onProposalReady,
     onRejectProposal,
     onRecoveryRestored,
+    onRepositoryBusyChange,
+    repositoryBusy,
     onSave,
     onSelectionChange,
     onToggleProposalChange,
     onToggleProposalFile,
-    onTabChange,
+    onProposalOpenChange,
     saving,
     selection,
     proposalAcceptedChangeIds,
     proposalApplying,
     proposalApplyError,
     proposalReview,
-    tab,
+    proposalOpen,
     t,
     versionNotice,
     versionWarning,
     versionRefreshKey,
   } = props;
-  const tabs: readonly { id: WorkspaceTab; label: MessageKey }[] = [
-    { id: "content", label: "content" },
-    { id: "assistant", label: "aiChat" },
-    { id: "review", label: "changeReview" },
-  ];
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantMode, setAssistantMode] = useState<
+    "chat" | "agent" | "knowledge"
+  >("chat");
+  const [historyOpen, setHistoryOpen] = useState(false);
   const roleLabels: Readonly<Record<StructureNode["role"], MessageKey>> = {
     act: "structureRoleAct",
     chapter: "structureRoleChapter",
@@ -138,7 +146,13 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
             variant="outline"
             size="sm"
             data-testid="save-version"
-            disabled={activeProject === undefined || dirty || saving}
+            disabled={
+              activeProject === undefined ||
+              dirty ||
+              saving ||
+              loading ||
+              proposalApplying
+            }
             title={dirty ? t("versionSaveDocumentFirst") : t("saveVersion")}
             onClick={onCreateVersion}
           >
@@ -148,28 +162,19 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
             type="button"
             className="button primary save-button"
             data-testid="save-document"
-            disabled={!dirty || saving || document === undefined}
+            disabled={
+              !dirty ||
+              saving ||
+              loading ||
+              proposalApplying ||
+              document === undefined
+            }
             onClick={onSave}
           >
             {saving ? t("saving") : t("save")}
           </button>
         </div>
       </header>
-
-      <nav className="workspace-tabs" aria-label={t("editor")}>
-        {tabs.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            className={tab === id ? "active" : ""}
-            onClick={() => onTabChange(id)}
-          >
-            {t(label)}
-          </button>
-        ))}
-      </nav>
 
       {error !== undefined ? (
         <div className="editor-alert" role="alert">
@@ -180,49 +185,82 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
         </div>
       ) : null}
 
-      <section className="editor-body">
-        {tab === "content" ? (
-          document === undefined ? (
-            <div className="empty-editor">
-              <span className="empty-glyph" aria-hidden="true">
-                ¶
-              </span>
-              <p>{loading ? t("loading") : t("documentEmpty")}</p>
-            </div>
-          ) : (
-            <textarea
-              aria-label={t("content")}
-              data-testid="document-editor"
-              spellCheck
-              value={content}
-              placeholder={t("documentPlaceholder")}
-              onChange={(event) => onChange(event.target.value)}
-              onSelect={(event) => {
-                const target = event.currentTarget;
-                if (target.selectionStart === target.selectionEnd) {
-                  onSelectionChange(undefined);
-                  return;
-                }
-                const startLine = target.value
-                  .slice(0, target.selectionStart)
-                  .split("\n").length;
-                const inclusiveEnd = Math.max(
-                  target.selectionStart,
-                  target.selectionEnd - 1,
-                );
-                const endLine = target.value
-                  .slice(0, inclusiveEnd)
-                  .split("\n").length;
-                onSelectionChange({ startLine, endLine });
+      <WritingEditor
+        content={content}
+        projectId={activeProject?.id}
+        documentPath={document?.path}
+        readOnly={loading || proposalApplying}
+        loading={loading}
+        assistantOpen={assistantOpen}
+        onChange={onChange}
+        onSelectionChange={onSelectionChange}
+        onSave={onSave}
+        onHistory={() => {
+          onProposalOpenChange(false);
+          setHistoryOpen(true);
+        }}
+        onToggleAssistant={() => setAssistantOpen((open) => !open)}
+        t={t}
+      >
+        <aside
+          id="assistant-dock"
+          className="assistant-dock"
+          data-testid="assistant-dock"
+          hidden={!assistantOpen}
+          aria-label={t("aiChat")}
+        >
+          <header className="assistant-dock-header">
+            <strong>{t("aiChat")}</strong>
+            <button
+              type="button"
+              aria-label={t("close")}
+              onClick={() => setAssistantOpen(false)}
+            >
+              <X size={16} />
+            </button>
+          </header>
+          <AiConnectionSelector t={t} />
+          <nav className="assistant-mode-tabs" aria-label={t("aiChat")}>
+            {(
+              [
+                ["chat", "assistantChatMode"],
+                ["agent", "assistantAgentMode"],
+                ["knowledge", "assistantKnowledgeMode"],
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                type="button"
+                key={mode}
+                aria-pressed={assistantMode === mode}
+                onClick={() => setAssistantMode(mode)}
+              >
+                {t(label)}
+              </button>
+            ))}
+          </nav>
+          {proposalReview !== undefined ? (
+            <button
+              type="button"
+              className="pending-proposal"
+              onClick={() => {
+                setHistoryOpen(false);
+                onProposalOpenChange(true);
               }}
-            />
-          )
-        ) : tab === "assistant" ? (
-          <div className="assistant-workspace">
-            {activeProject === undefined ? null : (
-              <>
+            >
+              {t("editorPendingProposal")}
+            </button>
+          ) : null}
+          {activeProject === undefined ? null : (
+            <>
+              <div
+                className="assistant-view chat-view"
+                hidden={assistantMode !== "chat"}
+              >
                 <ChatPanel
-                  canPropose={!dirty}
+                  canPropose={
+                    !dirty && !saving && !loading && !proposalApplying
+                  }
+                  contextPaths={aiContext.map((node) => node.path)}
                   content={content}
                   documentPath={document?.path}
                   onOpenSource={onOpenKnowledgeSource}
@@ -231,61 +269,108 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
                   selection={selection}
                   t={t}
                 />
-                <aside className="assistant-sidebar">
-                  <KnowledgePanel
-                    onOpenSource={onOpenKnowledgeSource}
-                    projectId={activeProject.id}
-                    t={t}
-                  />
-                  <section
-                    className="ai-context-section"
-                    aria-label={t("aiContext")}
-                  >
-                    <div className="ai-context-heading">
-                      <strong>{t("aiContext")}</strong>
-                      <span>{aiContext.length}</span>
-                    </div>
-                    {aiContext.length === 0 ? (
-                      <p>{t("aiContextEmpty")}</p>
-                    ) : (
-                      <ul className="ai-context-list">
-                        {aiContext.map((node) => (
-                          <li key={node.path}>
-                            <span>{node.name}</span>
-                            <small>{t(roleLabels[node.role])}</small>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </section>
-                </aside>
-              </>
+              </div>
+              <div
+                className="assistant-view"
+                hidden={assistantMode !== "agent"}
+              >
+                <AgentPanel
+                  projectId={activeProject.id}
+                  projectName={activeProject.name}
+                  refreshKey={versionRefreshKey}
+                  blocked={
+                    dirty || saving || repositoryBusy || proposalApplying
+                  }
+                  onBusyChange={props.onAgentBusyChange}
+                  onFilesChanged={onRecoveryRestored}
+                  t={t}
+                />
+              </div>
+              <div
+                className="assistant-view"
+                hidden={assistantMode !== "knowledge"}
+              >
+                <KnowledgePanel
+                  onOpenSource={onOpenKnowledgeSource}
+                  projectId={activeProject.id}
+                  t={t}
+                />
+                <section
+                  className="ai-context-section"
+                  aria-label={t("aiContext")}
+                >
+                  <div className="ai-context-heading">
+                    <strong>{t("aiContext")}</strong>
+                    <span>{aiContext.length}</span>
+                  </div>
+                  {aiContext.length === 0 ? (
+                    <p>{t("aiContextEmpty")}</p>
+                  ) : (
+                    <ul className="ai-context-list">
+                      {aiContext.map((node) => (
+                        <li key={node.path}>
+                          <span>{node.name}</span>
+                          <small>{t(roleLabels[node.role])}</small>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              </div>
+            </>
+          )}
+        </aside>
+      </WritingEditor>
+      <Dialog
+        open={historyOpen || proposalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setHistoryOpen(false);
+            onProposalOpenChange(false);
+          }
+        }}
+      >
+        <DialogContent
+          className="editor-history-dialog"
+          closeLabel={`${t("close")} ${t(proposalOpen ? "editorPendingProposal" : "versionHistory")}`}
+          aria-describedby={undefined}
+        >
+          <DialogTitle>
+            {t(proposalOpen ? "editorPendingProposal" : "versionHistory")}
+          </DialogTitle>
+          <div className="editor-history-body">
+            {activeProject === undefined ? null : proposalOpen &&
+              proposalReview !== undefined ? (
+              <ChangeReviewPanel
+                acceptedChangeIds={proposalAcceptedChangeIds}
+                applying={proposalApplying}
+                applyBlocked={dirty || saving || loading}
+                applyError={proposalApplyError}
+                onAcceptAll={onAcceptAllProposalChanges}
+                onApply={onApplyProposal}
+                onRejectProposal={() => {
+                  onRejectProposal();
+                  onProposalOpenChange(false);
+                }}
+                onToggleChange={onToggleProposalChange}
+                onToggleFile={onToggleProposalFile}
+                review={proposalReview}
+                t={t}
+              />
+            ) : (
+              <VersionHistoryPanel
+                dirty={dirty}
+                busy={repositoryBusy || loading}
+                onBusyChange={onRepositoryBusyChange}
+                onRepositoryChanged={onRecoveryRestored}
+                projectId={activeProject.id}
+                refreshKey={versionRefreshKey}
+                t={t}
+              />
             )}
           </div>
-        ) : activeProject === undefined ? null : proposalReview !==
-          undefined ? (
-          <ChangeReviewPanel
-            acceptedChangeIds={proposalAcceptedChangeIds}
-            applying={proposalApplying}
-            applyError={proposalApplyError}
-            onAcceptAll={onAcceptAllProposalChanges}
-            onApply={onApplyProposal}
-            onRejectProposal={onRejectProposal}
-            onToggleChange={onToggleProposalChange}
-            onToggleFile={onToggleProposalFile}
-            review={proposalReview}
-            t={t}
-          />
-        ) : (
-          <VersionHistoryPanel
-            dirty={dirty}
-            onRepositoryChanged={onRecoveryRestored}
-            projectId={activeProject.id}
-            refreshKey={versionRefreshKey}
-            t={t}
-          />
-        )}
-      </section>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

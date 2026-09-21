@@ -351,6 +351,19 @@ export class KnowledgeService {
     };
   }
 
+  async invalidateProject(projectId: string): Promise<void> {
+    const active = this.activeByProject.get(projectId);
+    active?.controller.abort();
+    await active?.completion;
+    await this.updateQueues.get(projectId);
+    const state = await this.readRecoverableState(projectId);
+    if (state.indexVersion !== null)
+      await this.markStale(
+        state,
+        "Agent task files changed. Rebuild the knowledge index.",
+      );
+  }
+
   handleDocumentSaved = (event: DocumentSavedEvent): void => {
     const predecessor =
       this.updateQueues.get(event.projectId) ?? Promise.resolve();

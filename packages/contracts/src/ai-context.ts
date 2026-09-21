@@ -7,6 +7,12 @@ import {
 import { ContentHashSchema, RelativeProjectPathSchema } from "./project.js";
 
 export const AI_CONTEXT_MAX_DOCUMENT_CHARACTERS = 200_000;
+export const AI_CONTEXT_MAX_DOCUMENTS = 20;
+export const AI_CONTEXT_MAX_TOTAL_CHARACTERS = 400_000;
+export const AiContextPathsSchema = z
+  .array(RelativeProjectPathSchema)
+  .max(AI_CONTEXT_MAX_DOCUMENTS);
+
 export const AI_CONTEXT_MAX_INSTRUCTION_CHARACTERS = 4_000;
 
 export const AiContextPermissionsSchema = z.strictObject({
@@ -45,6 +51,7 @@ export const AiInstructionSchema = z
 export const AiContextAssemblyRequestSchema = z.strictObject({
   projectId: z.uuid(),
   currentDocument: AiCurrentDocumentContextSchema,
+  contextPaths: AiContextPathsSchema.optional(),
   instruction: AiInstructionSchema,
   permissions: AiContextPermissionsSchema,
   retrievalLimit: z.number().int().min(1).max(20).default(5),
@@ -92,8 +99,18 @@ export const AiRequestContextSectionSchema = z.strictObject({
   permissions: AiContextPermissionsSchema,
 });
 
+export const AiContextDocumentSchema = z.strictObject({
+  relativePath: RelativeProjectPathSchema,
+  baselineHash: ContentHashSchema,
+  text: z.string().max(AI_CONTEXT_MAX_DOCUMENT_CHARACTERS),
+});
+
 export const AiAssembledContextSchema = z.strictObject({
   projectId: z.uuid(),
+  documents: z
+    .array(AiContextDocumentSchema)
+    .max(AI_CONTEXT_MAX_DOCUMENTS)
+    .optional(),
   sections: z.tuple([
     AiCurrentContextSectionSchema,
     AiStructureContextSectionSchema,

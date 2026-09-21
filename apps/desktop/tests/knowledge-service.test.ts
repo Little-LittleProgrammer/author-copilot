@@ -368,6 +368,25 @@ describe("KnowledgeService", () => {
     await knowledgeService.waitForIdle(setup.projectId);
   });
 
+  it("invalidates an Agent-modified project and cancels an in-flight rebuild before finalizing", async () => {
+    const setup = await fixture();
+    const service = new KnowledgeService({
+      storageRoot: setup.storageRoot,
+      projectService: setup.projectService,
+    });
+    await service.initialize(setup.projectId);
+    await service.waitForIdle(setup.projectId);
+    await service.rebuild(setup.projectId);
+    await service.invalidateProject(setup.projectId);
+    expect(await service.getStatus(setup.projectId)).toMatchObject({
+      status: "stale",
+      activeTaskId: null,
+    });
+    await expect(
+      service.search(setup.projectId, "雨夜", 5),
+    ).rejects.toMatchObject({ code: "unavailable" });
+  });
+
   it("marks the index stale after an external file change and rejects search", async () => {
     const setup = await fixture();
     const service = new KnowledgeService({

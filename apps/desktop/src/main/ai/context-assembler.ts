@@ -4,7 +4,12 @@ import type {
   KnowledgeIndexStatusResult,
   KnowledgeSearchHit,
 } from "@author-copilot/contracts";
-import { AiContextAssemblyRequestSchema } from "@author-copilot/contracts";
+import {
+  AI_CONTEXT_MAX_DOCUMENTS,
+  AI_CONTEXT_MAX_DOCUMENT_CHARACTERS,
+  AI_CONTEXT_MAX_TOTAL_CHARACTERS,
+  AiContextAssemblyRequestSchema,
+} from "@author-copilot/contracts";
 
 import type { KnowledgeService } from "../knowledge/index.js";
 import type {
@@ -24,7 +29,11 @@ export interface AiContextAssemblerOptions {
 }
 
 export class AiContextAssemblyError extends Error {
-  readonly code: "current_document_not_found" | "invalid_selection";
+  readonly code:
+    | "current_document_not_found"
+    | "invalid_selection"
+    | "invalid_context_path"
+    | "context_limit";
 
   constructor(code: AiContextAssemblyError["code"], message: string) {
     super(message);
@@ -137,8 +146,14 @@ export class AiContextAssembler {
     );
     const knowledge = await this.assembleKnowledge(request, status);
 
+    const documents = await this.assembleDocuments(
+      request,
+      [...structure.nodes, ...structure.unclassified],
+      knowledge.hits,
+    );
     return {
       projectId: request.projectId,
+      documents,
       sections: [
         current,
         {
@@ -157,6 +172,67 @@ export class AiContextAssembler {
         },
       ],
     };
+  }
+
+  private async assembleDocuments(
+    request: AiContextAssemblyRequest,
+    nodes: readonly StructureEntry[],
+    hits: readonly KnowledgeSearchHit[],
+  ): Promise<NonNullable<AiAssembledContext["documents"]>> {
+    const paths = new Set<string>();
+    const addDocuments = (entries: readonly StructureEntry[]): void => {
+      for (const entry of entries) {
+        if (entry.kind === "document") paths.add(entry.relativePath);
+        else addDocuments(entry.children);
+      }
+    };
+    for (const selectedPath of request.contextPaths ?? []) {
+      const path = findStructurePath(nodes, selectedPath.replaceAll("\\", "/"));
+      const entry = path?.at(-1);
+      if (entry === undefined) {
+        throw new AiContextAssemblyError(
+          "invalid_context_path",
+          "A selected context entry is no longer in this project. Update the context selection and try again.",
+        );
+      }
+      addDocuments([entry]);
+    }
+    if (request.permissions.proposeChanges) {
+      // Proposals need full baselines for every candidate, not just search excerpts.
+      paths.add(request.currentDocument.relativePath);
+      for (const hit of hits) paths.add(hit.relativePath);
+    }
+    if (paths.size > AI_CONTEXT_MAX_DOCUMENTS) {
+      throw new AiContextAssemblyError(
+        "context_limit",
+        "Too many context documents. Select fewer files or a smaller folder and try again.",
+      );
+    }
+    let total = request.currentDocument.content.length;
+    const documents: NonNullable<AiAssembledContext["documents"]> = [];
+    for (const relativePath of paths) {
+      if (relativePath === request.currentDocument.relativePath) continue;
+      const snapshot = await this.options.projectService.readDocument(
+        request.projectId,
+        relativePath,
+      );
+      total += snapshot.content.length;
+      if (
+        snapshot.content.length > AI_CONTEXT_MAX_DOCUMENT_CHARACTERS ||
+        total > AI_CONTEXT_MAX_TOTAL_CHARACTERS
+      ) {
+        throw new AiContextAssemblyError(
+          "context_limit",
+          "The selected context is too large. Select fewer or smaller documents and try again.",
+        );
+      }
+      documents.push({
+        relativePath,
+        baselineHash: snapshot.hash,
+        text: snapshot.content,
+      });
+    }
+    return documents;
   }
 
   private async assembleKnowledge(

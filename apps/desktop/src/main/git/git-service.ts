@@ -141,6 +141,14 @@ export class GitService {
     this.operationQueue = options.operationQueue ?? new ProjectOperationQueue();
   }
 
+  public async initializeRepository(projectId: string): Promise<void> {
+    await this.withProjectLock(projectId, async () => {
+      const rootPath = await this.resolveProjectRoot(projectId);
+      await this.prepareIsolationFiles();
+      await this.ensureRepository(rootPath);
+    });
+  }
+
   public async createVersion(
     projectId: string,
     message: string,
@@ -149,6 +157,12 @@ export class GitService {
       const rootPath = await this.resolveProjectRoot(projectId);
       await this.prepareIsolationFiles();
       await this.ensureRepository(rootPath);
+      if (await this.options.hasRecoverableTask?.(projectId))
+        throw new GitServiceError(
+          "task_active",
+          "Review and keep or restore the Agent task before creating another version.",
+          false,
+        );
       await this.assertNoExternalFilters(rootPath);
 
       await this.run(rootPath, ["add", "--all", "--", "."]);
@@ -245,6 +259,12 @@ export class GitService {
       const rootPath = await this.resolveProjectRoot(projectId);
       await this.prepareIsolationFiles();
       await this.ensureRepository(rootPath);
+      if (await this.options.hasRecoverableTask?.(projectId))
+        throw new GitServiceError(
+          "task_active",
+          "Review and keep or restore the Agent task before creating another version.",
+          false,
+        );
       await this.assertNoExternalFilters(rootPath);
       const paths = relativePaths.map((path) => path.replaceAll("\\", "/"));
       await this.run(rootPath, ["add", "--all", "--", ...paths]);
@@ -314,15 +334,27 @@ export class GitService {
         ["rev-parse", "--verify", "HEAD"],
         [0, 1, 128],
       );
-      if (head.exitCode !== 0) return [];
-      const result = await this.run(rootPath, [
-        "log",
-        "-z",
-        "--abbrev=8",
-        `--max-count=${limit}`,
-        "--format=%H%x00%h%x00%cI%x00%s",
+      const result =
+        head.exitCode !== 0
+          ? { stdout: "" }
+          : await this.run(rootPath, [
+              "log",
+              "-z",
+              "--abbrev=8",
+              `--max-count=${limit}`,
+              "--format=%H%x00%h%x00%cI%x00%s",
+            ]);
+      const managed = await this.run(rootPath, [
+        "for-each-ref",
+        "--sort=-committerdate",
+        `--count=${limit}`,
+        "--format=%(objectname)%00%(objectname:short=8)%00%(committerdate:iso-strict)%00%(subject)%00",
+        "refs/author-copilot/tasks/",
       ]);
-      const fields = outputLines(result.stdout);
+      const fields = [
+        ...outputLines(result.stdout),
+        ...outputLines(managed.stdout.replaceAll("\0\n", "\0")),
+      ];
       if (fields.length % 4 !== 0) {
         throw new GitServiceError(
           "git_failed",
@@ -355,7 +387,9 @@ export class GitService {
           createdAt: createdAt.toISOString(),
         });
       }
-      return versions;
+      return versions
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, limit);
     });
   }
 
@@ -644,6 +678,7 @@ export class GitService {
         this.options.gitExecutable,
         [
           "--no-pager",
+          "--literal-pathspecs",
           "-c",
           `core.hooksPath=${this.options.hooksDirectory}`,
           "-c",

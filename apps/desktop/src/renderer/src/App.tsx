@@ -1,3 +1,4 @@
+import { useAiSettings } from "./features/assistant/ai-settings-state.js";
 import { useCallback, useEffect, useState, type JSX } from "react";
 import { BookOpen, Grid2X2, TriangleAlert, X } from "lucide-react";
 
@@ -19,11 +20,11 @@ import { useI18n } from "./i18n/index.js";
 import { ThemeDialog } from "./themes/ThemeDialog.js";
 import { useTheme } from "./themes/index.js";
 
-const sessionKey = "author-copilot.session";
+const sessionKey = "author-copilot.local-session";
 const emptyTabState: TabState = { activeTabId: null, tabs: [] };
 
-function initialAccount(): string | undefined {
-  return localStorage.getItem(sessionKey) ?? undefined;
+function initialLocalSession(): boolean {
+  return localStorage.getItem(sessionKey) === "active";
 }
 
 function mapProject(project: ProjectSummaryContract): ProjectSummary {
@@ -38,17 +39,22 @@ function mapProject(project: ProjectSummaryContract): ProjectSummary {
 function ShellApp(): JSX.Element {
   const { locale, t } = useI18n();
   useTheme();
-  const [account, setAccount] = useState<string | undefined>(initialAccount);
+  const [sessionStarted, setSessionStarted] = useState(initialLocalSession);
   const [runtime, setRuntime] = useState<RuntimeInfo>();
   const [tabState, setTabState] = useState<TabState>(emptyTabState);
 
   const logout = useCallback(async () => {
-    const result = await window.authorCopilot.tabs.endSession();
-    if (result.status !== "completed") return;
+    const result = await window.authorCopilot.tabs
+      .endSession()
+      .catch((reason: unknown) => {
+        window.alert(errorMessage(reason, t("errorGeneric")));
+        return undefined;
+      });
+    if (result?.status !== "completed") return;
     localStorage.removeItem(sessionKey);
-    setAccount(undefined);
+    setSessionStarted(false);
     setTabState(emptyTabState);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void window.authorCopilot.system
@@ -68,28 +74,25 @@ function ShellApp(): JSX.Element {
   }, [locale]);
 
   useEffect(() => {
-    if (account === undefined) return;
+    if (!sessionStarted) return;
     void window.authorCopilot.tabs
       .startSession()
       .then(setTabState)
       .catch(() => undefined);
-  }, [account]);
+  }, [sessionStarted]);
 
-  const login = useCallback((nextAccount: string, remember: boolean) => {
-    if (remember) localStorage.setItem(sessionKey, nextAccount);
-    else localStorage.removeItem(sessionKey);
-    setAccount(nextAccount);
+  const continueLocal = useCallback(() => {
+    localStorage.setItem(sessionKey, "active");
+    setSessionStarted(true);
   }, []);
-
-  const authenticated = account !== undefined;
 
   return (
     <div
-      className={`app-shell ${authenticated ? "app-view-tabs" : "app-view-login"} platform-${runtime?.platform ?? "unknown"}`}
+      className={`app-shell ${sessionStarted ? "app-view-tabs" : "app-view-login"} platform-${runtime?.platform ?? "unknown"}`}
       data-testid="shell-app"
     >
-      {!authenticated ? (
-        <LoginPage onLogin={login} t={t} />
+      {!sessionStarted ? (
+        <LoginPage onContinue={continueLocal} t={t} />
       ) : (
         <>
           <nav className="app-tabs" role="tablist" aria-label={t("openTabs")}>
@@ -167,7 +170,8 @@ function WriterCenterApp(): JSX.Element {
   >(null);
   const [themeDialogOpen, setThemeDialogOpen] = useState(false);
   const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
-  const account = initialAccount() ?? "";
+  const { state: aiSettings } = useAiSettings();
+  const account = aiSettings?.user?.email ?? t("localWorkspace");
 
   useEffect(() => {
     const api = getProjectApi();

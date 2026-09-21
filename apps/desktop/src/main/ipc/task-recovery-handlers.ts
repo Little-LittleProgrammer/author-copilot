@@ -1,3 +1,4 @@
+import type { AgentTaskService } from "../ai/agent/task-service.js";
 import {
   IPC_INVOKE_CHANNELS,
   TaskRecoveryListRequestSchema,
@@ -13,6 +14,7 @@ import { assertTrustedIpcRequest } from "../ipc-policy.js";
 import { ProjectNotFoundError } from "../project/index.js";
 
 export interface TaskRecoveryIpcOptions {
+  readonly agentService: AgentTaskService;
   readonly taskSnapshotService: TaskSnapshotService;
   readonly trustedRendererUrl: string;
 }
@@ -104,7 +106,7 @@ export function registerTaskRecoveryIpcHandlers(
       );
       try {
         const request = TaskRecoveryRestoreRequestSchema.parse(args[0]);
-        const result = await options.taskSnapshotService.restoreTaskSnapshot(
+        const result = await options.agentService.restore(
           request.projectId,
           request.taskId,
         );

@@ -9,7 +9,8 @@
     "dev": "nest start --watch --path tsconfig.build.json",
     "lint": "eslint src test --max-warnings=0",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dev:credit": "pnpm build && node --env-file-if-exists=.env dist/platform/dev-credit.js"
   },
   "dependencies": {
     "@nestjs/common": "catalog:",
@@ -18,7 +19,13 @@
     "class-transformer": "catalog:",
     "class-validator": "catalog:",
     "reflect-metadata": "catalog:",
-    "rxjs": "catalog:"
+    "rxjs": "catalog:",
+    "mongodb": "catalog:",
+    "redis": "catalog:",
+    "nodemailer": "catalog:",
+    "jose": "catalog:",
+    "zod": "catalog:",
+    "@author-copilot/contracts": "workspace:*"
   },
   "devDependencies": {
     "@author-copilot/config-eslint": "workspace:*",
@@ -27,6 +34,7 @@
     "@types/node": "catalog:",
     "eslint": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@types/nodemailer": "catalog:"
   }
 }

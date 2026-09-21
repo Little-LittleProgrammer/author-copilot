@@ -21,7 +21,7 @@ export const AI_PATCH_TOOL: {
 } = {
   name: AI_PATCH_TOOL_NAME,
   description:
-    "Return reviewable replacements for exact text ranges in project documents. Use only content and SHA-256 baselines supplied in the ordered context. This tool creates a proposal and never writes files.",
+    "Return reviewable replacements for exact text ranges in project documents. Use only content and SHA-256 baselines supplied in the ordered context. Offsets are zero-based UTF-16 code units in the complete document text. Additional documents contain full text and baselineHash. This tool creates a proposal and never writes files.",
   inputSchema: {
     type: "object",
     additionalProperties: false,
@@ -92,6 +92,7 @@ export function providerMessages(
 ): readonly MessageParam[] {
   const sources = contextSources(context);
   const orderedContext = {
+    documents: context.documents ?? [],
     sections: [
       context.sections[0],
       context.sections[1],

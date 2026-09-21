@@ -1,3 +1,18 @@
+import {
+  AiSettingsRequestSchema,
+  AiSettingsResponseSchema,
+} from "./ai-settings.js";
+import {
+  AgentStartRequestSchema,
+  AgentStartResponseSchema,
+  AgentProjectRequestSchema,
+  AgentStateResponseSchema,
+  AgentTaskRequestSchema,
+  AgentCancelResponseSchema,
+  AgentRetainRequestSchema,
+  AgentRetainResponseSchema,
+} from "./agent-workflow.js";
+import { AgentTaskEventSchema } from "./agent-task.js";
 import { z } from "zod";
 import {
   AnthropicCredentialDeleteRequestSchema,
@@ -92,7 +107,20 @@ import {
   VersionListResponseSchema,
 } from "./version.js";
 
+import {
+  WritingStatisticsRequestSchema,
+  WritingStatisticsRecordSchema,
+  WritingStatisticsResponseSchema,
+} from "./writing-statistics.js";
+
 export const IPC_INVOKE_CHANNELS = {
+  writingStatisticsGet: "writing-statistics:get",
+  writingStatisticsRecord: "writing-statistics:record",
+  aiSettings: "ai:settings",
+  agentRetain: "agent:retain",
+  agentCancel: "agent:cancel",
+  agentState: "agent:state",
+  agentStart: "agent:start",
   runtimeGetInfo: "app:get-runtime-info",
   anthropicCredentialGetStatus: "ai-credential:anthropic-status",
   anthropicCredentialSet: "ai-credential:anthropic-set",
@@ -136,6 +164,7 @@ export const IPC_INVOKE_CHANNELS = {
 } as const;
 
 export const IPC_EVENT_CHANNELS = {
+  agentTaskEvent: "agent:event",
   aiChatEvent: "ai-chat:event",
   taskProgress: "task:progress",
   taskCancelled: "task:cancelled",
@@ -145,6 +174,13 @@ export const IPC_EVENT_CHANNELS = {
 } as const;
 
 export const IPC_INVOKE_CHANNEL_NAMES = [
+  IPC_INVOKE_CHANNELS.writingStatisticsGet,
+  IPC_INVOKE_CHANNELS.writingStatisticsRecord,
+  IPC_INVOKE_CHANNELS.aiSettings,
+  IPC_INVOKE_CHANNELS.agentRetain,
+  IPC_INVOKE_CHANNELS.agentCancel,
+  IPC_INVOKE_CHANNELS.agentState,
+  IPC_INVOKE_CHANNELS.agentStart,
   IPC_INVOKE_CHANNELS.runtimeGetInfo,
   IPC_INVOKE_CHANNELS.anthropicCredentialGetStatus,
   IPC_INVOKE_CHANNELS.anthropicCredentialSet,
@@ -188,6 +224,7 @@ export const IPC_INVOKE_CHANNEL_NAMES = [
 ] as const;
 
 export const IPC_EVENT_CHANNEL_NAMES = [
+  IPC_EVENT_CHANNELS.agentTaskEvent,
   IPC_EVENT_CHANNELS.aiChatEvent,
   IPC_EVENT_CHANNELS.taskProgress,
   IPC_EVENT_CHANNELS.taskCancelled,
@@ -210,9 +247,37 @@ export type IpcEventChannel = z.infer<typeof IpcEventChannelSchema>;
 export type IpcChannel = z.infer<typeof IpcChannelSchema>;
 
 export const IPC_INVOKE_CONTRACTS = {
+  [IPC_INVOKE_CHANNELS.writingStatisticsGet]: {
+    request: WritingStatisticsRequestSchema,
+    response: WritingStatisticsResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.writingStatisticsRecord]: {
+    request: WritingStatisticsRecordSchema,
+    response: WritingStatisticsResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.agentRetain]: {
+    request: AgentRetainRequestSchema,
+    response: AgentRetainResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.agentCancel]: {
+    request: AgentTaskRequestSchema,
+    response: AgentCancelResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.agentState]: {
+    request: AgentProjectRequestSchema,
+    response: AgentStateResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.agentStart]: {
+    request: AgentStartRequestSchema,
+    response: AgentStartResponseSchema,
+  },
   [IPC_INVOKE_CHANNELS.runtimeGetInfo]: {
     request: RuntimeInfoRequestSchema,
     response: RuntimeInfoSchema,
+  },
+  [IPC_INVOKE_CHANNELS.aiSettings]: {
+    request: AiSettingsRequestSchema,
+    response: AiSettingsResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.anthropicCredentialGetStatus]: {
     request: AnthropicCredentialStatusRequestSchema,
@@ -373,6 +438,7 @@ export const IPC_INVOKE_CONTRACTS = {
 } as const;
 
 export const IPC_EVENT_CONTRACTS = {
+  [IPC_EVENT_CHANNELS.agentTaskEvent]: AgentTaskEventSchema,
   [IPC_EVENT_CHANNELS.aiChatEvent]: AiChatEventSchema,
   [IPC_EVENT_CHANNELS.taskProgress]: TaskProgressEventSchema,
   [IPC_EVENT_CHANNELS.taskCancelled]: TaskCancelledEventSchema,

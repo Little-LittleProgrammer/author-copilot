@@ -55,7 +55,8 @@ export interface ApiKeyStatus {
   readonly updatedAt: string | null;
 }
 
-export type ApiKeyProvider = "anthropic";
+export type ApiKeyProvider =
+  "anthropic" | "platform-refresh" | `provider:${string}`;
 
 interface StoredCredential {
   readonly origin: string;
@@ -214,16 +215,25 @@ function parseStore(contents: string): CredentialStoreFile {
       );
     }
     const values = input.apiKeys as Record<string, unknown>;
-    if (Object.keys(values).some((provider) => provider !== "anthropic")) {
+    if (
+      Object.keys(values).some(
+        (provider) =>
+          provider !== "anthropic" &&
+          provider !== "platform-refresh" &&
+          !/^provider:[a-f0-9-]{36}$/u.test(provider),
+      )
+    ) {
       throw new CredentialStoreError(
         "invalid_store",
         "The API key provider is invalid.",
       );
     }
-    apiKeys =
-      values.anthropic === undefined
-        ? {}
-        : { anthropic: parseStoredApiKey(values.anthropic) };
+    apiKeys = Object.fromEntries(
+      Object.entries(values).map(([key, value]) => [
+        key,
+        parseStoredApiKey(value),
+      ]),
+    );
   }
   return { schemaVersion: STORE_SCHEMA_VERSION, entries, apiKeys };
 }

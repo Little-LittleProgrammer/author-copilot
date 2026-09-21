@@ -1,4 +1,20 @@
 import {
+  AiSettingsResponseSchema,
+  type AiSettingsRequest,
+} from "@author-copilot/contracts";
+import {
+  AgentStartResponseSchema,
+  AgentStateResponseSchema,
+  AgentCancelResponseSchema,
+  AgentRetainResponseSchema,
+  AgentTaskEventSchema,
+  type AgentStartRequest,
+  type AgentProjectRequest,
+  type AgentTaskRequest,
+  type AgentRetainRequest,
+  type AgentTaskEvent,
+} from "@author-copilot/contracts";
+import {
   AiChatCancelResponseSchema,
   AiChatEventSchema,
   AiChatStartResponseSchema,
@@ -66,6 +82,11 @@ import {
   type VersionDiffRequest,
   type VersionListRequest,
 } from "@author-copilot/contracts";
+import {
+  WritingStatisticsResponseSchema,
+  type WritingStatisticsRequest,
+  type WritingStatisticsRecord,
+} from "@author-copilot/contracts";
 import { contextBridge, ipcRenderer } from "electron";
 
 import type { AuthorCopilotApi } from "../shared/desktop-api.js";
@@ -88,6 +109,22 @@ function subscribe<T>(
 }
 
 const api: AuthorCopilotApi = Object.freeze({
+  writingStatistics: Object.freeze({
+    get: async (request: WritingStatisticsRequest) =>
+      WritingStatisticsResponseSchema.parse(
+        await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.writingStatisticsGet,
+          request,
+        ),
+      ),
+    record: async (request: WritingStatisticsRecord) =>
+      WritingStatisticsResponseSchema.parse(
+        await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.writingStatisticsRecord,
+          request,
+        ),
+      ),
+  }),
   system: Object.freeze({
     getRuntimeInfo: async () => {
       const response: unknown = await ipcRenderer.invoke(
@@ -96,6 +133,10 @@ const api: AuthorCopilotApi = Object.freeze({
       return RuntimeInfoSchema.parse(response);
     },
   }),
+  aiSettings: async (request: AiSettingsRequest) =>
+    AiSettingsResponseSchema.parse(
+      await ipcRenderer.invoke(IPC_INVOKE_CHANNELS.aiSettings, request),
+    ),
   credentials: Object.freeze({
     anthropic: Object.freeze({
       getStatus: async () => {
@@ -122,6 +163,30 @@ const api: AuthorCopilotApi = Object.freeze({
     }),
   }),
   assistant: Object.freeze({
+    agent: Object.freeze({
+      start: async (request: AgentStartRequest) =>
+        AgentStartResponseSchema.parse(
+          await ipcRenderer.invoke(IPC_INVOKE_CHANNELS.agentStart, request),
+        ),
+      getState: async (request: AgentProjectRequest) =>
+        AgentStateResponseSchema.parse(
+          await ipcRenderer.invoke(IPC_INVOKE_CHANNELS.agentState, request),
+        ),
+      cancel: async (request: AgentTaskRequest) =>
+        AgentCancelResponseSchema.parse(
+          await ipcRenderer.invoke(IPC_INVOKE_CHANNELS.agentCancel, request),
+        ),
+      retain: async (request: AgentRetainRequest) =>
+        AgentRetainResponseSchema.parse(
+          await ipcRenderer.invoke(IPC_INVOKE_CHANNELS.agentRetain, request),
+        ),
+      onEvent: (listener: (event: AgentTaskEvent) => void) =>
+        subscribe(
+          IPC_EVENT_CHANNELS.agentTaskEvent,
+          (value) => AgentTaskEventSchema.parse(value),
+          listener,
+        ),
+    }),
     chat: Object.freeze({
       start: async (request: AiChatStartRequest) => {
         const response: unknown = await ipcRenderer.invoke(

@@ -1,12 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import {
   AiAssembledContextSchema,
+  AiContextDocumentSchema,
   type AiContextAssemblyRequest,
   type KnowledgeIndexStatusResult,
 } from "@author-copilot/contracts";
 
-import { AiContextAssembler } from "../src/main/ai/index.js";
+import { AiContextAssembler, AiPatchValidator } from "../src/main/ai/index.js";
+import { providerMessages } from "../src/main/ai/prompt.js";
 
 const projectId = "10000000-0000-4000-8000-000000000001";
 const relativePath = "第一卷/第一章/01-正文.md";
@@ -100,6 +103,131 @@ function projectService(
 }
 
 describe("AiContextAssembler", () => {
+  it("supplies complete baselines for selected and retrieved documents that validate as a multi-file proposal", async () => {
+    const otherPath = "附加/第二章.md";
+    const currentText = "雨夜正文";
+    const otherText = "另一章\n雨夜回忆";
+    const contents: Record<string, string> = {
+      [relativePath]: currentText,
+      [otherPath]: otherText,
+    };
+    const projects = projectService([
+      { kind: "document", name: "当前章", relativePath },
+      {
+        kind: "chapter",
+        name: "附加",
+        relativePath: "附加",
+        children: [
+          { kind: "document", name: "第二章", relativePath: otherPath },
+        ],
+      },
+    ]);
+    projects.readDocument.mockImplementation(
+      async (_id: string, path: string) => {
+        const content = contents[path];
+        if (content === undefined) throw new Error("missing fixture");
+        return { content, hash: hash(content), mode: 0o600, mtimeMs: 1 };
+      },
+    );
+    const assembler = new AiContextAssembler({
+      projectService: projects,
+      knowledgeService: {
+        getStatus: vi.fn().mockResolvedValue(readyStatus),
+        search: vi.fn().mockResolvedValue({
+          status: readyStatus,
+          hits: [
+            {
+              relativePath: otherPath,
+              titleContext: [],
+              startLine: 2,
+              endLine: 2,
+              score: 1,
+              text: "雨夜回忆",
+              indexVersion: "index-v1",
+            },
+          ],
+        }),
+      },
+    });
+    const context = await assembler.assemble(
+      request({
+        currentDocument: { relativePath, content: currentText },
+        contextPaths: ["附加"],
+        permissions: { ...permissions, proposeChanges: true },
+      }),
+    );
+    const message = providerMessages(context, []).at(-1)?.content;
+    expect(typeof message).toBe("string");
+    if (typeof message !== "string")
+      throw new Error("Expected serialized provider context");
+    const serialized = message.slice(message.indexOf("\n") + 1);
+    const providerContext = z
+      .object({ documents: z.array(AiContextDocumentSchema) })
+      .parse(JSON.parse(serialized));
+    const other = providerContext.documents?.find(
+      (doc) => doc.relativePath === otherPath,
+    );
+    expect(other).toEqual({
+      relativePath: otherPath,
+      text: otherText,
+      baselineHash: hash(otherText),
+    });
+    const candidateDocuments = [
+      {
+        relativePath,
+        text: context.sections[0].text,
+        baselineHash: context.sections[0].baselineHash,
+      },
+      ...(providerContext.documents ?? []),
+    ];
+    const proposal = {
+      summary: "两章修改",
+      files: candidateDocuments.map((doc, i) => ({
+        relativePath: doc.relativePath,
+        baselineHash: doc.baselineHash,
+        edits: [
+          {
+            changeId: `edit-${i}`,
+            startOffset: doc.text.indexOf("雨夜"),
+            endOffset: doc.text.indexOf("雨夜") + 2,
+            expectedText: "雨夜",
+            replacementText: "清晨",
+          },
+        ],
+      })),
+    };
+    const validated = await new AiPatchValidator({
+      projectService: projects,
+    }).validate(projectId, proposal);
+    expect(validated.files.map((file) => file.proposedContent)).toEqual([
+      "清晨正文",
+      "另一章\n清晨回忆",
+    ]);
+  });
+
+  it("uses explicitly selected documents even without an initialized index", async () => {
+    const projects = projectService([
+      { kind: "document", name: "当前", relativePath },
+      { kind: "document", name: "设定", relativePath: "设定.md" },
+    ]);
+    const assembler = new AiContextAssembler({
+      projectService: projects,
+      knowledgeService: {
+        getStatus: vi.fn().mockResolvedValue(notReadyStatus),
+        search: vi.fn(),
+      },
+    });
+    const context = await assembler.assemble(
+      request({ contextPaths: ["设定.md"] }),
+    );
+    expect(context.documents).toEqual([
+      { relativePath: "设定.md", text: "saved", baselineHash: "a".repeat(64) },
+    ]);
+    await expect(
+      assembler.assemble(request({ contextPaths: ["not-in-project.md"] })),
+    ).rejects.toMatchObject({ code: "invalid_context_path" });
+  });
+
   it("assembles selection, structure, sourced retrieval, and request in order", async () => {
     const projects = projectService();
     const knowledge = {

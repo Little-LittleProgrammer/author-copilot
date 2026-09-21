@@ -18,7 +18,7 @@ import {
 import { VersionDialog } from "../version/VersionDialog.js";
 import type { VersionResult } from "../version/version-api.js";
 import { getProposalApi } from "../assistant/assistant-api.js";
-import { EditorWorkspace, type WorkspaceTab } from "./EditorWorkspace.js";
+import { EditorWorkspace } from "./EditorWorkspace.js";
 
 interface ProjectEditorTabProps {
   readonly onDirtyChange: (projectId: string, dirty: boolean) => void;
@@ -64,12 +64,14 @@ export function ProjectEditorTab({
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(() => getProjectApi() !== undefined);
   const [saving, setSaving] = useState(false);
+  const [agentBusy, setAgentBusy] = useState(false);
+  const [repositoryChanging, setRepositoryChanging] = useState(false);
   const [versionNotice, setVersionNotice] = useState<string>();
   const [versionWarning, setVersionWarning] = useState(false);
   const [versionRefreshKey, setVersionRefreshKey] = useState(0);
   const [versionDialogOpen, setVersionDialogOpen] = useState(false);
   const [error, setError] = useState<string>();
-  const [tab, setTab] = useState<WorkspaceTab>("content");
+  const [proposalOpen, setProposalOpen] = useState(false);
   const [selection, setSelection] = useState<AiContextSelection>();
   const [proposalReview, setProposalReview] = useState<AiPatchReview>();
   const [proposalApplying, setProposalApplying] = useState(false);
@@ -131,6 +133,14 @@ export function ProjectEditorTab({
     (node: StructureNode) => {
       const api = getProjectApi();
       if (api === undefined || node.kind !== "document") return;
+      if (
+        saving ||
+        loading ||
+        proposalApplying ||
+        repositoryChanging ||
+        agentBusy
+      )
+        return;
       if (dirty && !window.confirm(t("discardPrompt"))) return;
       setLoading(true);
       setError(undefined);
@@ -140,19 +150,37 @@ export function ProjectEditorTab({
           setDocument(snapshot);
           setContent(snapshot.content);
           setSelection(undefined);
-          setTab("content");
+          setProposalOpen(false);
         })
         .catch((reason: unknown) =>
           setError(errorMessage(reason, t("errorGeneric"))),
         )
         .finally(() => setLoading(false));
     },
-    [dirty, project.id, t],
+    [
+      dirty,
+      project.id,
+      t,
+      saving,
+      loading,
+      proposalApplying,
+      repositoryChanging,
+      agentBusy,
+    ],
   );
 
   const save = useCallback(() => {
     const api = getProjectApi();
-    if (api === undefined || document === undefined) return;
+    if (
+      api === undefined ||
+      document === undefined ||
+      saving ||
+      loading ||
+      proposalApplying ||
+      repositoryChanging ||
+      agentBusy
+    )
+      return;
     setSaving(true);
     setError(undefined);
     setVersionNotice(undefined);
@@ -165,7 +193,9 @@ export function ProjectEditorTab({
       })
       .then((snapshot) => {
         setDocument(snapshot);
-        setContent(snapshot.content);
+        setContent((current) =>
+          current === content ? snapshot.content : current,
+        );
       })
       .catch((reason: unknown) => {
         setError(
@@ -175,7 +205,17 @@ export function ProjectEditorTab({
         );
       })
       .finally(() => setSaving(false));
-  }, [content, document, project.id, t]);
+  }, [
+    content,
+    document,
+    project.id,
+    t,
+    saving,
+    loading,
+    proposalApplying,
+    repositoryChanging,
+    agentBusy,
+  ]);
 
   const reload = useCallback(() => {
     if (document === undefined) return;
@@ -199,12 +239,12 @@ export function ProjectEditorTab({
     [selectDocument, structure],
   );
 
-  const reloadAfterRepositoryChange = useCallback(() => {
+  const reloadAfterRepositoryChange = useCallback(async () => {
     const api = getProjectApi();
     if (api === undefined) return;
     setLoading(true);
     setError(undefined);
-    void api
+    await api
       .getStructure({ projectId: project.id })
       .then(async (nodes) => {
         setStructure(nodes);
@@ -227,7 +267,10 @@ export function ProjectEditorTab({
       .catch((reason: unknown) =>
         setError(errorMessage(reason, t("errorGeneric"))),
       )
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setVersionRefreshKey((value) => value + 1);
+      });
   }, [document, project.id, t]);
 
   const updateProject = useCallback(
@@ -246,7 +289,14 @@ export function ProjectEditorTab({
         setError(t("projectApiUnavailable"));
         return;
       }
-      if (dirty) {
+      if (
+        dirty ||
+        saving ||
+        loading ||
+        proposalApplying ||
+        repositoryChanging ||
+        agentBusy
+      ) {
         setError(t("renameSaveFirst"));
         return;
       }
@@ -290,7 +340,17 @@ export function ProjectEditorTab({
         setLoading(false);
       }
     },
-    [dirty, project.id, refreshStructure, t],
+    [
+      dirty,
+      saving,
+      loading,
+      proposalApplying,
+      repositoryChanging,
+      agentBusy,
+      project.id,
+      refreshStructure,
+      t,
+    ],
   );
 
   const deleteEntry = useCallback(
@@ -300,7 +360,14 @@ export function ProjectEditorTab({
         setError(t("projectApiUnavailable"));
         return;
       }
-      if (dirty) {
+      if (
+        dirty ||
+        saving ||
+        loading ||
+        proposalApplying ||
+        repositoryChanging ||
+        agentBusy
+      ) {
         setError(t("renameSaveFirst"));
         return;
       }
@@ -333,7 +400,18 @@ export function ProjectEditorTab({
         setLoading(false);
       }
     },
-    [dirty, document, project.id, refreshStructure, t],
+    [
+      dirty,
+      saving,
+      loading,
+      proposalApplying,
+      repositoryChanging,
+      agentBusy,
+      document,
+      project.id,
+      refreshStructure,
+      t,
+    ],
   );
 
   const toggleAiContext = useCallback((node: StructureNode): void => {
@@ -369,7 +447,7 @@ export function ProjectEditorTab({
         ),
       ),
     );
-    setTab("review");
+    setProposalOpen(true);
   }, []);
 
   const toggleProposalChange = useCallback((changeId: string): void => {
@@ -424,6 +502,17 @@ export function ProjectEditorTab({
   }, [project.id, proposalReview]);
 
   const applyProposal = useCallback(async (): Promise<void> => {
+    if (
+      dirty ||
+      saving ||
+      loading ||
+      proposalApplying ||
+      repositoryChanging ||
+      agentBusy
+    ) {
+      setProposalApplyError(t("renameSaveFirst"));
+      return;
+    }
     if (proposalReview === undefined || acceptedProposalChanges.size === 0) {
       return;
     }
@@ -453,8 +542,8 @@ export function ProjectEditorTab({
         );
         setVersionWarning(true);
       }
-      reloadAfterRepositoryChange();
-      setTab("content");
+      await reloadAfterRepositoryChange();
+      setProposalOpen(false);
     } catch (reason) {
       setProposalApplyError(
         reason instanceof Error ? reason.message : t("errorGeneric"),
@@ -463,6 +552,12 @@ export function ProjectEditorTab({
       setProposalApplying(false);
     }
   }, [
+    dirty,
+    saving,
+    loading,
+    proposalApplying,
+    repositoryChanging,
+    agentBusy,
     acceptedProposalChanges,
     project.id,
     proposalReview,
@@ -478,7 +573,9 @@ export function ProjectEditorTab({
           activeProject={project}
           aiContextPaths={aiContextPaths}
           canMutateStructure={!dirty && !loading}
-          loading={loading}
+          loading={
+            loading || repositoryChanging || proposalApplying || agentBusy
+          }
           onDeleteEntry={deleteEntry}
           onRenameEntry={renameEntry}
           onSelectDocument={selectDocument}
@@ -488,13 +585,16 @@ export function ProjectEditorTab({
           t={t}
         />
         <EditorWorkspace
+          onAgentBusyChange={setAgentBusy}
           activeProject={project}
           aiContext={aiContextNodes}
           content={content}
           document={document}
           dirty={dirty}
           error={error}
-          loading={loading}
+          loading={
+            loading || repositoryChanging || proposalApplying || agentBusy
+          }
           onChange={setContent}
           onDiscard={() => {
             if (document !== undefined) setContent(document.content);
@@ -507,6 +607,10 @@ export function ProjectEditorTab({
           onReload={reload}
           onOpenKnowledgeSource={openKnowledgeSource}
           onRecoveryRestored={reloadAfterRepositoryChange}
+          onRepositoryBusyChange={setRepositoryChanging}
+          repositoryBusy={
+            repositoryChanging || saving || loading || proposalApplying
+          }
           onSave={save}
           onSelectionChange={setSelection}
           onToggleProposalChange={toggleProposalChange}
@@ -515,10 +619,10 @@ export function ProjectEditorTab({
           proposalApplying={proposalApplying}
           proposalApplyError={proposalApplyError}
           proposalReview={proposalReview}
-          onTabChange={setTab}
+          onProposalOpenChange={setProposalOpen}
           saving={saving}
           selection={selection}
-          tab={tab}
+          proposalOpen={proposalOpen}
           t={t}
           versionNotice={versionNotice}
           versionWarning={versionWarning}

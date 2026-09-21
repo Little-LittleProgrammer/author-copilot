@@ -24,6 +24,7 @@ import { getAssistantApi } from "./assistant-api.js";
 
 interface ChatPanelProps {
   readonly canPropose: boolean;
+  readonly contextPaths: readonly string[];
   readonly content: string;
   readonly documentPath: string | undefined;
   readonly onOpenSource: (relativePath: string) => void;
@@ -45,6 +46,7 @@ interface ChatMessage {
 
 export function ChatPanel({
   canPropose,
+  contextPaths,
   content,
   documentPath,
   onOpenSource,
@@ -126,6 +128,8 @@ export function ChatPanel({
       if (
         normalized.length === 0 ||
         documentPath === undefined ||
+        starting ||
+        (mode === "proposal" && !canPropose) ||
         activeRun.current !== null
       ) {
         return;
@@ -145,6 +149,7 @@ export function ChatPanel({
         const result = await api.start({
           projectId,
           mode,
+          contextPaths: [...contextPaths],
           currentDocument: {
             relativePath: documentPath,
             content,
@@ -190,6 +195,9 @@ export function ChatPanel({
       api,
       applyEvent,
       content,
+      contextPaths,
+      canPropose,
+      starting,
       documentPath,
       instruction,
       messages,
@@ -371,12 +379,18 @@ function ChatSources({
 }): JSX.Element {
   return (
     <div className="chat-sources">
+      {context.documentPaths !== undefined &&
+      context.documentPaths.length > 0 ? (
+        <small>{context.documentPaths.join(" · ")}</small>
+      ) : null}
       <span className="chat-scope">
         <BookOpen size={12} aria-hidden="true" />
         {t(
           context.scope === "full_book"
             ? "aiChatFullBookContext"
-            : "aiChatCurrentDocumentContext",
+            : (context.documentPaths?.length ?? 0) > 0
+              ? "aiChatSelectedDocumentsContext"
+              : "aiChatCurrentDocumentContext",
         )}
       </span>
       {context.sources.length > 0 ? (

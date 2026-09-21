@@ -1,4 +1,19 @@
 import type {
+  AiSettingsRequest,
+  AiSettingsResponse,
+} from "@author-copilot/contracts";
+import type {
+  AgentStartRequest,
+  AgentStartResponse,
+  AgentProjectRequest,
+  AgentStateResponse,
+  AgentTaskRequest,
+  AgentCancelResponse,
+  AgentRetainRequest,
+  AgentRetainResponse,
+  AgentTaskEvent,
+} from "@author-copilot/contracts";
+import type {
   AiChatCancelRequest,
   AiChatCancelResponse,
   AiChatEvent,
@@ -60,7 +75,24 @@ import type {
   VersionListResponse,
 } from "@author-copilot/contracts";
 
+import type {
+  WritingStatisticsRequest,
+  WritingStatisticsRecord,
+  WritingStatisticsResponse,
+} from "@author-copilot/contracts";
+
 export interface AuthorCopilotApi {
+  readonly writingStatistics: {
+    readonly get: (
+      request: WritingStatisticsRequest,
+    ) => Promise<WritingStatisticsResponse>;
+    readonly record: (
+      request: WritingStatisticsRecord,
+    ) => Promise<WritingStatisticsResponse>;
+  };
+  readonly aiSettings: (
+    request: AiSettingsRequest,
+  ) => Promise<AiSettingsResponse>;
   readonly system: {
     readonly getRuntimeInfo: () => Promise<RuntimeInfo>;
   };
@@ -74,6 +106,23 @@ export interface AuthorCopilotApi {
     };
   };
   readonly assistant: {
+    readonly agent: {
+      readonly start: (
+        request: AgentStartRequest,
+      ) => Promise<AgentStartResponse>;
+      readonly getState: (
+        request: AgentProjectRequest,
+      ) => Promise<AgentStateResponse>;
+      readonly cancel: (
+        request: AgentTaskRequest,
+      ) => Promise<AgentCancelResponse>;
+      readonly retain: (
+        request: AgentRetainRequest,
+      ) => Promise<AgentRetainResponse>;
+      readonly onEvent: (
+        listener: (event: AgentTaskEvent) => void,
+      ) => () => void;
+    };
     readonly chat: {
       readonly start: (
         request: AiChatStartRequest,

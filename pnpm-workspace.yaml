@@ -3,7 +3,9 @@ packages:
   - packages/*
 
 catalog:
+  "@anthropic-ai/claude-agent-sdk": "0.3.207"
   "@anthropic-ai/sdk": "0.111.0"
+  "@modelcontextprotocol/sdk": "1.29.0"
   "@nestjs/cli": "11.0.16"
   "@nestjs/common": "11.1.28"
   "@nestjs/core": "11.1.28"
@@ -48,6 +50,11 @@ catalog:
   vite: "8.1.4"
   vitest: "4.1.10"
   zod: "4.4.3"
+  mongodb: "7.6.0"
+  redis: "6.2.1"
+  nodemailer: "10.0.9"
+  jose: "6.2.12"
+  "@types/nodemailer": "8.0.1"
 
 allowBuilds:
   "@nestjs/core": true
@@ -60,3 +67,6 @@ allowBuilds:
 
 overrides:
   "@electron/get@^3.0.0": 3.1.0
+
+minimumReleaseAgeExclude:
+  - nodemailer@10.0.9

@@ -1,4 +1,5 @@
 export * from "./ai-orchestrator.js";
+export * from "./agent/index.js";
 export * from "./anthropic-transport.js";
 export * from "./context-assembler.js";
 export * from "./errors.js";

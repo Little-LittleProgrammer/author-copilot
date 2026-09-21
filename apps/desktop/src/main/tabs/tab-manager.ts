@@ -42,6 +42,7 @@ export interface TabManagerOptions {
     dirtyCount: number,
     locale: "en-US" | "zh-CN",
   ) => Promise<boolean>;
+  readonly beforeEndSession?: () => Promise<void>;
   readonly afterConfirmedWindowClose?: () => void;
   readonly afterCancelledWindowClose?: () => void;
 }
@@ -59,6 +60,7 @@ export class TabManager {
     TabManagerOptions["afterConfirmedWindowClose"] | undefined;
   private readonly afterCancelledWindowClose:
     TabManagerOptions["afterCancelledWindowClose"] | undefined;
+  private readonly beforeEndSession: (() => Promise<void>) | undefined;
   private readonly entries: TabEntry[] = [];
   private readonly contexts = new Map<number, TabContext>();
   private activeTabId: string | null = null;
@@ -69,6 +71,7 @@ export class TabManager {
   private operations: Promise<void> = Promise.resolve();
 
   constructor(options: TabManagerOptions) {
+    this.beforeEndSession = options.beforeEndSession;
     this.window = options.window;
     this.rendererUrl = options.rendererUrl;
     this.webPreferences = options.webPreferences;
@@ -176,6 +179,7 @@ export class TabManager {
       ) {
         return { status: "cancelled" };
       }
+      await this.beforeEndSession?.();
       this.removeAllEntries();
       this.publishState();
       return { status: "completed" };

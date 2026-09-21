@@ -1,3 +1,7 @@
+import type { ProviderService } from "./ai/provider-service.js";
+import { registerAiSettingsHandlers } from "./ipc/ai-settings-handlers.js";
+import type { AgentTaskService } from "./ai/agent/task-service.js";
+import { registerAgentIpcHandlers } from "./ipc/agent-handlers.js";
 import {
   IPC_INVOKE_CHANNELS,
   RuntimeInfoRequestSchema,
@@ -23,7 +27,13 @@ import type { GitService, TaskSnapshotService } from "./git/index.js";
 import type { KnowledgeService } from "./knowledge/index.js";
 import type { TabManager } from "./tabs/index.js";
 
+import { registerWritingStatisticsHandlers } from "./ipc/writing-statistics-handlers.js";
+import type { WritingStatisticsService } from "./writing-statistics/writing-statistics-service.js";
+
 export interface IpcHandlerOptions {
+  readonly writingStatisticsService: WritingStatisticsService;
+  readonly providerService: ProviderService;
+  readonly agentService: AgentTaskService;
   readonly aiOrchestrator: AiOrchestrator;
   readonly patchApplication: AiPatchApplicationService;
   readonly credentialStore: SecureCredentialStore;
@@ -69,9 +79,19 @@ export function registerIpcHandlers(
     },
   );
 
+  registerWritingStatisticsHandlers({
+    trustedRendererUrl,
+    service: options.writingStatisticsService,
+    getTabManager: options.getTabManager,
+  });
+  registerAiSettingsHandlers(options.providerService, trustedRendererUrl);
   registerAiCredentialIpcHandlers({
     trustedRendererUrl,
     credentialStore: options.credentialStore,
+  });
+  registerAgentIpcHandlers({
+    trustedRendererUrl,
+    service: options.agentService,
   });
   registerAiChatIpcHandlers({
     trustedRendererUrl,
@@ -99,6 +119,7 @@ export function registerIpcHandlers(
   registerTaskRecoveryIpcHandlers({
     trustedRendererUrl,
     taskSnapshotService: options.taskSnapshotService,
+    agentService: options.agentService,
   });
   registerTabIpcHandlers({
     trustedRendererUrl,

@@ -25,6 +25,14 @@ import {
   win32,
 } from "node:path";
 
+import {
+  AppErrorSchema,
+  type AppError,
+  AgentTaskEventSchema,
+  type AgentTaskEvent,
+  type AgentReview,
+} from "@author-copilot/contracts";
+
 import { ProjectOperationQueue } from "./project-operation-queue.js";
 
 const SNAPSHOT_SCHEMA_VERSION = 1;
@@ -84,6 +92,8 @@ interface SnapshotManifest {
   readonly mutations: SnapshotMutation[];
   state: SnapshotState;
   totalBlobBytes: number;
+  taskEvent?: AgentTaskEvent;
+  versionError?: AppError;
 }
 
 interface GitCommandResult {
@@ -406,6 +416,12 @@ function parseManifest(value: unknown): SnapshotManifest {
     mutations,
     state: input.state as SnapshotState,
     totalBlobBytes: input.totalBlobBytes,
+    ...(input.versionError === undefined
+      ? {}
+      : { versionError: AppErrorSchema.parse(input.versionError) }),
+    ...(input.taskEvent === undefined
+      ? {}
+      : { taskEvent: AgentTaskEventSchema.parse(input.taskEvent) }),
   };
 }
 
@@ -422,6 +438,7 @@ function isolatedGitEnvironment(
     GIT_CONFIG_GLOBAL: globalConfigPath,
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_TERMINAL_PROMPT: "0",
+    GIT_LITERAL_PATHSPECS: "1",
   };
 }
 
@@ -484,10 +501,13 @@ export class TaskSnapshotService {
     taskId: string,
     relativePath: string,
     content: Buffer | string,
+    expectedHash?: string | null,
+    assertAuthorized?: () => void,
   ): Promise<void> {
     await this.withProjectLock(projectId, async () => {
       const manifest = await this.loadAuthorizedManifest(projectId, taskId);
       this.assertTaskWritable(manifest);
+      assertAuthorized?.();
       await this.assertHeadUnchanged(manifest);
       const buffer = Buffer.isBuffer(content)
         ? content
@@ -498,6 +518,7 @@ export class TaskSnapshotService {
         manifest.repoRoot,
         relativePath,
       );
+      await this.assertExpectedFileState(resolved.absolutePath, expectedHash);
       const createdDirectories = await this.createdParentDirectories(
         manifest.repoRoot,
         resolved.absolutePath,
@@ -515,6 +536,7 @@ export class TaskSnapshotService {
         relativePath: resolved.relativePath,
         after,
         createdDirectories,
+        ...(expectedHash === undefined ? {} : { expectedHash }),
       });
       await this.atomicWrite(
         prepared.resolved.absolutePath,
@@ -522,6 +544,19 @@ export class TaskSnapshotService {
         prepared.mutation.after.kind === "file"
           ? prepared.mutation.after.mode
           : 0o644,
+        async () => {
+          const current = await this.inspectFileState(
+            prepared.resolved.absolutePath,
+          );
+          if (!sameState(current, prepared.mutation.before)) {
+            throw new TaskSnapshotError(
+              "task_conflict",
+              "The task file changed before the write completed.",
+              true,
+            );
+          }
+          assertAuthorized?.();
+        },
       );
       prepared.mutation.state = "applied";
       await this.saveManifest(snapshotDirectory, manifest);
@@ -695,6 +730,266 @@ export class TaskSnapshotService {
     });
   }
 
+  public async saveTaskEvent(
+    projectId: string,
+    taskId: string,
+    event: AgentTaskEvent,
+  ): Promise<void> {
+    await this.withProjectLock(projectId, async () => {
+      const manifest = await this.loadAuthorizedManifest(projectId, taskId);
+      manifest.taskEvent = AgentTaskEventSchema.parse(event);
+      await this.saveManifest(
+        this.snapshotDirectory(projectId, taskId),
+        manifest,
+      );
+    });
+  }
+
+  public async saveTaskVersionError(
+    projectId: string,
+    taskId: string,
+    error: AppError,
+  ): Promise<void> {
+    await this.withProjectLock(projectId, async () => {
+      const manifest = await this.loadAuthorizedManifest(projectId, taskId);
+      manifest.versionError = AppErrorSchema.parse(error);
+      await this.saveManifest(
+        this.snapshotDirectory(projectId, taskId),
+        manifest,
+      );
+    });
+  }
+
+  public async getTaskReview(
+    projectId: string,
+    taskId: string,
+  ): Promise<{
+    review: AgentReview;
+    event?: AgentTaskEvent;
+    versionError?: AppError;
+  }> {
+    return this.withProjectLock(projectId, async () => {
+      const manifest = await this.loadAuthorizedManifest(projectId, taskId);
+      return {
+        review: await this.reviewManifest(manifest),
+        ...(manifest.versionError === undefined
+          ? {}
+          : { versionError: manifest.versionError }),
+        ...(manifest.taskEvent === undefined
+          ? {}
+          : { event: manifest.taskEvent }),
+      };
+    });
+  }
+
+  private async reviewManifest(
+    manifest: SnapshotManifest,
+  ): Promise<AgentReview> {
+    const directory = this.snapshotDirectory(
+      manifest.projectId,
+      manifest.taskId,
+    );
+    const paths = [
+      ...new Set(
+        manifest.mutations
+          .filter((m) => m.state !== "restored")
+          .map((m) => m.path),
+      ),
+    ].sort();
+    const digest = createHash("sha256");
+    const files: AgentReview["files"] = [];
+    let remaining = 400_000;
+    for (const path of paths) {
+      const first = manifest.mutations.find(
+        (m) => m.path === path && m.state !== "restored",
+      );
+      if (first === undefined) continue;
+      const resolved = await this.resolveAuthorizedPath(
+        manifest.repoRoot,
+        path,
+      );
+      const current = await this.inspectFileState(resolved.absolutePath);
+      digest.update(JSON.stringify([path, first.before, current]));
+      const beforeBuffer =
+        first.before.kind === "missing"
+          ? null
+          : await this.readStateContent(directory, first.before);
+      const afterBuffer =
+        current.kind === "missing"
+          ? null
+          : await readFile(resolved.absolutePath);
+      if (
+        afterBuffer !== null &&
+        current.kind === "file" &&
+        createHash("sha256").update(afterBuffer).digest("hex") !== current.hash
+      ) {
+        throw new TaskSnapshotError(
+          "task_conflict",
+          "A task file changed while loading its review. Reload the review.",
+          true,
+        );
+      }
+      const beforeText = beforeBuffer?.toString("utf8") ?? null;
+      const afterText = afterBuffer?.toString("utf8") ?? null;
+      const before = beforeText?.slice(0, Math.min(100_000, remaining)) ?? null;
+      remaining -= before?.length ?? 0;
+      const after = afterText?.slice(0, Math.min(100_000, remaining)) ?? null;
+      remaining -= after?.length ?? 0;
+      files.push({
+        path,
+        before,
+        after,
+        truncated: before !== beforeText || after !== afterText,
+      });
+    }
+    return {
+      taskId: manifest.taskId,
+      reviewDigest: digest.digest("hex"),
+      files,
+    };
+  }
+
+  // Result commits live on application refs. The user's HEAD, index and files
+  // stay untouched, including staged and unstaged edits on the same file.
+  public async retainTaskSnapshot(
+    projectId: string,
+    taskId: string,
+    reviewDigest: string,
+  ): Promise<string | null> {
+    return this.withProjectLock(projectId, async () => {
+      const root = await this.resolveProjectRoot(projectId);
+      const ref = `refs/author-copilot/tasks/${taskId}`;
+      assertUuid(taskId, "taskId");
+      const existing = await this.runGit(
+        root,
+        ["rev-parse", "--verify", ref],
+        [0, 1, 128],
+      );
+      if (existing.exitCode === 0) {
+        await rm(this.snapshotDirectory(projectId, taskId), {
+          recursive: true,
+          force: true,
+        });
+        return existing.stdout.toString("utf8").trim();
+      }
+      const manifest = await this.loadAuthorizedManifest(projectId, taskId);
+      const review = await this.reviewManifest(manifest);
+      if (review.reviewDigest !== reviewDigest)
+        throw new TaskSnapshotError(
+          "task_conflict",
+          "Task files changed. Reload and review them before keeping the result.",
+          true,
+        );
+      await this.assertHeadUnchanged(manifest);
+      const directory = this.snapshotDirectory(projectId, taskId);
+      if (review.files.length === 0) {
+        await rm(directory, { recursive: true, force: true });
+        return null;
+      }
+      const temporary = await mkdtemp(join(directory, "result-"));
+      const environment = { GIT_INDEX_FILE: join(temporary, "index") };
+      const git = async (args: readonly string[]): Promise<string> =>
+        (await this.runGit(root, args, [0], environment)).stdout
+          .toString("utf8")
+          .trim();
+      try {
+        await git(
+          manifest.head === null
+            ? ["read-tree", "--empty"]
+            : ["read-tree", manifest.head],
+        );
+        const put = async (
+          path: string,
+          state: FileState,
+          source: string,
+        ): Promise<void> => {
+          if (state.kind === "missing") {
+            await git(["update-index", "--force-remove", "--", path]);
+            return;
+          }
+          const oid = await git([
+            "hash-object",
+            "-w",
+            "--no-filters",
+            "--",
+            source,
+          ]);
+          await git([
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            (state.mode & 0o111) !== 0 ? "100755" : "100644",
+            oid,
+            path,
+          ]);
+        };
+        for (const file of review.files) {
+          const first = manifest.mutations.find(
+            (m) => m.path === file.path && m.state !== "restored",
+          );
+          if (first !== undefined)
+            await put(
+              file.path,
+              first.before,
+              first.before.kind === "file"
+                ? join(directory, "blobs", first.before.hash)
+                : "",
+            );
+        }
+        const beforeTree = await git(["write-tree"]);
+        for (const file of review.files) {
+          const resolved = await this.resolveAuthorizedPath(root, file.path);
+          await put(
+            file.path,
+            await this.inspectFileState(resolved.absolutePath),
+            resolved.absolutePath,
+          );
+        }
+        const afterTree = await git(["write-tree"]);
+        // Recheck after reading content so a concurrent editor cannot silently
+        // change what the user approved while the Git objects are constructed.
+        if ((await this.reviewManifest(manifest)).reviewDigest !== reviewDigest)
+          throw new TaskSnapshotError(
+            "task_conflict",
+            "Task files changed while creating the result version. Reload the review.",
+            true,
+          );
+        let commitId: string | null = null;
+        if (beforeTree !== afterTree) {
+          const identity = [
+            "-c",
+            "user.name=Author Copilot",
+            "-c",
+            "user.email=author-copilot@local",
+            "-c",
+            "commit.gpgSign=false",
+          ];
+          const baseline = await git([
+            ...identity,
+            "commit-tree",
+            beforeTree,
+            "-m",
+            `Agent baseline ${taskId}`,
+          ]);
+          commitId = await git([
+            ...identity,
+            "commit-tree",
+            afterTree,
+            "-p",
+            baseline,
+            "-m",
+            `Agent result ${taskId}`,
+          ]);
+          await git(["update-ref", ref, commitId, ""]);
+        }
+        await rm(directory, { recursive: true, force: true });
+        return commitId;
+      } finally {
+        await rm(temporary, { recursive: true, force: true });
+      }
+    });
+  }
+
   public async closeTaskSnapshot(
     projectId: string,
     taskId: string,
@@ -716,6 +1011,7 @@ export class TaskSnapshotService {
     readonly relativePath: string;
     readonly after: FileState;
     readonly createdDirectories: readonly string[];
+    readonly expectedHash?: string | null;
     readonly requireExistingFile?: boolean;
   }): Promise<PreparedMutation> {
     const resolved = await this.resolveAuthorizedPath(
@@ -727,6 +1023,17 @@ export class TaskSnapshotService {
       options.manifest,
       resolved.absolutePath,
     );
+    if (
+      (options.expectedHash === null && before.kind !== "missing") ||
+      (typeof options.expectedHash === "string" &&
+        (before.kind !== "file" || before.hash !== options.expectedHash))
+    ) {
+      throw new TaskSnapshotError(
+        "task_conflict",
+        "The task file changed after it was read.",
+        true,
+      );
+    }
     if (options.requireExistingFile === true && before.kind !== "file") {
       throw new TaskSnapshotError(
         "unsafe_path",
@@ -1147,6 +1454,45 @@ export class TaskSnapshotService {
     );
   }
 
+  private async inspectFileState(absolutePath: string): Promise<FileState> {
+    if (!(await pathExists(absolutePath))) return { kind: "missing" };
+    const entry = await lstat(absolutePath);
+    if (!entry.isFile() || entry.isSymbolicLink()) {
+      throw new TaskSnapshotError(
+        "unsafe_path",
+        "Only regular files can be inspected.",
+        false,
+      );
+    }
+    this.assertFileBudget(entry.size);
+    const content = await readFile(absolutePath);
+    return {
+      kind: "file",
+      hash: sha256(content),
+      mode: portableFileMode(entry.mode),
+      size: content.length,
+    };
+  }
+
+  private async assertExpectedFileState(
+    absolutePath: string,
+    expectedHash: string | null | undefined,
+  ): Promise<void> {
+    if (expectedHash === undefined) return;
+    const current = await this.inspectFileState(absolutePath);
+    if (
+      (expectedHash === null && current.kind !== "missing") ||
+      (typeof expectedHash === "string" &&
+        (current.kind !== "file" || current.hash !== expectedHash))
+    ) {
+      throw new TaskSnapshotError(
+        "task_conflict",
+        "The task file changed after it was read.",
+        true,
+      );
+    }
+  }
+
   private assertFileBudget(size: number): void {
     if (size > (this.options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES)) {
       throw new TaskSnapshotError(
@@ -1318,6 +1664,7 @@ export class TaskSnapshotService {
     absolutePath: string,
     content: Buffer,
     mode: number,
+    beforeReplace?: () => Promise<void>,
   ): Promise<void> {
     await mkdir(dirname(absolutePath), { recursive: true });
     const temporaryPath = join(
@@ -1326,6 +1673,7 @@ export class TaskSnapshotService {
     );
     try {
       await writeFile(temporaryPath, content, { mode });
+      await beforeReplace?.();
       await rename(temporaryPath, absolutePath);
       await chmod(absolutePath, mode);
     } finally {
@@ -1425,22 +1773,38 @@ export class TaskSnapshotService {
     cwd: string,
     args: readonly string[],
     allowedExitCodes: readonly number[] = [0],
+    environment: Readonly<Record<string, string>> = {},
   ): Promise<GitCommandResult> {
     await this.prepareStorage();
     const timeoutMs = this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const maxOutputBytes =
       this.options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
     return new Promise((resolvePromise, reject) => {
-      const child = spawn(this.options.gitExecutable, ["-C", cwd, ...args], {
-        cwd,
-        env: isolatedGitEnvironment(
-          join(this.options.isolationDirectory, "config"),
-          this.options.runtimeEnvironment,
-        ),
-        shell: false,
-        stdio: ["ignore", "pipe", "pipe"],
-        windowsHide: true,
-      });
+      const child = spawn(
+        this.options.gitExecutable,
+        [
+          "-c",
+          `core.hooksPath=${this.options.isolationDirectory}`,
+          "-c",
+          "core.fsmonitor=false",
+          "-C",
+          cwd,
+          ...args,
+        ],
+        {
+          cwd,
+          env: {
+            ...isolatedGitEnvironment(
+              join(this.options.isolationDirectory, "config"),
+              this.options.runtimeEnvironment,
+            ),
+            ...environment,
+          },
+          shell: false,
+          stdio: ["ignore", "pipe", "pipe"],
+          windowsHide: true,
+        },
+      );
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
       let outputBytes = 0;

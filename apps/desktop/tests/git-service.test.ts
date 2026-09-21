@@ -49,6 +49,45 @@ afterEach(async () => {
 });
 
 describe("GitService", () => {
+  it("treats accepted filenames as literal paths and preserves unrelated staged edits", async () => {
+    const root = await temporaryRoot();
+    const projectRoot = join(root, "literal paths");
+    await mkdir(projectRoot);
+    const service = createService(projectRoot, join(root, "hooks"));
+    for (const path of ["[ab].md", "a.md", "b.md"])
+      await writeFile(join(projectRoot, path), "original");
+    await service.createVersion(projectId, "baseline");
+    for (const path of ["[ab].md", "a.md", "b.md"])
+      await writeFile(join(projectRoot, path), "changed");
+    await execFileAsync("git", ["-C", projectRoot, "add", "--", "a.md"]);
+    await service.createVersionForPaths(projectId, "AI accepted", ["[ab].md"]);
+    const committed = await execFileAsync("git", [
+      "-C",
+      projectRoot,
+      "diff-tree",
+      "--no-commit-id",
+      "--name-only",
+      "-r",
+      "HEAD",
+    ]);
+    expect(committed.stdout.trim()).toBe("[ab].md");
+    const staged = await execFileAsync("git", [
+      "-C",
+      projectRoot,
+      "diff",
+      "--cached",
+      "--name-only",
+    ]);
+    expect(staged.stdout.trim()).toBe("a.md");
+    const unstaged = await execFileAsync("git", [
+      "-C",
+      projectRoot,
+      "diff",
+      "--name-only",
+    ]);
+    expect(unstaged.stdout.trim()).toBe("b.md");
+  });
+
   it("creates an application-managed version without invoking a shell", async () => {
     const root = await temporaryRoot();
     const projectRoot = join(root, "作品 $(touch escaped)");

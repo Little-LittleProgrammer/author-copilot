@@ -1,3 +1,5 @@
+import { AiRouteError } from "./provider-service.js";
+import type { AiRoute, ProviderService } from "./provider-service.js";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -45,6 +47,7 @@ interface ActiveRun {
 }
 
 export interface AiOrchestratorOptions {
+  readonly providers?: ProviderService;
   readonly contextAssembler: AiContextAssembler;
   readonly credentialStore: Pick<SecureCredentialStore, "getApiKey">;
   readonly transport: ClaudeTransport;
@@ -59,6 +62,8 @@ function contextMetadata(context: AiAssembledContext): AiChatContextMetadata {
   const knowledge = context.sections[2];
   return {
     scope: knowledge.scope,
+    documentPaths:
+      context.documents?.map((document) => document.relativePath) ?? [],
     knowledgeStatus: knowledge.status,
     indexVersion: knowledge.indexVersion,
     degradationReason: knowledge.degradationReason,
@@ -68,6 +73,12 @@ function contextMetadata(context: AiAssembledContext): AiChatContextMetadata {
 
 function startError(error: unknown): AiChatServiceError {
   if (error instanceof AiChatServiceError) return error;
+  if (error instanceof AiRouteError)
+    return new AiChatServiceError({
+      code: "AI_UNAVAILABLE",
+      message: error.message,
+      retryable: false,
+    });
   if (error instanceof ProjectNotFoundError) {
     return new AiChatServiceError({
       code: "NOT_FOUND",
@@ -82,7 +93,10 @@ function startError(error: unknown): AiChatServiceError {
   ) {
     return new AiChatServiceError({
       code: "VALIDATION_FAILED",
-      message: "The AI chat request is invalid.",
+      message:
+        error instanceof AiContextAssemblyError
+          ? error.message
+          : "The AI chat request is invalid.",
       retryable: false,
     });
   }
@@ -119,6 +133,7 @@ export class AiOrchestrator {
     emit: (event: AiChatEvent) => void,
   ): Promise<AiChatStartSuccess> {
     let projectId: string | undefined;
+    let ownsStart = false;
     try {
       const request = AiChatStartRequestSchema.parse(input);
       projectId = request.projectId;
@@ -133,7 +148,15 @@ export class AiOrchestrator {
         });
       }
       this.startingProjects.add(projectId);
-      const apiKey = await this.options.credentialStore.getApiKey("anthropic");
+      ownsStart = true;
+      const route = this.options.providers
+        ? await this.options.providers.resolve(
+            await this.options.providers.snapshot(),
+          )
+        : undefined;
+      const apiKey =
+        route?.apiKey ??
+        (await this.options.credentialStore.getApiKey("anthropic"));
       if (apiKey === null) {
         throw new AiChatServiceError({
           code: "AI_UNAVAILABLE",
@@ -144,6 +167,9 @@ export class AiOrchestrator {
       const context = await this.options.contextAssembler.assemble({
         projectId,
         currentDocument: request.currentDocument,
+        ...(request.contextPaths === undefined
+          ? {}
+          : { contextPaths: request.contextPaths }),
         instruction: request.instruction,
         permissions: {
           readCurrentDocument: true,
@@ -163,7 +189,9 @@ export class AiOrchestrator {
       this.activeByRun.set(run.runId, run);
       this.activeByProject.set(projectId, run);
       setImmediate(() => {
-        void this.execute(run, apiKey, context, request).catch(() => undefined);
+        void this.execute(run, apiKey, context, request, route).catch(
+          () => undefined,
+        );
       });
       return {
         ok: true,
@@ -173,7 +201,8 @@ export class AiOrchestrator {
     } catch (error) {
       throw startError(error);
     } finally {
-      if (projectId !== undefined) this.startingProjects.delete(projectId);
+      if (ownsStart && projectId !== undefined)
+        this.startingProjects.delete(projectId);
     }
   }
 
@@ -194,6 +223,7 @@ export class AiOrchestrator {
     apiKey: string,
     context: AiAssembledContext,
     request: AiChatStartRequest,
+    route?: AiRoute,
   ): Promise<void> {
     const timeout = setTimeout(() => {
       if (run.controller.signal.aborted) return;
@@ -204,6 +234,13 @@ export class AiOrchestrator {
       let proposalReview: AiPatchReview | undefined;
       await this.options.transport.stream({
         apiKey,
+        ...(route
+          ? {
+              baseURL: route.baseURL,
+              model: route.model,
+              platform: route.platform,
+            }
+          : {}),
         messages: providerMessages(context, request.history),
         signal: run.controller.signal,
         system: AUTHOR_COPILOT_SYSTEM_PROMPT,

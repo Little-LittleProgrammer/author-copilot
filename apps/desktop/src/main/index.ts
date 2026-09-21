@@ -1,3 +1,14 @@
+import { ApiBaseUrlSchema } from "@author-copilot/contracts";
+import { ProviderService } from "./ai/provider-service.js";
+import { PlatformClient } from "./platform/platform-client.js";
+import { query } from "@anthropic-ai/claude-agent-sdk";
+import {
+  AgentCapabilityService,
+  AgentFileToolService,
+  AgentTaskStartService,
+  AgentTaskRuntimeService,
+  AgentTaskService,
+} from "./ai/agent/index.js";
 import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -25,6 +36,8 @@ import {
 } from "./git/index.js";
 import { resolveGitRuntime } from "./git-runtime.js";
 import { registerIpcHandlers } from "./ipc.js";
+import { WritingStatisticsService } from "./writing-statistics/writing-statistics-service.js";
+
 import { KnowledgeService } from "./knowledge/index.js";
 import {
   createFixedProjectDirectoryPicker,
@@ -42,9 +55,13 @@ import {
   createWindowOptions,
 } from "./window-options.js";
 
+let writingStatisticsService: WritingStatisticsService | undefined;
 let mainWindow: BrowserWindow | undefined;
 let tabManager: TabManager | undefined;
 let quitRequested = false;
+let agentService: AgentTaskService | undefined;
+let agentShutdownComplete = false;
+let agentShutdownPending = false;
 let aiOrchestrator: AiOrchestrator | undefined;
 const smokeMode = process.env.AUTHOR_COPILOT_ELECTRON_SMOKE === "1";
 const e2eMode = !app.isPackaged && process.env.AUTHOR_COPILOT_E2E === "1";
@@ -68,6 +85,7 @@ function rendererTarget(): {
 }
 
 interface MainWindowOptions {
+  readonly beforeEndSession: () => Promise<void>;
   readonly target: ReturnType<typeof rendererTarget>;
   readonly preloadPath: string;
   readonly projectService: ProjectService;
@@ -89,6 +107,7 @@ async function createMainWindow(options: MainWindowOptions): Promise<void> {
 
   lockDownWindow(mainWindow);
   tabManager = new TabManager({
+    beforeEndSession: options.beforeEndSession,
     window: mainWindow,
     rendererUrl: options.target.url,
     webPreferences: createSecureWebPreferences(options.preloadPath),
@@ -118,10 +137,14 @@ async function createMainWindow(options: MainWindowOptions): Promise<void> {
 
 app.whenReady().then(async () => {
   const target = rendererTarget();
+  writingStatisticsService = new WritingStatisticsService(
+    join(app.getPath("userData"), "writing-statistics"),
+  );
   const domainEvents = new DesktopDomainEvents();
   const gitOperationQueue = new ProjectOperationQueue();
   const projectService = new ProjectService({
     registry: new RegistryStore(app.getPath("userData")),
+    assertCanMutate: (projectId) => agentService?.assertIdle(projectId),
     publishEvent: domainEvents.publish,
     operationQueue: gitOperationQueue,
   });
@@ -173,11 +196,72 @@ app.whenReady().then(async () => {
     hasRecoverableTask: (projectId) =>
       taskSnapshotService.hasRecoverableTaskWhileProjectLocked(projectId),
   });
+  const capabilities = new AgentCapabilityService({});
+  const fileTools = new AgentFileToolService({
+    capabilityService: capabilities,
+    projectService,
+    taskSnapshotService,
+  });
+  const agentRuntime = new AgentTaskRuntimeService({
+    capabilityService: capabilities,
+    fileTools,
+    ...(e2eMode && process.env.AUTHOR_COPILOT_E2E_AGENT_BASE_URL !== undefined
+      ? {
+          createQuery: ({ prompt, options }) =>
+            query({
+              prompt,
+              options: {
+                ...options,
+                env: {
+                  ...options.env,
+                  ANTHROPIC_BASE_URL:
+                    process.env.AUTHOR_COPILOT_E2E_AGENT_BASE_URL,
+                },
+              },
+            }),
+        }
+      : {}),
+  });
+  const platformClient = new PlatformClient(
+    process.env.AUTHOR_COPILOT_PLATFORM_URL
+      ? ApiBaseUrlSchema.parse(process.env.AUTHOR_COPILOT_PLATFORM_URL)
+      : undefined,
+    credentialStore,
+  );
+  const providerService = new ProviderService(
+    join(app.getPath("userData"), "ai-providers.json"),
+    credentialStore,
+    platformClient,
+  );
+  agentService = new AgentTaskService({
+    ...(e2eMode && process.env.AUTHOR_COPILOT_E2E_AGENT_BASE_URL
+      ? {}
+      : { providers: providerService }),
+    capabilities,
+    runtime: agentRuntime,
+    startService: new AgentTaskStartService({
+      initializeRepository: (projectId) =>
+        gitService.initializeRepository(projectId),
+      capabilityService: capabilities,
+      projectService,
+      taskSnapshotService,
+    }),
+    snapshots: taskSnapshotService,
+    projects: projectService,
+    credentials: credentialStore,
+    configRoot: join(app.getPath("userData"), "agent-config"),
+    onFilesChanged: async (projectId) => {
+      await knowledgeService.invalidateProject(projectId);
+    },
+  });
   const patchApplication = new AiPatchApplicationService({
     projectService,
     gitService,
   });
   aiOrchestrator = new AiOrchestrator({
+    ...(e2eMode && process.env.AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL
+      ? {}
+      : { providers: providerService }),
     contextAssembler: new AiContextAssembler({
       projectService,
       knowledgeService,
@@ -198,6 +282,9 @@ app.whenReady().then(async () => {
     installProductionCsp(session.defaultSession);
   }
   registerIpcHandlers(target.url, {
+    writingStatisticsService,
+    providerService,
+    agentService,
     aiOrchestrator,
     patchApplication,
     credentialStore,
@@ -228,7 +315,18 @@ app.whenReady().then(async () => {
     getTabManager: () => tabManager,
   });
 
-  const windowOptions = { target, preloadPath, projectService };
+  const windowOptions = {
+    target,
+    preloadPath,
+    projectService,
+    beforeEndSession: async () => {
+      if (
+        platformClient.baseURL &&
+        (await credentialStore.getApiKeyStatus("platform-refresh")).configured
+      )
+        await platformClient.logout();
+    },
+  };
   await createMainWindow(windowOptions);
 
   app.on("activate", () => {
@@ -241,6 +339,22 @@ app.whenReady().then(async () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
+  }
+});
+
+app.on("will-quit", (event) => {
+  if (agentService !== undefined && !agentShutdownComplete) {
+    event.preventDefault();
+    if (!agentShutdownPending) {
+      agentShutdownPending = true;
+      void Promise.all([
+        agentService.shutdown(),
+        writingStatisticsService?.drain(),
+      ]).finally(() => {
+        agentShutdownComplete = true;
+        setImmediate(() => app.quit());
+      });
+    }
   }
 });
 

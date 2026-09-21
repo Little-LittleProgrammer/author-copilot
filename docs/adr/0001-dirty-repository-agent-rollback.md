@@ -176,3 +176,22 @@ This ADR is ready for project review. Acceptance should unblock M3 production
 work, which must port the contract into the Desktop Git/Agent services and
 repeat the suite with the bundled Git runtime on all four supported platform
 architectures.
+
+## M6 addendum: explicitly retained result versions (2026-09-12)
+
+The no-commit/no-ref rule above applies to task start, Agent execution and
+restoration. On explicit **Keep and create version**, the application now creates
+a baseline commit and a result commit using a private temporary index, referenced
+by `refs/author-copilot/tasks/<taskId>`. The baseline overlays the first before-image
+of each affected path onto the task-start HEAD tree (or an empty tree); the result
+overlays those paths with their reviewed current content. This isolates the task
+diff even when the affected file already had staged or unstaged user edits.
+
+These commits do not move HEAD or modify the user's real index or worktree. They
+appear in the application's version history, but are not automatically pushed.
+Repository hooks and filesystem monitors are disabled for snapshot Git commands.
+The content review digest is revalidated before publishing the result ref.
+Failures retain the journal and permit version-only retries; ref publication is
+idempotent by task ID. Restoring a task still never writes commits or refs.
+
+See [M6 implementation and evidence](../reports/m6/2026-09-12-agent-desktop-workflow.md).

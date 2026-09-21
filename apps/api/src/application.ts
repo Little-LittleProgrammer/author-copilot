@@ -1,3 +1,5 @@
+import type { NestExpressApplication } from "@nestjs/platform-express";
+import { PlatformErrorFilter } from "./platform/error-filter.js";
 import { ValidationPipe, type INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 
@@ -47,8 +49,12 @@ function configureCors(app: INestApplication): void {
 export async function createApplication(): Promise<INestApplication> {
   const options =
     process.env.NODE_ENV === "test" ? { logger: false as const } : {};
-  const app = await NestFactory.create(AppModule, options);
+  const app = await NestFactory.create<NestExpressApplication>(
+    AppModule,
+    options,
+  );
 
+  app.useBodyParser("json", { limit: "8mb" });
   const express = app.getHttpAdapter().getInstance() as ExpressLikeApplication;
   express.disable("x-powered-by");
 
@@ -58,6 +64,7 @@ export async function createApplication(): Promise<INestApplication> {
     }
     next();
   });
+  app.useGlobalFilters(new PlatformErrorFilter());
   app.useGlobalPipes(
     new ValidationPipe({
       forbidNonWhitelisted: true,

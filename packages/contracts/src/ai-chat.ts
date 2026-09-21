@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   AiCurrentDocumentContextSchema,
+  AiContextPathsSchema,
   AiInstructionSchema,
 } from "./ai-context.js";
 import { AppErrorSchema } from "./errors.js";
@@ -25,6 +26,7 @@ export const AiChatStartRequestSchema = z.strictObject({
   projectId: z.uuid(),
   mode: z.enum(["chat", "proposal"]).optional(),
   currentDocument: AiCurrentDocumentContextSchema,
+  contextPaths: AiContextPathsSchema.optional(),
   instruction: AiInstructionSchema,
   history: z
     .array(AiChatHistoryMessageSchema)
@@ -42,6 +44,7 @@ export const AiChatSourceSchema = KnowledgeSearchHitSchema.extend({
 export type AiChatSource = z.infer<typeof AiChatSourceSchema>;
 
 export const AiChatContextMetadataSchema = z.strictObject({
+  documentPaths: AiContextPathsSchema.optional(),
   scope: z.enum(["current_document", "full_book"]),
   knowledgeStatus: KnowledgeIndexStatusSchema,
   indexVersion: z.string().trim().min(1).nullable(),

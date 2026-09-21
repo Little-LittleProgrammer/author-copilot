@@ -31,7 +31,9 @@ interface VersionHistoryPanelProps {
   readonly projectId: string;
   readonly refreshKey: number;
   readonly dirty: boolean;
-  readonly onRepositoryChanged: () => void;
+  readonly onRepositoryChanged: () => Promise<void>;
+  readonly busy: boolean;
+  readonly onBusyChange: (busy: boolean) => void;
   readonly t: (key: MessageKey) => string;
 }
 
@@ -55,6 +57,8 @@ export function VersionHistoryPanel({
   refreshKey,
   dirty,
   onRepositoryChanged,
+  busy,
+  onBusyChange,
   t,
 }: VersionHistoryPanelProps): JSX.Element {
   const [versions, setVersions] = useState<readonly VersionSummary[]>([]);
@@ -143,16 +147,18 @@ export function VersionHistoryPanel({
       selectedBranch === branchState.currentBranch ||
       activeRecovery !== undefined ||
       dirty ||
+      busy ||
       branchSwitching
     ) {
       return;
     }
+    onBusyChange(true);
     setBranchSwitching(true);
     setBranchError(undefined);
     setBranchNotice(undefined);
     void api
       .switchBranch(projectId, selectedBranch)
-      .then((result) => {
+      .then(async (result) => {
         setBranchNotice(
           result.switched ? t("branchSwitched") : t("branchAlreadyCurrent"),
         );
@@ -163,7 +169,7 @@ export function VersionHistoryPanel({
             current: branch.name === result.branchName,
           })),
         }));
-        onRepositoryChanged();
+        await onRepositoryChanged();
         setHistoryLoading(true);
         setReloadKey((value) => value + 1);
         setRecoveryReloadKey((value) => value + 1);
@@ -179,7 +185,10 @@ export function VersionHistoryPanel({
             : errorMessage(reason, t("branchSwitchFailed")),
         );
       })
-      .finally(() => setBranchSwitching(false));
+      .finally(() => {
+        setBranchSwitching(false);
+        onBusyChange(false);
+      });
   };
 
   const restoreTask = (): void => {
@@ -188,25 +197,30 @@ export function VersionHistoryPanel({
       api === undefined ||
       activeRecovery === undefined ||
       dirty ||
+      busy ||
       restoring ||
       !window.confirm(t("taskRecoveryConfirm"))
     ) {
       return;
     }
+    onBusyChange(true);
     setRestoring(true);
     setRecoveryError(undefined);
     setRestoreResult(undefined);
     void api
       .restore(projectId, activeRecovery.taskId)
-      .then((result) => {
+      .then(async (result) => {
         setRestoreResult(result);
-        onRepositoryChanged();
+        await onRepositoryChanged();
         setRecoveryReloadKey((value) => value + 1);
       })
       .catch((reason: unknown) => {
         setRecoveryError(errorMessage(reason, t("taskRecoveryFailed")));
       })
-      .finally(() => setRestoring(false));
+      .finally(() => {
+        setRestoring(false);
+        onBusyChange(false);
+      });
   };
 
   useEffect(() => {
@@ -308,6 +322,7 @@ export function VersionHistoryPanel({
               branchesLoading ||
               branchSwitching ||
               dirty ||
+              busy ||
               activeRecovery !== undefined ||
               branchState.branches.length === 0
             }
@@ -335,6 +350,7 @@ export function VersionHistoryPanel({
               selectedBranch === branchState.currentBranch ||
               branchSwitching ||
               dirty ||
+              busy ||
               activeRecovery !== undefined
             }
             title={

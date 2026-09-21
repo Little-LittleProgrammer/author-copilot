@@ -7,6 +7,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  rename,
   realpath,
   rm,
   stat,
@@ -91,6 +92,64 @@ afterEach(async () => {
 });
 
 describe("ProjectService templates and registry", () => {
+  it("rejects every registered operation after the root is redirected", async () => {
+    const { projects, base, service } = await fixture();
+    const project = await service.createProject(projects, "Original", "novel");
+    const outside = join(base, "unregistered");
+    await mkdir(outside);
+    await writeFile(join(outside, "outside.md"), "unregistered content");
+    await rename(project.rootPath, `${project.rootPath}-moved`);
+    await symlink(
+      outside,
+      project.rootPath,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    const operations = [
+      () => service.getProjectRoot(project.projectId),
+      () => service.getStructure(project.projectId),
+      () => service.readDocument(project.projectId, "outside.md"),
+      () =>
+        service.saveDocument(
+          project.projectId,
+          "outside.md",
+          "replacement",
+          "a".repeat(64),
+        ),
+      () => service.renameEntry(project.projectId, "outside.md", "renamed"),
+      () => service.deleteEntry(project.projectId, "outside.md"),
+      () => service.updateProjectTitle(project.projectId, "Changed"),
+    ];
+    for (const operation of operations) {
+      await expect(operation()).rejects.toBeInstanceOf(InvalidProjectPathError);
+    }
+    expect(await readFile(join(outside, "outside.md"), "utf8")).toBe(
+      "unregistered content",
+    );
+    expect(await readdir(outside)).toEqual(["outside.md"]);
+  });
+
+  it.each([".git", ".GIT", "author-copilot.json"])(
+    "rejects reserved folder rename %s before changing the structure",
+    async (name) => {
+      const { projects, service } = await fixture();
+      const project = await service.createProject(projects, "Book", "novel");
+      await expect(
+        service.renameEntry(project.projectId, "第一卷/第一章", name),
+      ).rejects.toBeInstanceOf(InvalidProjectPathError);
+      expect(
+        (await service.getStructure(project.projectId)).nodes,
+      ).toHaveLength(1);
+      expect(
+        (
+          await service.readDocument(
+            project.projectId,
+            "第一卷/第一章/01-正文.md",
+          )
+        ).content,
+      ).toBe("");
+    },
+  );
+
   it("creates a Chinese novel template and registers its canonical path", async () => {
     const { projects, userData, service } = await fixture();
     const project = await service.createProject(

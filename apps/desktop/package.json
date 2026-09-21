@@ -32,9 +32,11 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.e2e.json --noEmit && tsc -p tsconfig.web.json --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "catalog:",
     "@anthropic-ai/sdk": "catalog:",
     "@author-copilot/contracts": "workspace:*",
     "@author-copilot/project-schema": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
     "@radix-ui/react-dialog": "catalog:",
     "@radix-ui/react-label": "catalog:",
     "@radix-ui/react-slot": "catalog:",
@@ -45,7 +47,8 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "tailwind-merge": "catalog:",
-    "tw-animate-css": "catalog:"
+    "tw-animate-css": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@author-copilot/config-eslint": "workspace:*",
@@ -95,6 +98,9 @@
     },
     "win": {
       "verifyUpdateCodeSignature": true
-    }
+    },
+    "asarUnpack": [
+      "node_modules/@anthropic-ai/claude-agent-sdk-*/**/*"
+    ]
   }
 }

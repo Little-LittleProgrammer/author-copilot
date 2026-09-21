@@ -14,6 +14,9 @@ export interface ClaudeToolRequest {
 
 export interface ClaudeStreamRequest {
   readonly apiKey: string;
+  readonly baseURL?: string;
+  readonly model?: string;
+  readonly platform?: boolean;
   readonly messages: readonly MessageParam[];
   readonly signal: AbortSignal;
   readonly system: string;
@@ -43,17 +46,20 @@ export class AnthropicClaudeTransport implements ClaudeTransport {
 
   async stream(request: ClaudeStreamRequest): Promise<void> {
     const client = new Anthropic({
-      apiKey: request.apiKey,
-      ...(this.options.baseURL === undefined
+      ...(request.platform
+        ? { apiKey: null, authToken: request.apiKey }
+        : { apiKey: request.apiKey }),
+      fetchOptions: { redirect: "error" },
+      ...((request.baseURL ?? this.options.baseURL) === undefined
         ? {}
-        : { baseURL: this.options.baseURL }),
+        : { baseURL: request.baseURL ?? this.options.baseURL }),
       maxRetries: 0,
       timeout: request.timeoutMs,
     });
     const stream = client.messages.stream({
       max_tokens: this.maxTokens,
       messages: [...request.messages],
-      model: this.model,
+      model: request.model ?? this.model,
       system: request.system,
       ...(request.tool === undefined
         ? {}

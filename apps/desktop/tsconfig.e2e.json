@@ -7,6 +7,7 @@
   },
   "include": [
     "e2e/**/*.ts",
+    "src/shared/**/*.ts",
     "src/main/git/project-operation-queue.ts",
     "src/main/git/task-snapshot-service.ts"
   ]
