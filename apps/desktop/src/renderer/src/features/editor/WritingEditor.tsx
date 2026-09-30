@@ -27,8 +27,10 @@ import type { MessageKey } from "../../i18n/index.js";
 import { FindReplaceWindow } from "./FindReplaceWindow.js";
 import { findTextMatches, formatManuscript } from "./editor-text.js";
 import { useWritingStatistics } from "./use-writing-statistics.js";
+import { useWritingGoal } from "./use-writing-goal.js";
 import { countWritingCharacters } from "./writing-statistics.js";
 import { WritingHistoryDialog } from "./WritingHistoryDialog.js";
+import { WritingGoalDialog } from "./WritingGoalDialog.js";
 
 interface WritingEditorProps {
   readonly sidebar: ReactNode;
@@ -110,6 +112,7 @@ export function WritingEditor({
 }: WritingEditorProps): JSX.Element {
   const editor = useRef<HTMLTextAreaElement>(null);
   const writingHistoryButton = useRef<HTMLButtonElement>(null);
+  const writingGoalButton = useRef<HTMLButtonElement>(null);
   const compositionStart = useRef<string | undefined>(undefined);
   const findInput = useRef<HTMLInputElement>(null);
   const [font, setFont] = useState(loadFont);
@@ -117,6 +120,7 @@ export function WritingEditor({
   const [fontOpen, setFontOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [writingHistoryOpen, setWritingHistoryOpen] = useState(false);
+  const [writingGoalOpen, setWritingGoalOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [replacement, setReplacement] = useState("");
   const [activeMatch, setActiveMatch] = useState(0);
@@ -127,6 +131,7 @@ export function WritingEditor({
     future: [] as string[],
   });
   const writingStats = useWritingStatistics(projectId);
+  const writingGoal = useWritingGoal(projectId);
   const lastCountedContent = useRef(content);
   // A document switch or external reload/discard starts a new undo history.
   if (history.path !== documentPath || history.value !== content) {
@@ -146,6 +151,24 @@ export function WritingEditor({
   }, [font]);
   const disabled = readOnly || documentPath === undefined;
   const wordCount = useMemo(() => countWritingCharacters(content), [content]);
+  const goalProgress =
+    writingGoal.dailyTarget !== undefined && writingGoal.dailyTarget > 0
+      ? writingStats.today === undefined
+        ? undefined
+        : Math.min(
+            100,
+            Math.max(0, (writingStats.today / writingGoal.dailyTarget) * 100),
+          )
+      : undefined;
+  const goalLabel = writingGoal.failed
+    ? t("writingGoalUnavailable")
+    : writingGoal.dailyTarget === undefined
+      ? t("writingGoal")
+      : writingGoal.dailyTarget === 0
+        ? t("writingGoalDisabled")
+        : t("writingGoalProgress")
+            .replace("{current}", String(writingStats.today ?? "—"))
+            .replace("{target}", String(writingGoal.dailyTarget));
   const matches = useMemo(
     () => findTextMatches(content, query),
     [content, query],
@@ -636,6 +659,32 @@ export function WritingEditor({
                     >
                       {t("writingHistory")}
                     </button>
+                    <button
+                      type="button"
+                      className="text-button writing-goal-button"
+                      aria-haspopup="dialog"
+                      ref={writingGoalButton}
+                      data-testid="writing-goal-button"
+                      onClick={() => setWritingGoalOpen(true)}
+                      title={
+                        writingGoal.dailyTarget !== undefined &&
+                        writingGoal.dailyTarget > 0 &&
+                        writingStats.today !== undefined &&
+                        writingStats.today >= writingGoal.dailyTarget
+                          ? t("writingGoalReached")
+                          : undefined
+                      }
+                    >
+                      {goalLabel}
+                      {goalProgress !== undefined ? (
+                        <span
+                          className="writing-goal-progress"
+                          aria-hidden="true"
+                        >
+                          <span style={{ width: `${goalProgress}%` }} />
+                        </span>
+                      ) : null}
+                    </button>
                     {writingStats.failed ? (
                       <button
                         type="button"
@@ -670,6 +719,16 @@ export function WritingEditor({
           tracker={writingStats.tracker}
           onClose={() => setWritingHistoryOpen(false)}
           onReturnFocus={() => writingHistoryButton.current?.focus()}
+          t={t}
+        />
+      ) : null}
+      {writingGoalOpen && projectId !== undefined ? (
+        <WritingGoalDialog
+          open
+          dailyTarget={writingGoal.dailyTarget ?? 0}
+          onClose={() => setWritingGoalOpen(false)}
+          onReturnFocus={() => writingGoalButton.current?.focus()}
+          onSave={writingGoal.save}
           t={t}
         />
       ) : null}

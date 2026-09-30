@@ -2863,6 +2863,26 @@ input[type="search"]::-webkit-search-cancel-button {
 .writing-statistics-pending {
   color: var(--muted);
 }
+.writing-goal-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.writing-goal-progress {
+  display: inline-block;
+  width: 42px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  vertical-align: middle;
+}
+.writing-goal-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 160ms ease;
+}
 .assistant-dock {
   display: flex;
   flex-direction: column;

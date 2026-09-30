@@ -85,6 +85,9 @@ import type {
   WritingStatisticsHistoryResponse,
   WritingStatisticsRecord,
   WritingStatisticsResponse,
+  WritingGoalRequest,
+  WritingGoalResponse,
+  WritingGoalSetRequest,
 } from "@author-copilot/contracts";
 
 export interface AuthorCopilotApi {
@@ -98,6 +101,12 @@ export interface AuthorCopilotApi {
     readonly record: (
       request: WritingStatisticsRecord,
     ) => Promise<WritingStatisticsResponse>;
+  };
+  readonly writingGoal: {
+    readonly get: (request: WritingGoalRequest) => Promise<WritingGoalResponse>;
+    readonly set: (
+      request: WritingGoalSetRequest,
+    ) => Promise<WritingGoalResponse>;
   };
   readonly aiSettings: (
     request: AiSettingsRequest,

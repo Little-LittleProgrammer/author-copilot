@@ -20,6 +20,9 @@ import {
   VersionBranchSwitchRequestSchema,
   WritingStatisticsHistoryRequestSchema,
   WritingStatisticsHistoryResponseSchema,
+  WritingGoalRequestSchema,
+  WritingGoalSetRequestSchema,
+  WritingGoalResponseSchema,
 } from "../src/index.js";
 
 const taskId = "20000000-0000-4000-8000-000000000001";
@@ -58,8 +61,34 @@ describe("IPC contracts", () => {
     ).toBe(false);
   });
 
+  it("bounds daily writing goals and keeps response payloads strict", () => {
+    expect(WritingGoalRequestSchema.parse({ projectId: taskId })).toEqual({
+      projectId: taskId,
+    });
+    expect(
+      WritingGoalSetRequestSchema.parse({
+        projectId: taskId,
+        dailyTarget: 1000,
+      }),
+    ).toEqual({ projectId: taskId, dailyTarget: 1000 });
+    for (const dailyTarget of [-1, 1.5, 1_000_001]) {
+      expect(
+        WritingGoalSetRequestSchema.safeParse({
+          projectId: taskId,
+          dailyTarget,
+        }).success,
+      ).toBe(false);
+    }
+    expect(
+      WritingGoalResponseSchema.safeParse({
+        ok: true,
+        goal: { dailyTarget: 500, extra: true },
+      }).success,
+    ).toBe(false);
+  });
+
   it("keeps every declared channel in the validated whitelist", () => {
-    expect(IPC_CHANNEL_NAMES).toHaveLength(56);
+    expect(IPC_CHANNEL_NAMES).toHaveLength(58);
     for (const channel of IPC_CHANNEL_NAMES) {
       expect(IpcChannelSchema.parse(channel)).toBe(channel);
     }

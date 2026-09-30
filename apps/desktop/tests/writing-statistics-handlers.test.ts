@@ -18,6 +18,47 @@ vi.mock("electron", () => ({
 import { registerWritingStatisticsHandlers } from "../src/main/ipc/writing-statistics-handlers.js";
 
 describe("writing statistics IPC", () => {
+  it("guards daily goal reads and writes by the active project", async () => {
+    const projectId = "10000000-0000-4000-8000-000000000001";
+    const trustedRendererUrl = "file:///app/renderer/index.html";
+    const frame = { url: trustedRendererUrl };
+    const event = { senderFrame: frame, sender: { id: 42, mainFrame: frame } };
+    const manager = {
+      getContext: vi.fn(() => ({ kind: "project", project: { projectId } })),
+    };
+    const service = {
+      getGoal: vi.fn(async () => ({ dailyTarget: 500 })),
+      setGoal: vi.fn(async () => ({ dailyTarget: 1200 })),
+    };
+    registerWritingStatisticsHandlers({
+      trustedRendererUrl,
+      service: service as unknown as WritingStatisticsService,
+      getTabManager: () => manager as unknown as TabManager,
+    });
+    const get = handlers.get(IPC_INVOKE_CHANNELS.writingGoalGet)!;
+    const set = handlers.get(IPC_INVOKE_CHANNELS.writingGoalSet)!;
+    expect(await get(event, { projectId })).toEqual({
+      ok: true,
+      goal: { dailyTarget: 500 },
+    });
+    expect(await set(event, { projectId, dailyTarget: 1200 })).toEqual({
+      ok: true,
+      goal: { dailyTarget: 1200 },
+    });
+    expect(await get(event, { projectId, dailyTarget: 10 })).toEqual({
+      ok: false,
+      error: "invalid_request",
+    });
+    expect(
+      await set(event, {
+        projectId: "20000000-0000-4000-8000-000000000001",
+        dailyTarget: 1200,
+      }),
+    ).toEqual({ ok: false, error: "invalid_request" });
+    expect(service.getGoal).toHaveBeenCalledTimes(1);
+    expect(service.setGoal).toHaveBeenCalledTimes(1);
+  });
+
   it("guards history reads and sanitizes storage errors", async () => {
     const projectId = "10000000-0000-4000-8000-000000000001";
     const trustedRendererUrl = "file:///app/renderer/index.html";

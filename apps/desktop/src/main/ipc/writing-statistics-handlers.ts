@@ -5,6 +5,9 @@ import {
   WritingStatisticsRecordSchema,
   WritingStatisticsRequestSchema,
   WritingStatisticsResponseSchema,
+  WritingGoalRequestSchema,
+  WritingGoalResponseSchema,
+  WritingGoalSetRequestSchema,
 } from "@author-copilot/contracts";
 import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import { assertTrustedIpcRequest } from "../ipc-policy.js";
@@ -20,6 +23,8 @@ export function registerWritingStatisticsHandlers(options: {
     IPC_INVOKE_CHANNELS.writingStatisticsHistory,
     IPC_INVOKE_CHANNELS.writingStatisticsGet,
     IPC_INVOKE_CHANNELS.writingStatisticsRecord,
+    IPC_INVOKE_CHANNELS.writingGoalGet,
+    IPC_INVOKE_CHANNELS.writingGoalSet,
   ]) {
     ipcMain.handle(
       channel,
@@ -40,7 +45,11 @@ export function registerWritingStatisticsHandlers(options: {
             ? WritingStatisticsHistoryRequestSchema
             : channel === IPC_INVOKE_CHANNELS.writingStatisticsRecord
               ? WritingStatisticsRecordSchema
-              : WritingStatisticsRequestSchema;
+              : channel === IPC_INVOKE_CHANNELS.writingGoalGet
+                ? WritingGoalRequestSchema
+                : channel === IPC_INVOKE_CHANNELS.writingGoalSet
+                  ? WritingGoalSetRequestSchema
+                  : WritingStatisticsRequestSchema;
         const request = schema.safeParse(args[0]);
         const context = options.getTabManager()?.getContext(event.sender.id);
         if (
@@ -48,12 +57,30 @@ export function registerWritingStatisticsHandlers(options: {
           context?.kind !== "project" ||
           context.project.projectId !== request.data.projectId
         ) {
-          return WritingStatisticsResponseSchema.parse({
-            ok: false,
-            error: "invalid_request",
-          });
+          return channel === IPC_INVOKE_CHANNELS.writingGoalGet ||
+            channel === IPC_INVOKE_CHANNELS.writingGoalSet
+            ? WritingGoalResponseSchema.parse({
+                ok: false,
+                error: "invalid_request",
+              })
+            : WritingStatisticsResponseSchema.parse({
+                ok: false,
+                error: "invalid_request",
+              });
         }
         try {
+          if (channel === IPC_INVOKE_CHANNELS.writingGoalGet) {
+            const goal = await options.service.getGoal(
+              WritingGoalRequestSchema.parse(request.data),
+            );
+            return WritingGoalResponseSchema.parse({ ok: true, goal });
+          }
+          if (channel === IPC_INVOKE_CHANNELS.writingGoalSet) {
+            const goal = await options.service.setGoal(
+              WritingGoalSetRequestSchema.parse(request.data),
+            );
+            return WritingGoalResponseSchema.parse({ ok: true, goal });
+          }
           if (channel === IPC_INVOKE_CHANNELS.writingStatisticsHistory) {
             const history = await options.service.history(
               WritingStatisticsHistoryRequestSchema.parse(request.data),
@@ -73,10 +100,16 @@ export function registerWritingStatisticsHandlers(options: {
                 );
           return WritingStatisticsResponseSchema.parse({ ok: true, snapshot });
         } catch {
-          return WritingStatisticsResponseSchema.parse({
-            ok: false,
-            error: "unavailable",
-          });
+          return channel === IPC_INVOKE_CHANNELS.writingGoalGet ||
+            channel === IPC_INVOKE_CHANNELS.writingGoalSet
+            ? WritingGoalResponseSchema.parse({
+                ok: false,
+                error: "unavailable",
+              })
+            : WritingStatisticsResponseSchema.parse({
+                ok: false,
+                error: "unavailable",
+              });
         }
       },
     );

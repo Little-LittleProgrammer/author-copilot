@@ -1423,6 +1423,17 @@ test("shows seven-day writing history with signed totals and recoverable read fa
       page
         .getByRole("button", { name: /七日趋势|7-day trend/u, exact: true })
         .click();
+    const goalButton = page.getByTestId("writing-goal-button");
+    await expect(goalButton).toHaveText(/未设置每日目标|No daily goal/u);
+    await goalButton.click();
+    const goalDialog = page.getByRole("dialog", {
+      name: /设置每日目标|Set daily goal/u,
+    });
+    await goalDialog.getByTestId("writing-goal-input").fill("100");
+    await goalDialog.getByTestId("writing-goal-save").click();
+    await expect(goalButton).toContainText(/今日 0 \/ 100|Today 0 \/ 100/u);
+    await expect(goalButton).toBeFocused();
+
     const dialog = page.getByRole("dialog", { name: /七日趋势|7-day trend/u });
     await openHistory();
     await expect(dialog.getByTestId("writing-history-total")).toHaveText("0");
@@ -1455,6 +1466,7 @@ test("shows seven-day writing history with signed totals and recoverable read fa
     await editor.press("ControlOrMeta+End");
     await editor.pressSequentially("abc");
     await expect(page.getByTestId("writing-today")).toHaveText("3");
+    await expect(goalButton).toContainText(/今日 3 \/ 100|Today 3 \/ 100/u);
     // Opening history includes the latest unsaved edit.
     await openHistory();
     await expect(dialog.getByTestId("writing-history-total")).toHaveText("363");
@@ -1500,6 +1512,21 @@ test("shows seven-day writing history with signed totals and recoverable read fa
     await expect(page.getByTestId("save-document")).toBeDisabled();
     await page.reload();
     await page.getByRole("button", { name: "第一章", exact: true }).click();
+    await expect(page.getByTestId("writing-goal-button")).toContainText(
+      /今日 3 \/ 100|Today 3 \/ 100/u,
+    );
+    await page.getByTestId("writing-goal-button").click();
+    const persistedGoalDialog = page.getByRole("dialog", {
+      name: /设置每日目标|Set daily goal/u,
+    });
+    await expect(
+      persistedGoalDialog.getByTestId("writing-goal-input"),
+    ).toHaveValue("100");
+    await persistedGoalDialog.getByTestId("writing-goal-input").fill("0");
+    await persistedGoalDialog.getByTestId("writing-goal-save").click();
+    await expect(page.getByTestId("writing-goal-button")).toHaveText(
+      /未设置每日目标|No daily goal/u,
+    );
     await openHistory();
     await expect(dialog.getByTestId("writing-history-total")).toHaveText("363");
     // The open panel follows local calendar rollover without reopening it.

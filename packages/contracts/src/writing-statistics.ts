@@ -85,3 +85,33 @@ export type WritingStatisticsSnapshot = z.infer<
 export type WritingStatisticsResponse = z.infer<
   typeof WritingStatisticsResponseSchema
 >;
+
+const WritingGoalValueSchema = z.int().min(0).max(1_000_000);
+
+export const WritingGoalRequestSchema = z.strictObject({
+  projectId: z.uuid(),
+});
+
+export const WritingGoalSetRequestSchema = WritingGoalRequestSchema.extend({
+  dailyTarget: WritingGoalValueSchema,
+});
+
+export const WritingGoalSchema = z.strictObject({
+  dailyTarget: WritingGoalValueSchema,
+});
+
+export const WritingGoalResponseSchema = z.discriminatedUnion("ok", [
+  z.strictObject({
+    ok: z.literal(true),
+    goal: WritingGoalSchema,
+  }),
+  z.strictObject({
+    ok: z.literal(false),
+    error: z.enum(["invalid_request", "unavailable"]),
+  }),
+]);
+
+export type WritingGoalRequest = z.infer<typeof WritingGoalRequestSchema>;
+export type WritingGoalSetRequest = z.infer<typeof WritingGoalSetRequestSchema>;
+export type WritingGoal = z.infer<typeof WritingGoalSchema>;
+export type WritingGoalResponse = z.infer<typeof WritingGoalResponseSchema>;

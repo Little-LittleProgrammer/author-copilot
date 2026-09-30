@@ -36,6 +36,31 @@ afterEach(async () => {
 });
 
 describe("writing statistics persistence", () => {
+  it("persists daily goals per project and keeps malformed goals intact", async () => {
+    const { root, service, request } = await fixture();
+    expect(await service.getGoal({ projectId: request.projectId })).toEqual({
+      dailyTarget: 0,
+    });
+    await service.setGoal({ projectId: request.projectId, dailyTarget: 1200 });
+    expect(
+      await new WritingStatisticsService(root).getGoal({
+        projectId: request.projectId,
+      }),
+    ).toEqual({ dailyTarget: 1200 });
+    expect(await service.getGoal({ projectId: randomUUID() })).toEqual({
+      dailyTarget: 0,
+    });
+    const path = join(root, "goals", `${request.projectId}.json`);
+    await writeFile(path, "damaged");
+    await expect(
+      service.getGoal({ projectId: request.projectId }),
+    ).rejects.toThrow();
+    expect(await readFile(path, "utf8")).toBe("damaged");
+    await expect(
+      service.setGoal({ projectId: request.projectId, dailyTarget: 1_000_001 }),
+    ).rejects.toThrow();
+  });
+
   it("reads seven ordered days with zero gaps, signed totals and queued writes across a leap month", async () => {
     const { root, service, request } = await fixture();
     await service.record({

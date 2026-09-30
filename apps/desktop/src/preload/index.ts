@@ -89,9 +89,12 @@ import {
 import {
   WritingStatisticsResponseSchema,
   WritingStatisticsHistoryResponseSchema,
+  WritingGoalResponseSchema,
   type WritingStatisticsHistoryRequest,
   type WritingStatisticsRequest,
   type WritingStatisticsRecord,
+  type WritingGoalRequest,
+  type WritingGoalSetRequest,
 } from "@author-copilot/contracts";
 import { contextBridge, ipcRenderer } from "electron";
 
@@ -136,6 +139,16 @@ const api: AuthorCopilotApi = Object.freeze({
           IPC_INVOKE_CHANNELS.writingStatisticsRecord,
           request,
         ),
+      ),
+  }),
+  writingGoal: Object.freeze({
+    get: async (request: WritingGoalRequest) =>
+      WritingGoalResponseSchema.parse(
+        await ipcRenderer.invoke(IPC_INVOKE_CHANNELS.writingGoalGet, request),
+      ),
+    set: async (request: WritingGoalSetRequest) =>
+      WritingGoalResponseSchema.parse(
+        await ipcRenderer.invoke(IPC_INVOKE_CHANNELS.writingGoalSet, request),
       ),
   }),
   system: Object.freeze({

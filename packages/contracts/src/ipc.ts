@@ -117,6 +117,9 @@ import {
   WritingStatisticsRequestSchema,
   WritingStatisticsRecordSchema,
   WritingStatisticsResponseSchema,
+  WritingGoalRequestSchema,
+  WritingGoalResponseSchema,
+  WritingGoalSetRequestSchema,
 } from "./writing-statistics.js";
 
 export const IPC_INVOKE_CHANNELS = {
@@ -124,6 +127,8 @@ export const IPC_INVOKE_CHANNELS = {
   writingStatisticsHistory: "writing-statistics:history",
   writingStatisticsGet: "writing-statistics:get",
   writingStatisticsRecord: "writing-statistics:record",
+  writingGoalGet: "writing-goal:get",
+  writingGoalSet: "writing-goal:set",
   aiSettings: "ai:settings",
   agentRetain: "agent:retain",
   agentCancel: "agent:cancel",
@@ -186,6 +191,8 @@ export const IPC_INVOKE_CHANNEL_NAMES = [
   IPC_INVOKE_CHANNELS.writingStatisticsHistory,
   IPC_INVOKE_CHANNELS.writingStatisticsGet,
   IPC_INVOKE_CHANNELS.writingStatisticsRecord,
+  IPC_INVOKE_CHANNELS.writingGoalGet,
+  IPC_INVOKE_CHANNELS.writingGoalSet,
   IPC_INVOKE_CHANNELS.aiSettings,
   IPC_INVOKE_CHANNELS.agentRetain,
   IPC_INVOKE_CHANNELS.agentCancel,
@@ -272,6 +279,14 @@ export const IPC_INVOKE_CONTRACTS = {
   [IPC_INVOKE_CHANNELS.writingStatisticsRecord]: {
     request: WritingStatisticsRecordSchema,
     response: WritingStatisticsResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.writingGoalGet]: {
+    request: WritingGoalRequestSchema,
+    response: WritingGoalResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.writingGoalSet]: {
+    request: WritingGoalSetRequestSchema,
+    response: WritingGoalResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.agentRetain]: {
     request: AgentRetainRequestSchema,

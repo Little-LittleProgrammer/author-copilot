@@ -12,6 +12,12 @@ import {
   type WritingStatisticsRecord,
   type WritingStatisticsRequest,
   type WritingStatisticsSnapshot,
+  WritingGoalRequestSchema,
+  WritingGoalSchema,
+  WritingGoalSetRequestSchema,
+  type WritingGoal,
+  type WritingGoalRequest,
+  type WritingGoalSetRequest,
 } from "@author-copilot/contracts";
 import { atomicWriteFile } from "../project/file-utils.js";
 
@@ -24,6 +30,11 @@ const DayFileSchema = z.strictObject({
       netCharacters: z.int(),
     }),
   ),
+});
+
+const GoalFileSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  dailyTarget: z.int().min(0).max(1_000_000),
 });
 
 /** One Main-owned writer; statistics never contain manuscript text. */
@@ -76,6 +87,30 @@ export class WritingStatisticsService {
     );
   }
 
+  getGoal(request: WritingGoalRequest): Promise<WritingGoal> {
+    return this.enqueue(async () => {
+      const { projectId } = WritingGoalRequestSchema.parse(request);
+      return this.readGoal(projectId);
+    });
+  }
+
+  setGoal(request: WritingGoalSetRequest): Promise<WritingGoal> {
+    return this.enqueue(async () => {
+      const parsed = WritingGoalSetRequestSchema.parse(request);
+      const path = this.goalPath(parsed.projectId);
+      const goal = WritingGoalSchema.parse({
+        dailyTarget: parsed.dailyTarget,
+      });
+      await mkdir(dirname(path), { recursive: true });
+      await atomicWriteFile(
+        path,
+        `${JSON.stringify({ schemaVersion: 1, ...goal })}\n`,
+        0o600,
+      );
+      return goal;
+    });
+  }
+
   async drain(): Promise<void> {
     await this.queue;
   }
@@ -104,6 +139,23 @@ export class WritingStatisticsService {
       ))
         throw error;
       return { schemaVersion: 1, sessions: {} };
+    }
+  }
+
+  private goalPath(projectId: string): string {
+    return join(this.root, "goals", `${projectId}.json`);
+  }
+
+  private async readGoal(projectId: string): Promise<WritingGoal> {
+    try {
+      const data = GoalFileSchema.parse(
+        JSON.parse(await readFile(this.goalPath(projectId), "utf8")),
+      );
+      return WritingGoalSchema.parse({ dailyTarget: data.dailyTarget });
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT")
+        return { dailyTarget: 0 };
+      throw error;
     }
   }
 
