@@ -13,6 +13,9 @@ export interface StructureNode {
   readonly kind: "document" | "group";
   readonly name: string;
   readonly path: string;
+  /** Directory represented by a chapter body; used for rename and delete. */
+  readonly entryPath?: string;
+  readonly namePrefix?: string;
   readonly role: "act" | "chapter" | "scene" | "unclassified" | "volume";
 }
 
@@ -23,6 +26,14 @@ export interface DocumentSnapshot {
 }
 
 export interface ImportPreview {
+  readonly sourceKind: "folder" | "file";
+  readonly document?: {
+    readonly format: "txt" | "doc" | "docx";
+    readonly textPreview: string;
+    readonly characterCount: number;
+    readonly splitChapters: boolean;
+    readonly matchedChapterCount: number;
+  };
   readonly fileCount: number;
   readonly name: string;
   readonly previewToken: string;
@@ -39,7 +50,11 @@ export interface ImportPreviewNode {
 export class ProjectApiError extends Error {
   public readonly code: string;
 
-  public constructor(code: string, message: string) {
+  public constructor(
+    code: string,
+    message: string,
+    public readonly importReason?: string,
+  ) {
     super(message);
     this.name = "ProjectApiError";
     this.code = code;
@@ -68,7 +83,11 @@ export interface ProjectBridge {
     readonly projectId: string;
   }) => Promise<readonly StructureNode[]>;
   readonly list: () => Promise<readonly ProjectSummary[]>;
-  readonly previewImport: (type: ProjectType) => Promise<ImportPreview | null>;
+  readonly previewImport: (
+    type: ProjectType,
+    sourceKind?: "folder" | "file",
+    splitChapters?: boolean,
+  ) => Promise<ImportPreview | null>;
   readonly readDocument: (input: {
     readonly path: string;
     readonly projectId: string;

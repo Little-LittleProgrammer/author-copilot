@@ -104,16 +104,24 @@ async function openAssistant(
   });
   if ((await toggle.getAttribute("aria-expanded")) !== "true")
     await toggle.click();
-  const label =
-    mode === "agent"
-      ? /Agent 任务|Agent/u
-      : mode === "knowledge"
-        ? /知识库|Knowledge/u
-        : /对话|Chat/u;
-  await page
-    .getByTestId("assistant-dock")
-    .getByRole("button", { name: label, exact: true })
-    .click();
+  const dock = page.getByTestId("assistant-dock");
+  if (mode === "knowledge") {
+    const knowledge = dock.getByRole("button", {
+      name: /知识库|Knowledge/u,
+      exact: true,
+    });
+    if (await knowledge.count()) await knowledge.click();
+  } else {
+    const back = dock.getByRole("button", {
+      name: /返回对话|Back to chat/u,
+      exact: true,
+    });
+    if (await back.isVisible()) await back.click();
+    if (await page.getByTestId("assistant-mode").isEnabled())
+      await page
+        .getByTestId("assistant-mode")
+        .selectOption(mode === "agent" ? "agent" : "ask");
+  }
 }
 
 async function closeWorkspacePanel(page: Page): Promise<void> {
@@ -175,7 +183,7 @@ test("creates, edits, saves, and protects an externally changed novel", async ()
     await expect(appTabs.getByRole("tab")).toHaveCount(2);
 
     const page = await rendererPage(application, "project");
-    await page.getByRole("button", { name: "01-正文", exact: true }).click();
+    await page.getByRole("button", { name: "第一章", exact: true }).click();
     const editor = page.getByTestId("document-editor");
     await editor.fill("保存时的正文");
     await editor.evaluate((element) => {
@@ -338,7 +346,7 @@ test("restores an Agent task from history without losing the task-start file", a
     await center.getByTestId("project-name").fill(projectTitle);
     await center.getByTestId("project-dialog-submit").click();
     const page = await rendererPage(application, "project");
-    await page.getByRole("button", { name: "01-正文", exact: true }).click();
+    await page.getByRole("button", { name: "第一章", exact: true }).click();
     const editor = page.getByTestId("document-editor");
     const taskStartContent = "# 任务前版本\n\n保留这一段。\n";
     await editor.fill(taskStartContent);
@@ -431,7 +439,7 @@ test("keeps native project views alive across switches and destroys them on clos
         childCount: 2,
       });
 
-    await project.getByRole("button", { name: "01-正文", exact: true }).click();
+    await project.getByRole("button", { name: "第一章", exact: true }).click();
     await project.getByTestId("document-editor").fill("尚未保存的原生标签内容");
     const projectTab = shell
       .locator(".app-tabs")
@@ -546,6 +554,11 @@ test("fills the writing page and edits work, volume, chapter, and document names
     await center.getByTestId("project-name").fill(projectTitle);
     await center.getByTestId("project-dialog-submit").click();
     const page = await rendererPage(application, "project");
+    await writeFile(
+      join(projectRoot, "第一卷", "第一章", "02-后续.md"),
+      "后续文稿",
+    );
+    await page.reload();
     await page.getByRole("button", { name: "01-正文", exact: true }).click();
 
     const editor = page.getByTestId("document-editor");
@@ -601,7 +614,9 @@ test("fills the writing page and edits work, volume, chapter, and document names
       .getByRole("button", { name: /确认重命名|Confirm rename/u })
       .click();
 
-    await expect(page.locator(".document-title h2")).toHaveText("开场");
+    await expect(
+      page.getByRole("heading", { name: "开场", exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "上卷", exact: true }),
     ).toBeVisible();
@@ -664,7 +679,7 @@ test("initializes and searches the local whole-work index with source navigation
     await center.getByTestId("project-name").fill("索引证据");
     await center.getByTestId("project-dialog-submit").click();
     const page = await rendererPage(application, "project");
-    await page.getByRole("button", { name: "01-正文", exact: true }).click();
+    await page.getByRole("button", { name: "第一章", exact: true }).click();
     await page
       .getByTestId("document-editor")
       .fill("# 雨夜\n\n白塔钟声响起，林舟在旧站台等候。\n");
@@ -782,7 +797,7 @@ test("streams a BYOK Claude answer and opens its local source", async () => {
     await center.getByTestId("project-name").fill("Claude 来源对话");
     await center.getByTestId("project-dialog-submit").click();
     const page = await rendererPage(application, "project");
-    await page.getByRole("button", { name: "01-正文", exact: true }).click();
+    await page.getByRole("button", { name: "第一章", exact: true }).click();
     await page
       .getByTestId("document-editor")
       .fill("# 雨夜\n\n白塔钟声响起，林舟在旧站台等候。\n");
@@ -807,10 +822,10 @@ test("streams a BYOK Claude answer and opens its local source", async () => {
     await expect(page.getByTestId("ai-chat-panel")).toContainText(
       "林舟记得白塔钟声。[1]",
     );
-    await expect(
-      page.getByText(/使用当前文档和全书来源|full-book sources/u),
-    ).toBeVisible();
-    const source = page.getByRole("button", { name: /\[1\].*01-正文/u });
+    await page.locator(".copilot-sources summary").click();
+    const source = page
+      .locator(".copilot-sources")
+      .getByRole("button", { name: /01-正文/u });
     await expect(source).toBeVisible();
     await page.screenshot({
       path: "test-results/m5-3-streaming-chat.png",
@@ -823,218 +838,52 @@ test("streams a BYOK Claude answer and opens its local source", async () => {
       "林舟记得白塔钟声。[1]",
     );
     expect(receivedKeys).toEqual([apiKey]);
-  } finally {
-    await application.close();
-    await new Promise<void>((resolve, reject) =>
-      server.close((error) =>
-        error === undefined ? resolve() : reject(error),
-      ),
+    await page
+      .getByRole("button", { name: /新建对话|New chat/u, exact: true })
+      .click();
+    await expect(page.locator(".copilot-message")).toHaveCount(0);
+    await page
+      .getByRole("button", { name: /对话历史|Chat history/u, exact: true })
+      .click();
+    await page
+      .getByRole("textbox", { name: /搜索对话|Search conversations/u })
+      .fill("白塔");
+    await page
+      .getByRole("button", { name: /重命名: 白塔钟声|Rename: 白塔钟声/u })
+      .click();
+    await page
+      .getByRole("textbox", { name: /重命名|Rename/u, exact: true })
+      .fill("白塔的往事");
+    await page
+      .locator(".copilot-history-item form")
+      .getByRole("button")
+      .click();
+    await page.getByRole("button", { name: /白塔的往事.*Ask/u }).click();
+    await expect(page.getByTestId("ai-chat-panel")).toContainText(
+      "林舟记得白塔钟声。[1]",
     );
-    await rm(temporaryRoot, { recursive: true, force: true });
-  }
-});
-
-test("reviews and applies selected Claude changes into a Git version", async () => {
-  const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
-  const projectTitle = "Claude 提案审阅";
-  const content = "雨夜，她开门。";
-  const documentPath = join(
-    temporaryRoot,
-    projectTitle,
-    "第一卷",
-    "第一章",
-    "01-正文.md",
-  );
-  const baselineHash = createHash("sha256").update(content).digest("hex");
-  let requestBody = "";
-  const server = createServer((request, response) => {
-    request.setEncoding("utf8");
-    request.on("data", (chunk: string) => {
-      requestBody += chunk;
-    });
-    request.on("end", () => {
-      const proposal = {
-        summary: "加强雨夜开场",
-        files: [
-          {
-            relativePath: "第一卷/第一章/01-正文.md",
-            baselineHash,
-            edits: [
-              {
-                changeId: "opening",
-                startOffset: 0,
-                endOffset: 2,
-                expectedText: "雨夜",
-                replacementText: "暴雨之夜",
-              },
-              {
-                changeId: "action",
-                startOffset: 4,
-                endOffset: 6,
-                expectedText: "开门",
-                replacementText: "推门而入",
-              },
-            ],
-          },
-        ],
-      };
-      const events = [
-        {
-          type: "message_start",
-          message: {
-            id: "msg_proposal",
-            type: "message",
-            role: "assistant",
-            model: "claude-sonnet-4-6",
-            content: [],
-            stop_reason: null,
-            stop_sequence: null,
-            usage: { input_tokens: 1, output_tokens: 0 },
-          },
-        },
-        {
-          type: "content_block_start",
-          index: 0,
-          content_block: {
-            type: "tool_use",
-            id: "toolu_proposal",
-            name: "propose_project_changes",
-            input: {},
-          },
-        },
-        {
-          type: "content_block_delta",
-          index: 0,
-          delta: {
-            type: "input_json_delta",
-            partial_json: JSON.stringify(proposal),
-          },
-        },
-        { type: "content_block_stop", index: 0 },
-        {
-          type: "message_delta",
-          delta: { stop_reason: "tool_use", stop_sequence: null },
-          usage: { output_tokens: 10 },
-        },
-        { type: "message_stop" },
-      ];
-      response.writeHead(200, {
-        "content-type": "text/event-stream",
-        connection: "close",
-      });
-      response.end(
-        events
-          .map(
-            (event) =>
-              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
-          )
-          .join(""),
-      );
-    });
-  });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  assert(address !== null && typeof address !== "string");
-  const application = await launchApplication(temporaryRoot, {
-    AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL: `http://127.0.0.1:${address.port}`,
-    AUTHOR_COPILOT_E2E_CREDENTIAL_ENCRYPTION: "1",
-  });
-
-  try {
-    const { center } = await enterWorkspace(application);
-    await center.getByRole("button", { name: /Claude API Key/u }).click();
-    await center
-      .getByTestId("anthropic-api-key")
-      .fill("sk-ant-api03-proposal-e2e");
-    await center.getByTestId("anthropic-credential-save").click();
-    await center.getByRole("button", { name: /关闭|Close/u }).click();
-
-    await center.getByRole("button", { name: /新建小说|New novel/u }).click();
-    await center.getByTestId("project-name").fill(projectTitle);
-    await center.getByTestId("project-dialog-submit").click();
-    const page = await rendererPage(application, "project");
-    await page.getByRole("button", { name: "01-正文", exact: true }).click();
-    await page.getByTestId("document-editor").fill(content);
-    await page.getByTestId("save-document").click();
-    await expect(
-      page.getByText(/已保存|Saved/u, { exact: true }),
-    ).toBeVisible();
-
+    await page.reload();
     await openAssistant(page);
-    await page.getByTestId("ai-chat-input").fill("加强开场的紧张感");
-    await page.getByTestId("ai-proposal-create").click();
-
-    const review = page.getByTestId("proposal-review");
-    await expect(review).toBeVisible();
-    await expect(review).toContainText("加强雨夜开场");
-    await expect(page.getByTestId("proposal-accepted-count")).toContainText(
-      "2/2",
-    );
-    await expect(page.getByTestId("proposal-change-opening")).toContainText(
-      "-雨夜",
-    );
+    await expect(page.getByTestId("ai-chat-panel")).toContainText("白塔的往事");
+    await page.getByRole("button", { name: "第一章", exact: true }).click();
+    await page.getByTestId("ai-chat-input").fill("接着说");
+    await page.getByTestId("ai-chat-send").click();
+    await expect(page.locator(".copilot-message.assistant")).toHaveCount(2);
+    await expect(page.locator(".copilot-progress")).toHaveCount(0);
     await page
-      .getByTestId("proposal-change-opening")
-      .getByRole("button")
+      .getByRole("button", { name: /对话历史|Chat history/u, exact: true })
       .click();
-    await expect(page.getByTestId("proposal-accepted-count")).toContainText(
-      "1/2",
-    );
-    await page.getByRole("button", { name: /接受此文件|Accept file/u }).click();
-    await expect(page.getByTestId("proposal-accepted-count")).toContainText(
-      "2/2",
-    );
-    await page
-      .getByTestId("proposal-change-action")
-      .getByRole("button")
-      .click();
-    await expect(page.getByTestId("proposal-accepted-count")).toContainText(
-      "1/2",
-    );
-    await page.screenshot({
-      path: "test-results/m5-6-proposal-review.png",
-      fullPage: true,
-    });
-
-    expect(await readFile(documentPath, "utf8")).toBe(content);
-    await closeWorkspacePanel(page);
-    await page
-      .getByTestId("document-editor")
-      .fill(`${content}作者尚未保存的补充`);
     await page
       .getByRole("button", {
-        name: /审阅 AI 修改建议|Review AI suggestions/u,
-        exact: true,
+        name: /删除对话: 白塔的往事|Delete chat: 白塔的往事/u,
       })
       .click();
-    await expect(page.getByTestId("proposal-apply")).toBeDisabled();
-    expect(await readFile(documentPath, "utf8")).toBe(content);
-    await closeWorkspacePanel(page);
-    await expect(page.getByTestId("document-editor")).toHaveValue(
-      `${content}作者尚未保存的补充`,
-    );
-    // Restore the original buffer deliberately; applying can now proceed.
-    await page.getByTestId("document-editor").fill(content);
     await page
-      .getByRole("button", {
-        name: /审阅 AI 修改建议|Review AI suggestions/u,
-        exact: true,
-      })
+      .locator(".copilot-delete-confirm")
+      .getByRole("button", { name: /删除对话|Delete chat/u })
       .click();
-    await page.getByTestId("proposal-apply").click();
-    await expect(page.getByTestId("document-editor")).toHaveValue(
-      "暴雨之夜，她开门。",
-    );
-    expect(await readFile(documentPath, "utf8")).toBe("暴雨之夜，她开门。");
-    const latestVersion = await execFileAsync(
-      "git",
-      ["-C", join(temporaryRoot, projectTitle), "log", "-1", "--format=%s"],
-      { encoding: "utf8" },
-    );
-    expect(latestVersion.stdout.trim()).toBe("AI: 加强雨夜开场");
-    expect(JSON.parse(requestBody)).toMatchObject({
-      tool_choice: { type: "tool", name: "propose_project_changes" },
-    });
+    await expect(page.locator(".copilot-history-item")).toHaveCount(0);
+    await expect(page.getByTestId("document-editor")).toHaveValue(/白塔钟声/u);
   } finally {
     await application.close();
     await new Promise<void>((resolve, reject) =>
@@ -1187,15 +1036,15 @@ test("persists custom themes and local background images", async () => {
     );
     const themeTokens = await page.evaluate(() => {
       const root = document.documentElement;
-      const primaryButton = document.querySelector<HTMLElement>(
-        ".works-actions .button.primary",
+      const primaryIcon = document.querySelector<HTMLElement>(
+        ".works-actions .create-icon",
       );
       const avatar = document.querySelector<HTMLElement>(
         ".center-profile-avatar",
       );
-      if (primaryButton === null || avatar === null) return undefined;
+      if (primaryIcon === null || avatar === null) return undefined;
       const rootStyle = root.style;
-      const primaryStyle = getComputedStyle(primaryButton);
+      const primaryStyle = getComputedStyle(primaryIcon);
       return {
         accent: rootStyle.getPropertyValue("--accent"),
         accentGradient: rootStyle.getPropertyValue("--accent-gradient"),
@@ -1212,7 +1061,7 @@ test("persists custom themes and local background images", async () => {
     await expect
       .poll(() =>
         page
-          .locator(".works-actions .button.primary")
+          .locator(".works-actions .create-icon")
           .evaluate((element) => getComputedStyle(element).color),
       )
       .toBe("rgb(23, 32, 29)");
@@ -1269,6 +1118,7 @@ test("runs the native Agent SDK through controlled tools, keeps a version, and c
   let baseline = "任务前的草稿。";
   let replacement = "任务前的草稿。Agent 补充了雨夜。";
   let holdAfterWrite = false;
+  let textOnly = false;
   let toolCalls = 0;
   const bodies: string[] = [];
   const server = createServer((request, response) => {
@@ -1291,7 +1141,8 @@ test("runs the native Agent SDK through controlled tools, keeps a version, and c
         stream?: boolean;
         messages?: unknown[];
       };
-      const hasResult = JSON.stringify(body.messages).includes('"tool_result"');
+      const hasResult =
+        textOnly || JSON.stringify(body.messages).includes('"tool_result"');
       if (hasResult && holdAfterWrite) return;
       const block = hasResult
         ? { type: "text", text: "已完成本次受控改稿。" }
@@ -1385,7 +1236,7 @@ test("runs the native Agent SDK through controlled tools, keeps a version, and c
     await center.getByTestId("project-name").fill(projectTitle);
     await center.getByTestId("project-dialog-submit").click();
     const page = await rendererPage(application, "project");
-    await page.getByRole("button", { name: "01-正文", exact: true }).click();
+    await page.getByRole("button", { name: "第一章", exact: true }).click();
     await page.getByTestId("document-editor").fill(baseline);
     await page.getByTestId("save-document").click();
     await expect(
@@ -1393,16 +1244,14 @@ test("runs the native Agent SDK through controlled tools, keeps a version, and c
     ).toBeVisible();
     // Startup must initialize Git without committing this existing draft.
     await openAssistant(page, "agent");
-    await page.getByTestId("agent-prompt").fill("加强雨夜描写。");
-    await expect(page.getByTestId("agent-start")).toBeDisabled();
+    await page.getByTestId("ai-chat-input").fill("加强雨夜描写。");
     expect(bodies).toHaveLength(0);
-    await page.getByTestId("agent-authorize").check();
-    await page.getByTestId("agent-start").click();
-    await expect(page.getByTestId("agent-outcome")).toContainText(
-      /任务完成|Task completed/u,
-      { timeout: 45_000 },
-    );
+    await page.getByTestId("ai-chat-send").click();
+    await expect(
+      page.locator(".copilot-message.assistant").last(),
+    ).toContainText(/已完成本次受控改稿/u, { timeout: 45_000 });
     expect(await readFile(documentPath, "utf8")).toBe(replacement);
+    await page.locator(".copilot-changed-file").last().click();
     await expect(page.getByTestId("agent-before")).toContainText(baseline);
     await expect(page.getByTestId("agent-after")).toContainText(replacement);
     const refsBefore = await execFileAsync("git", [
@@ -1413,8 +1262,14 @@ test("runs the native Agent SDK through controlled tools, keeps a version, and c
     ]);
     expect(refsBefore.stdout).toBe("");
     await page.screenshot({ path: "test-results/m6-agent-review.png" });
+    await page
+      .getByRole("button", { name: /关闭改动预览|Close change preview/u })
+      .click();
     await page.getByTestId("agent-retain").click();
-    await expect(page.getByTestId("agent-prompt")).toBeVisible();
+    await expect(page.getByTestId("agent-retain")).toHaveCount(0);
+    await expect(page.getByTestId("agent-changes").last()).toContainText(
+      /已保留|Kept/u,
+    );
     const refs = await execFileAsync("git", [
       "-C",
       projectRoot,
@@ -1432,12 +1287,28 @@ test("runs the native Agent SDK through controlled tools, keeps a version, and c
       savedVersion,
     ]);
     expect(diff.stdout).toContain("+任务前的草稿。Agent 补充了雨夜。");
+    // Agent can also answer conversationally; no confirmation is needed when
+    // no files changed, and the next request retains the previous dialogue.
+    textOnly = true;
+    await page.getByTestId("ai-chat-input").fill("解释刚才为什么这样修改。");
+    await page.getByTestId("ai-chat-send").click();
+    await expect(page.locator(".copilot-message.assistant")).toHaveCount(2);
+    await expect(page.locator(".copilot-progress")).toHaveCount(0);
+    await expect(page.getByTestId("agent-retain")).toHaveCount(0);
+    expect(
+      bodies.some(
+        (body) =>
+          body.includes("Previous conversation") &&
+          body.includes("加强雨夜描写"),
+      ),
+    ).toBe(true);
+    expect(await readFile(documentPath, "utf8")).toBe(replacement);
+    textOnly = false;
     baseline = replacement;
     replacement += "未完成的追加。";
     holdAfterWrite = true;
-    await page.getByTestId("agent-prompt").fill("继续修改，等待取消。");
-    await page.getByTestId("agent-authorize").check();
-    await page.getByTestId("agent-start").click();
+    await page.getByTestId("ai-chat-input").fill("继续修改，等待取消。");
+    await page.getByTestId("ai-chat-send").click();
     await expect
       .poll(() => readFile(documentPath, "utf8"), { timeout: 45_000 })
       .toBe(replacement);
@@ -1447,20 +1318,18 @@ test("runs the native Agent SDK through controlled tools, keeps a version, and c
       "",
     );
     await openAssistant(page, "agent");
-    await page.getByTestId("agent-cancel").click();
-    await expect(page.getByTestId("agent-outcome")).toContainText(
-      /任务已取消|Task cancelled/u,
-      { timeout: 15_000 },
-    );
+    await page.getByTestId("ai-chat-cancel").click();
+    await expect(
+      page.locator(".copilot-message.assistant").last(),
+    ).toContainText(/任务已取消|Task cancelled/u, { timeout: 15_000 });
     await page.getByTestId("agent-restore").click();
     await expect.poll(() => readFile(documentPath, "utf8")).toBe(baseline);
-    await expect(page.getByTestId("agent-prompt")).toBeVisible();
+    await expect(page.getByTestId("ai-chat-input")).toBeVisible();
     expect(toolCalls).toBe(2);
     // Crash the Main process after a controlled write; the durable ledger must
     // still be recoverable and the native child must exit when its pipe closes.
-    await page.getByTestId("agent-prompt").fill("模拟写入后的应用崩溃。");
-    await page.getByTestId("agent-authorize").check();
-    await page.getByTestId("agent-start").click();
+    await page.getByTestId("ai-chat-input").fill("模拟写入后的应用崩溃。");
+    await page.getByTestId("ai-chat-send").click();
     await expect
       .poll(() => readFile(documentPath, "utf8"), { timeout: 45_000 })
       .toBe(replacement);
@@ -1509,19 +1378,143 @@ test("runs the native Agent SDK through controlled tools, keeps a version, and c
       .click();
     const recoveredPage = await rendererPage(application, "project");
     await openAssistant(recoveredPage, "agent");
-    await expect(recoveredPage.getByTestId("agent-outcome")).toContainText(
-      /原授权已失效|authorization has expired/u,
-    );
-    await expect(recoveredPage.getByTestId("agent-start")).toHaveCount(0);
+    await expect(
+      recoveredPage.locator(".copilot-message.assistant").last(),
+    ).toContainText(/原授权已失效|authorization has expired/u);
+    await expect(recoveredPage.getByTestId("ai-chat-send")).toBeDisabled();
     await recoveredPage.getByTestId("agent-restore").click();
     await expect.poll(() => readFile(documentPath, "utf8")).toBe(baseline);
-    await expect(
-      recoveredPage.getByTestId("agent-authorize"),
-    ).not.toBeChecked();
+    await expect(recoveredPage.getByTestId("ai-chat-input")).toBeVisible();
+    await expect(recoveredPage.locator(".copilot-message.user")).toHaveCount(4);
   } finally {
     await application.close();
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("shows seven-day writing history with signed totals and recoverable read failures", async () => {
+  const temporaryRoot = await mkdtemp(
+    join(tmpdir(), "author-writing-history-"),
+  );
+  const application = await launchApplication(temporaryRoot);
+  try {
+    const { center } = await enterWorkspace(application);
+    await center.getByRole("button", { name: /新建小说|New novel/u }).click();
+    await center.getByTestId("project-name").fill("七日趋势验收");
+    await center.getByTestId("project-dialog-submit").click();
+    const page = await rendererPage(application, "project");
+    await page.getByRole("button", { name: "第一章", exact: true }).click();
+    const context = await page.evaluate(() =>
+      (
+        window as unknown as { authorCopilot: AuthorCopilotApi }
+      ).authorCopilot.tabs.getContext(),
+    );
+    assert(context.kind === "project");
+    const dates = await page.evaluate(() =>
+      Array.from({ length: 7 }, (_, index) => {
+        const date = new Date();
+        date.setDate(date.getDate() - 6 + index);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      }),
+    );
+    const openHistory = () =>
+      page
+        .getByRole("button", { name: /七日趋势|7-day trend/u, exact: true })
+        .click();
+    const dialog = page.getByRole("dialog", { name: /七日趋势|7-day trend/u });
+    await openHistory();
+    await expect(dialog.getByTestId("writing-history-total")).toHaveText("0");
+    await expect(dialog.locator(".writing-history-day")).toHaveCount(7);
+    await expect(dialog.getByText(/暂无净增记录|No net change/u)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /七日趋势|7-day trend/u, exact: true }),
+    ).toBeFocused();
+
+    const directory = join(
+      temporaryRoot,
+      ".user-data",
+      "writing-statistics",
+      context.project.projectId,
+    );
+    await mkdir(directory, { recursive: true });
+    const values = [120, -40, 0, 80, 200, 0];
+    for (const [index, netCharacters] of values.entries()) {
+      await writeFile(
+        join(directory, `${dates[index]}.json`),
+        JSON.stringify({
+          schemaVersion: 1,
+          sessions: { [randomUUID()]: { sequence: 1, netCharacters } },
+        }),
+      );
+    }
+    const editor = page.getByTestId("document-editor");
+    await editor.press("ControlOrMeta+End");
+    await editor.pressSequentially("abc");
+    await expect(page.getByTestId("writing-today")).toHaveText("3");
+    // Opening history includes the latest unsaved edit.
+    await openHistory();
+    await expect(dialog.getByTestId("writing-history-total")).toHaveText("363");
+    for (const [index, value] of [...values, 3].entries()) {
+      await expect(
+        dialog.getByTestId(`writing-history-${dates[index]}`),
+      ).toHaveText(String(value));
+    }
+    await expect(
+      dialog.locator('.writing-history-bar[data-negative="true"]'),
+    ).toHaveCount(1);
+    await page.screenshot({ path: "test-results/writing-history.png" });
+    await application.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]?.setSize(880, 700),
+    );
+    await expect(dialog).toBeVisible();
+    const bounds = await dialog.boundingBox();
+    assert(bounds !== null);
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(
+      page.viewportSize()?.width ?? 880,
+    );
+    await page.screenshot({ path: "test-results/writing-history-narrow.png" });
+
+    // Damaged history is an error, never a zero-filled success; retry can recover.
+    const damagedPath = join(directory, `${dates[0]}.json`);
+    const original = await readFile(damagedPath, "utf8");
+    await writeFile(damagedPath, "damaged");
+    await dialog
+      .getByRole("button", { name: /刷新|Refresh/u, exact: true })
+      .click();
+    await expect(dialog.getByRole("alert")).toBeVisible();
+    await expect(dialog.getByTestId("writing-history-total")).toHaveCount(0);
+    expect(await readFile(damagedPath, "utf8")).toBe("damaged");
+    await writeFile(damagedPath, original);
+    await dialog.getByRole("button", { name: /统计重试|Retry stats/u }).click();
+    await expect(dialog.getByTestId("writing-history-total")).toHaveText("363");
+    await page.keyboard.press("Escape");
+    await expect(
+      page.getByRole("button", { name: /七日趋势|7-day trend/u, exact: true }),
+    ).toBeFocused();
+    await editor.press("ControlOrMeta+s");
+    await expect(page.getByTestId("save-document")).toBeDisabled();
+    await page.reload();
+    await page.getByRole("button", { name: "第一章", exact: true }).click();
+    await openHistory();
+    await expect(dialog.getByTestId("writing-history-total")).toHaveText("363");
+    // The open panel follows local calendar rollover without reopening it.
+    const tomorrow = await page.evaluate(() => {
+      const date = new Date();
+      date.setDate(date.getDate() + 1);
+      return date.getTime();
+    });
+    await page.clock.setFixedTime(tomorrow);
+    await expect(dialog.getByTestId(`writing-history-${dates[0]}`)).toHaveCount(
+      0,
+    );
+    await expect(dialog.getByTestId("writing-history-total")).toHaveText("243");
+  } finally {
+    await application.close();
     await rm(temporaryRoot, { recursive: true, force: true });
   }
 });
@@ -1815,7 +1808,7 @@ test("keeps AI beside the manuscript and supports writing toolbar operations", a
 });
 
 for (const connection of ["custom", "platform"] as const) {
-  test(`uses ${connection} Anthropic settings for chat, proposal and native Agent`, async () => {
+  test(`uses ${connection} Anthropic settings for Ask and native Agent`, async () => {
     test.skip(
       connection === "platform" && process.env.PLATFORM_INTEGRATION !== "1",
       "Requires the isolated Mongo replica set, Redis and a built API.",
@@ -2115,43 +2108,41 @@ for (const connection of ["custom", "platform"] as const) {
       await center.getByTestId("project-name").fill(projectTitle);
       await center.getByTestId("project-dialog-submit").click();
       const page = await rendererPage(application, "project");
-      await page.getByRole("button", { name: "01-正文", exact: true }).click();
+      await page.getByRole("button", { name: "第一章", exact: true }).click();
       await page.getByTestId("document-editor").fill("雨夜，她开门。");
       await page.getByTestId("save-document").click();
       await expect(page.getByTestId("save-document")).toBeDisabled();
       await openAssistant(page);
-      if (connection === "platform")
+      if (connection === "platform") {
+        await page
+          .getByRole("button", { name: /AI 模型|AI model/u, exact: true })
+          .click();
         await page
           .getByRole("combobox", { name: /AI 连接|AI connection/u })
           .selectOption("platform");
+        await page
+          .getByRole("dialog")
+          .getByRole("button", { name: /^(关闭|Close)$/u })
+          .click();
+      }
       await page.getByTestId("ai-chat-input").fill("帮我分析开场");
       await page.getByTestId("ai-chat-send").click();
       await expect(page.getByTestId("ai-chat-panel")).toContainText(
         "这段雨夜描写可以加强声音细节。",
       );
-      mode = "proposal";
-      await page.getByTestId("ai-chat-input").fill("加强雨夜");
-      await page.getByTestId("ai-proposal-create").click();
-      await expect(page.getByTestId("proposal-review")).toBeVisible();
-      await page.getByTestId("proposal-apply").click();
-      await expect(page.getByTestId("document-editor")).toHaveValue(
-        "暴雨之夜，她开门。",
-      );
       mode = "agent";
       await openAssistant(page, "agent");
-      await page.getByTestId("agent-prompt").fill("补充钟声");
-      await page.getByTestId("agent-authorize").check();
-      await page.getByTestId("agent-start").click();
-      await expect(page.getByTestId("agent-outcome")).toContainText(
-        /任务完成|Task completed/u,
-        { timeout: 60000 },
-      );
+      await page.getByTestId("ai-chat-input").fill("补充钟声");
+      await page.getByTestId("ai-chat-send").click();
+      await expect(
+        page.locator(".copilot-message.assistant").last(),
+      ).toContainText(/已完成本次受控改稿/u, { timeout: 60000 });
       expect(await readFile(documentPath, "utf8")).toBe(
-        "暴雨之夜，她开门。远处传来钟声。",
+        "雨夜，她开门。远处传来钟声。",
       );
       await page.getByTestId("agent-retain").click();
-      await expect(page.getByTestId("agent-prompt")).toBeVisible();
-      expect(requests.length).toBeGreaterThanOrEqual(4);
+      await expect(page.getByTestId("agent-retain")).toHaveCount(0);
+      expect(requests.length).toBeGreaterThanOrEqual(3);
       expect(
         requests.every(
           (request) =>
@@ -2164,7 +2155,9 @@ for (const connection of ["custom", "platform"] as const) {
       ).toBe(true);
       if (connection === "platform") {
         await page
-          .getByTestId("assistant-dock")
+          .getByRole("button", { name: /AI 模型|AI model/u, exact: true })
+          .click();
+        await page
           .getByRole("button", { name: /AI 设置|AI settings/u })
           .click();
         await page
@@ -2214,3 +2207,385 @@ for (const connection of ["custom", "platform"] as const) {
     }
   });
 }
+
+test("arranges the writing workspace around a full-width toolbar and preserves drafts across panels", async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-layout-"));
+  const application = await launchApplication(temporaryRoot);
+  try {
+    const { center } = await enterWorkspace(application);
+    await center
+      .getByRole("button", { name: /新建作品|Create work/u, exact: true })
+      .click();
+    await center.getByRole("menuitem", { name: /新建小说|New novel/u }).click();
+    await center.getByTestId("project-name").fill("布局验证");
+    await center.getByTestId("project-dialog-submit").click();
+    const page = await rendererPage(application, "project");
+    await page.getByRole("button", { name: "第一章", exact: true }).click();
+    const editor = page.getByTestId("document-editor");
+    await editor.fill("面板切换期间保留的草稿。");
+    const toolbar = page.getByRole("toolbar");
+    const directory = page.locator(".editor-directory");
+    const toolbarBox = await toolbar.boundingBox();
+    const directoryBox = await directory.boundingBox();
+    const bodyBox = await page.locator("body").boundingBox();
+    assert(toolbarBox && directoryBox && bodyBox);
+    expect(toolbarBox.width).toBe(bodyBox.width);
+    expect(toolbarBox.y + toolbarBox.height).toBeLessThanOrEqual(
+      directoryBox.y,
+    );
+    await page
+      .getByRole("button", { name: /目录|Directory/u, exact: true })
+      .click();
+    await expect(directory).toBeHidden();
+    await expect(editor).toHaveValue("面板切换期间保留的草稿。");
+    await page
+      .getByRole("button", { name: /目录|Directory/u, exact: true })
+      .click();
+    const search = page.getByRole("searchbox", {
+      name: /搜索章节标题|Search chapter titles/u,
+    });
+    await page.getByRole("button", { name: "第一卷", exact: true }).click();
+    await search.fill("第一章");
+    await expect(
+      page.getByRole("button", { name: "第一章", exact: true }),
+    ).toBeVisible();
+    await search.fill("没有这个章节");
+    await expect(
+      page.getByText(/没有匹配的章节|No matching chapters/u),
+    ).toBeVisible();
+    await search.fill("");
+    const rail = page.locator(".editor-tool-rail");
+    await rail
+      .getByRole("button", { name: /打开面板: 对话|Open panel: Chat/u })
+      .click();
+    const chatInput = page.getByTestId("ai-chat-input");
+    await chatInput.fill("尚未发送的问题");
+    await rail
+      .getByRole("button", { name: /打开面板: 知识库|Open panel: Knowledge/u })
+      .click();
+    await expect(chatInput).toBeHidden();
+    await rail
+      .getByRole("button", { name: /打开面板: 对话|Open panel: Chat/u })
+      .click();
+    await expect(chatInput).toHaveValue("尚未发送的问题");
+    await toolbar
+      .getByRole("button", { name: /背景|Background/u, exact: true })
+      .click();
+    await page.getByRole("button", { name: /晨曦|Dawn/u }).click();
+    await page
+      .getByRole("button", { name: /关闭|Close/u, exact: true })
+      .last()
+      .click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dawn");
+    await expect(editor).toHaveValue("面板切换期间保留的草稿。");
+    await application.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]?.setSize(880, 600),
+    );
+    await expect
+      .poll(() =>
+        page.locator("body").evaluate((element) => element.clientWidth),
+      )
+      .toBe(880);
+    const editorBox = await editor.boundingBox();
+    const assistantBox = await page.getByTestId("assistant-dock").boundingBox();
+    const railBox = await rail.boundingBox();
+    assert(editorBox && assistantBox && railBox);
+    expect(editorBox.width).toBeGreaterThan(280);
+    expect(editorBox.x + editorBox.width).toBeLessThanOrEqual(assistantBox.x);
+    expect(assistantBox.x + assistantBox.width).toBeLessThanOrEqual(railBox.x);
+    await page.getByTestId("save-document").click();
+    await expect(page.getByTestId("save-document")).toBeDisabled();
+  } finally {
+    await application.close();
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+for (const format of ["txt", "doc", "docx"] as const) {
+  test(`previews and imports ${format} into a new work without modifying its source`, async () => {
+    const temporaryRoot = await mkdtemp(join(tmpdir(), "author-file-import-"));
+    const source = join(temporaryRoot, `导入原稿.${format}`);
+    const bytes =
+      format === "txt"
+        ? Buffer.from(
+            "雨夜来信\r\n\r\n林舟推开旧书店的门。\r\n第二段保留中文、标点和 café。\r\n",
+          )
+        : await readFile(
+            resolve(
+              import.meta.dirname,
+              `../tests/fixtures/import/chinese.${format}`,
+            ),
+          );
+    await writeFile(source, bytes);
+    const application = await launchApplication(temporaryRoot, {
+      AUTHOR_COPILOT_E2E_IMPORT_SOURCE: source,
+    });
+    try {
+      const { center } = await enterWorkspace(application);
+      await center
+        .getByRole("button", { name: /导入作品|Import work/u })
+        .click();
+      await center
+        .getByRole("button", {
+          name: /选择 TXT \/ Word 文件|Choose TXT \/ Word file/u,
+        })
+        .click();
+      await expect(
+        center.locator(".import-document-preview pre"),
+      ).toContainText("林舟推开旧书店的门。");
+      await expect(center.getByText("第一卷", { exact: true })).toBeVisible();
+      await expect(center.getByRole("combobox")).toHaveCount(1);
+      await expect(
+        center.locator(".import-preview > div").last().locator("dd"),
+      ).toHaveText("1");
+      const submitBounds = await center
+        .getByTestId("project-dialog-submit")
+        .boundingBox();
+      const viewportHeight = await center.evaluate(() => innerHeight);
+      assert(submitBounds);
+      expect(submitBounds.y + submitBounds.height).toBeLessThanOrEqual(
+        viewportHeight,
+      );
+      await assert.rejects(lstat(join(temporaryRoot, "导入原稿")), {
+        code: "ENOENT",
+      });
+      if (format === "docx") {
+        await center.screenshot({
+          path: "test-results/document-import-preview.png",
+        });
+      }
+      await center.getByTestId("project-dialog-submit").click();
+      const project = await rendererPage(application, "project");
+      await project
+        .getByRole("button", { name: "第一章", exact: true })
+        .click();
+      await expect(project.getByTestId("document-editor")).toHaveValue(
+        /雨夜来信\n\n林舟推开旧书店的门。\n第二段保留中文、标点和 café。/u,
+      );
+      expect(await readFile(source)).toEqual(bytes);
+    } finally {
+      await application.close();
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+}
+
+test("invalidates file previews on template changes and detects changed source files", async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "author-file-preview-"));
+  const source = join(temporaryRoot, "原稿.txt");
+  await writeFile(source, "预览正文");
+  const application = await launchApplication(temporaryRoot, {
+    AUTHOR_COPILOT_E2E_IMPORT_SOURCE: source,
+  });
+  try {
+    const { center } = await enterWorkspace(application);
+    await center.getByRole("button", { name: /导入作品|Import work/u }).click();
+    const chooseFile = center.getByRole("button", {
+      name: /选择 TXT \/ Word 文件|Choose TXT \/ Word file/u,
+    });
+    await chooseFile.click();
+    await expect(center.locator(".import-document-preview pre")).toHaveText(
+      "预览正文",
+    );
+    await center.getByRole("combobox").selectOption("screenplay");
+    await expect(center.getByTestId("project-dialog-submit")).toBeDisabled();
+    await expect(center.locator(".import-document-preview")).toHaveCount(0);
+    await chooseFile.click();
+    await expect(center.getByText("第一幕", { exact: true })).toBeVisible();
+    await writeFile(source, "更新后的正文");
+    await center.getByTestId("project-dialog-submit").click();
+    await expect(center.getByRole("alert")).toContainText(
+      /源文件已发生变化|source file changed/u,
+    );
+    await assert.rejects(lstat(join(temporaryRoot, "原稿")), {
+      code: "ENOENT",
+    });
+    await chooseFile.click();
+    await expect(center.locator(".import-document-preview pre")).toHaveText(
+      "更新后的正文",
+    );
+    await center.getByTestId("project-dialog-submit").click();
+    const project = await rendererPage(application, "project");
+    await project
+      .getByRole("button", { name: "01-第一场", exact: true })
+      .click();
+    await expect(project.getByTestId("document-editor")).toHaveValue(
+      "更新后的正文",
+    );
+  } finally {
+    await application.close();
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+for (const format of ["txt", "doc", "docx"] as const) {
+  test(`splits a single ${format} into the previewed volumes and chapters`, async () => {
+    const temporaryRoot = await mkdtemp(
+      join(tmpdir(), "author-chapter-import-"),
+    );
+    const source = join(temporaryRoot, `全本.${format}`);
+    const bytes = await readFile(
+      resolve(
+        import.meta.dirname,
+        `../tests/fixtures/import/chapters.${format}`,
+      ),
+    );
+    await writeFile(source, bytes);
+    const application = await launchApplication(temporaryRoot, {
+      AUTHOR_COPILOT_E2E_IMPORT_SOURCE: source,
+    });
+    try {
+      const { center } = await enterWorkspace(application);
+      await center
+        .getByRole("button", { name: /导入作品|Import work/u })
+        .click();
+      await expect(
+        center.getByRole("checkbox", { name: /自动拆章|Automatically split/u }),
+      ).toBeChecked();
+      await center
+        .getByRole("button", {
+          name: /选择 TXT \/ Word 文件|Choose TXT \/ Word file/u,
+        })
+        .click();
+      await expect(center.getByTestId("import-split-summary")).toContainText(
+        "3",
+      );
+      await expect(
+        center.locator(".import-preview > div").last().locator("dd"),
+      ).toHaveText("4");
+      await expect(
+        center
+          .locator(".preview-tree")
+          .getByText("0002-第一章 来信", { exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        center
+          .locator(".preview-tree")
+          .getByText("第一章 来信", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        center
+          .locator(".preview-tree")
+          .getByText("第二章 来信", { exact: true }),
+      ).toBeVisible();
+      if (format === "docx")
+        await center.screenshot({
+          path: "test-results/chapter-import-preview.png",
+        });
+      await center.getByTestId("project-dialog-submit").click();
+      const page = await rendererPage(application, "project");
+      const documents = [
+        ["0001-第一卷/0001-前言/01-正文.md", "作品简介：雨夜的故事。"],
+        ["0002-第一卷 初见/0001-第一章 来信/01-正文.md", "林舟收到一封信。"],
+        ["0002-第一卷 初见/0002-第二章 来信/01-正文.md", "他推开旧书店的门。"],
+        ["0003-第二卷 归途/0001-番外一/01-正文.md", "故事留在这里。"],
+      ] as const;
+      for (const [path, content] of documents) {
+        expect(
+          await readFile(join(temporaryRoot, "全本", path), "utf8"),
+        ).toContain(content);
+      }
+      const chapter = page.getByRole("button", {
+        name: "第二章 来信",
+        exact: true,
+      });
+      await expect(chapter).not.toHaveAttribute("aria-expanded");
+      await expect(
+        page.getByRole("button", { name: "01-正文", exact: true }),
+      ).toHaveCount(0);
+      await chapter.click();
+      await expect(
+        page.getByRole("heading", { name: "第二章 来信", exact: true }),
+      ).toBeVisible();
+      await expect(page.getByTestId("document-editor")).toHaveValue(
+        /第二章 来信\n他推开旧书店的门。/u,
+      );
+      if (format === "docx") {
+        await page.screenshot({ path: "test-results/chapter-title-fixed.png" });
+        await page
+          .getByRole("button", { name: "重命名: 第二章 来信", exact: true })
+          .click();
+        await page
+          .getByRole("textbox", { name: /重命名|Rename/u, exact: true })
+          .fill("第二章 归来");
+        await page
+          .getByRole("button", { name: /确认重命名|Confirm rename/u })
+          .click();
+        await expect(
+          page.getByRole("heading", { name: "第二章 归来", exact: true }),
+        ).toBeVisible();
+        await page
+          .getByTestId("document-editor")
+          .fill("第二章 归来\n修改后的正文。");
+        await page.getByTestId("save-document").click();
+        const renamedPath = join(
+          temporaryRoot,
+          "全本",
+          "0002-第一卷 初见/0002-第二章 归来/01-正文.md",
+        );
+        await expect
+          .poll(() => readFile(renamedPath, "utf8"))
+          .toBe("第二章 归来\n修改后的正文。");
+        await page.reload();
+        await page
+          .getByRole("button", { name: "第二章 归来", exact: true })
+          .click();
+        await expect(
+          page.getByRole("heading", { name: "第二章 归来", exact: true }),
+        ).toBeVisible();
+        await page
+          .getByRole("button", { name: "第二章 归来", exact: true })
+          .click({ button: "right" });
+        page.once("dialog", (dialog) => dialog.accept());
+        await page.getByRole("menuitem", { name: /删除|Delete/u }).click();
+        await expect(page.getByTestId("document-editor")).toHaveCount(0);
+        await assert.rejects(lstat(renamedPath), { code: "ENOENT" });
+        await assert.doesNotReject(
+          lstat(join(temporaryRoot, "全本", documents[1][0])),
+        );
+      }
+      expect(await readFile(source)).toEqual(bytes);
+    } finally {
+      await application.close();
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+}
+
+test("clears stale chapter previews when switching to whole-document import", async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "author-unsplit-import-"));
+  const source = join(temporaryRoot, "整篇.txt");
+  const content = "第一章 初见\n正文一\n第二章 归来\n正文二";
+  await writeFile(source, content);
+  const application = await launchApplication(temporaryRoot, {
+    AUTHOR_COPILOT_E2E_IMPORT_SOURCE: source,
+  });
+  try {
+    const { center } = await enterWorkspace(application);
+    await center.getByRole("button", { name: /导入作品|Import work/u }).click();
+    const choose = center.getByRole("button", {
+      name: /选择 TXT \/ Word 文件|Choose TXT \/ Word file/u,
+    });
+    await choose.click();
+    await expect(center.getByTestId("import-split-summary")).toContainText("2");
+    await center
+      .getByRole("checkbox", { name: /自动拆章|Automatically split/u })
+      .uncheck();
+    await expect(center.getByTestId("project-dialog-submit")).toBeDisabled();
+    await expect(center.locator(".import-document-preview")).toHaveCount(0);
+    await choose.click();
+    await expect(center.getByTestId("import-split-summary")).toContainText(
+      /已关闭|off/u,
+    );
+    await expect(
+      center.locator(".import-preview > div").last().locator("dd"),
+    ).toHaveText("1");
+    await center.getByTestId("project-dialog-submit").click();
+    const page = await rendererPage(application, "project");
+    await page.getByRole("button", { name: "第一章", exact: true }).click();
+    await expect(page.getByTestId("document-editor")).toHaveValue(content);
+  } finally {
+    await application.close();
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});

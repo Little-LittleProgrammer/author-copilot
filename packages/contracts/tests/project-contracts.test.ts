@@ -42,6 +42,7 @@ describe("project contracts", () => {
     const preview = {
       ok: true,
       previewToken: "preview-token",
+      sourceKind: "folder",
       sourceRoot: { displayName: "旧作" },
       template: "novel",
       recognizedTree: [
@@ -72,6 +73,52 @@ describe("project contracts", () => {
           displayName: "旧作",
           absolutePath: "/Users/example/旧作",
         },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("bounds file previews and keeps their source paths private", () => {
+    const preview = {
+      ok: true,
+      previewToken: "file-token",
+      sourceKind: "file",
+      sourceRoot: { displayName: "作品.docx" },
+      template: "novel",
+      recognizedTree: [],
+      unclassifiedFiles: [],
+      document: {
+        format: "docx",
+        textPreview: "正文",
+        characterCount: 2,
+        splitChapters: true,
+        matchedChapterCount: 0,
+      },
+    };
+    expect(ProjectImportPreviewResponseSchema.safeParse(preview).success).toBe(
+      true,
+    );
+    expect(
+      ProjectImportPreviewResponseSchema.safeParse({
+        ...preview,
+        document: undefined,
+      }).success,
+    ).toBe(false);
+    expect(
+      ProjectImportPreviewResponseSchema.safeParse({
+        ...preview,
+        sourceKind: "folder",
+      }).success,
+    ).toBe(false);
+    expect(
+      ProjectImportPreviewResponseSchema.safeParse({
+        ...preview,
+        document: { ...preview.document, textPreview: "文".repeat(2001) },
+      }).success,
+    ).toBe(false);
+    expect(
+      ProjectImportPreviewResponseSchema.safeParse({
+        ...preview,
+        sourceRoot: { ...preview.sourceRoot, path: "/private/source.docx" },
       }).success,
     ).toBe(false);
   });
@@ -217,6 +264,7 @@ describe("project contracts", () => {
       "invalid_path",
       "io_error",
       "invalid_metadata",
+      "invalid_import",
     ]);
     expect(
       ProjectOperationErrorSchema.parse({

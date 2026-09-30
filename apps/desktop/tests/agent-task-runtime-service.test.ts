@@ -128,6 +128,54 @@ afterEach(() => {
 });
 
 describe("AgentTaskRuntimeService", () => {
+  it("streams only assistant text deltas and preserves event ordering", async () => {
+    const capabilityService = new AgentCapabilityService({});
+    grant(capabilityService);
+    const service = new AgentTaskRuntimeService({
+      capabilityService,
+      fileTools: fileTools(),
+      createProcessTree: () => processTree().tree,
+      createQuery: () => ({
+        close() {},
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: "stream_event",
+            event: {
+              type: "content_block_delta",
+              delta: { type: "thinking_delta", thinking: "private reasoning" },
+            },
+          } as SDKMessage;
+          yield {
+            type: "stream_event",
+            event: {
+              type: "content_block_delta",
+              delta: { type: "text_delta", text: "正在修改" },
+            },
+          } as SDKMessage;
+          yield {
+            type: "stream_event",
+            event: {
+              type: "content_block_delta",
+              delta: { type: "text_delta", text: "开场。" },
+            },
+          } as SDKMessage;
+          yield successResult("正在修改开场。");
+        },
+      }),
+    });
+    const events: AgentTaskEvent[] = [];
+    await service.execute(request(), (event) => events.push(event));
+    expect(
+      events
+        .filter((event) => event.type === "agent.task.delta")
+        .map((event) => event.text),
+    ).toEqual(["正在修改", "开场。"]);
+    expect(JSON.stringify(events)).not.toContain("private reasoning");
+    expect(events.map((event) => event.sequence)).toEqual(
+      events.map((_, index) => index),
+    );
+  });
+
   it("emits ordered sanitized progress and one normalized success terminal", async () => {
     const capabilityService = new AgentCapabilityService({});
     grant(capabilityService);

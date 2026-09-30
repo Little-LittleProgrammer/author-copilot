@@ -15,7 +15,6 @@ import type {
   ProjectOperationFailure,
   ProjectRenameEntryRequest,
   ProjectRenameEntryResponse,
-  ProjectStructureNode,
   ProjectUpdateRequest,
   ProjectUpdateResponse,
 } from "@author-copilot/contracts";
@@ -25,8 +24,11 @@ import {
   type ImportPreview,
   type ProjectBridge,
   type ProjectSummary,
-  type StructureNode,
 } from "./types.js";
+import {
+  presentImportNode,
+  presentStructureNode,
+} from "./structure-presentation.js";
 
 interface ProjectWindowApi {
   readonly project?: {
@@ -95,14 +97,18 @@ export function getProjectApi(): ProjectBridge | undefined {
     },
     async getStructure(input) {
       const response = unwrap(await raw.getStructure(input));
-      return response.nodes.map(mapStructureNode);
+      return response.nodes.map(presentStructureNode);
     },
     async list() {
       const response = unwrap(await raw.list());
       return response.projects.map(mapProject);
     },
-    async previewImport(type) {
-      const response = await raw.previewImport({ template: type });
+    async previewImport(type, sourceKind = "folder", splitChapters = true) {
+      const response = await raw.previewImport({
+        template: type,
+        sourceKind,
+        splitChapters,
+      });
       if (!response.ok && response.error.code === "cancelled") return null;
       const preview = unwrap(response);
       return mapPreview(preview);
@@ -156,7 +162,13 @@ function unwrap<T extends { readonly ok: boolean }>(
 ): Extract<T, { readonly ok: true }> {
   if (!response.ok) {
     const { error } = response as unknown as ProjectOperationFailure;
-    throw new ProjectApiError(error.code, error.message);
+    throw new ProjectApiError(
+      error.code,
+      error.message,
+      typeof error.details?.reason === "string"
+        ? error.details.reason
+        : undefined,
+    );
   }
   return response as Extract<T, { readonly ok: true }>;
 }
@@ -175,27 +187,12 @@ function mapProject(project: {
   };
 }
 
-function mapStructureNode(node: ProjectStructureNode): StructureNode {
-  return {
-    children: node.children.map(mapStructureNode),
-    id: node.relativePath,
-    kind: node.kind === "document" ? "document" : "group",
-    name: node.displayName,
-    role: node.role,
-    path: node.relativePath,
-  };
-}
-
 function countRecognized(
-  nodes: readonly { readonly children: readonly unknown[] }[],
+  nodes: readonly ProjectImportRecognizedNode[],
 ): number {
   return nodes.reduce(
     (count, node) =>
-      count +
-      1 +
-      countRecognized(
-        node.children as readonly { readonly children: readonly unknown[] }[],
-      ),
+      count + (node.role === "scene" ? 1 : 0) + countRecognized(node.children),
     0,
   );
 }
@@ -204,26 +201,18 @@ function mapPreview(
   preview: Extract<ProjectImportPreviewResponse, { readonly ok: true }>,
 ): ImportPreview {
   return {
+    sourceKind: preview.sourceKind,
+    ...(preview.document ? { document: preview.document } : {}),
     fileCount:
       countRecognized(preview.recognizedTree) +
       preview.unclassifiedFiles.length,
     name: preview.sourceRoot.displayName,
     previewToken: preview.previewToken,
-    structure: preview.recognizedTree.map(mapImportNode),
+    structure: preview.recognizedTree.map(presentImportNode),
     type: preview.template,
     unclassified: preview.unclassifiedFiles.map(
       ({ displayName }) => displayName,
     ),
-  };
-}
-
-function mapImportNode(node: ProjectImportRecognizedNode): {
-  readonly children: readonly ReturnType<typeof mapImportNode>[];
-  readonly name: string;
-} {
-  return {
-    name: node.displayName,
-    children: node.children.map(mapImportNode),
   };
 }
 

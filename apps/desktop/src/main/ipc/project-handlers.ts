@@ -42,7 +42,23 @@ import {
   projectOperationFailure,
 } from "./project-result.js";
 
+import {
+  previewDocumentImport,
+  assertImportSourceUnchanged,
+  DocumentImportError,
+  type DocumentImportPreview,
+} from "../project/document-import.js";
+
+import {
+  buildDocumentImportPlan,
+  type DocumentImportPlan,
+} from "../project/document-import-plan.js";
+
 interface PreviewEntry {
+  readonly ownerId: number;
+  readonly document?: DocumentImportPreview & {
+    readonly plan: DocumentImportPlan;
+  };
   readonly rootPath: string;
   readonly template: "novel" | "screenplay";
   readonly expiresAt: number;
@@ -180,9 +196,51 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
       );
       try {
         const request = ProjectImportPreviewRequestSchema.parse(args[0]);
-        const rootPath = await options.directoryPicker.chooseImportSource();
+        for (const [token, entry] of previews) {
+          if (
+            entry.expiresAt <= Date.now() ||
+            entry.ownerId === event.sender.id
+          )
+            previews.delete(token);
+        }
+        const rootPath =
+          request.sourceKind === "file"
+            ? await options.directoryPicker.chooseImportFile()
+            : await options.directoryPicker.chooseImportSource();
         if (rootPath === undefined) {
           return ProjectImportPreviewResponseSchema.parse(cancelledOperation());
+        }
+        if (request.sourceKind === "file") {
+          const document = await previewDocumentImport(rootPath);
+          const plan = buildDocumentImportPlan(
+            document.content,
+            request.template,
+            request.splitChapters,
+          );
+          const previewToken = randomUUID();
+          previews.set(previewToken, {
+            rootPath: document.sourcePath,
+            template: request.template,
+            document: { ...document, plan },
+            ownerId: event.sender.id,
+            expiresAt: Date.now() + 15 * 60_000,
+          });
+          return ProjectImportPreviewResponseSchema.parse({
+            ok: true,
+            previewToken,
+            sourceKind: "file",
+            sourceRoot: { displayName: basename(document.sourcePath) },
+            template: request.template,
+            document: {
+              format: document.format,
+              textPreview: document.content.slice(0, 2000),
+              characterCount: document.content.length,
+              splitChapters: request.splitChapters,
+              matchedChapterCount: plan.matchedChapterCount,
+            },
+            recognizedTree: plan.structure.map(importNode),
+            unclassifiedFiles: [],
+          });
         }
         const preview = await options.projectService.previewImport(
           rootPath,
@@ -190,6 +248,7 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
         );
         const previewToken = randomUUID();
         previews.set(previewToken, {
+          ownerId: event.sender.id,
           rootPath: preview.rootPath,
           template: preview.template,
           expiresAt: Date.now() + 15 * 60_000,
@@ -197,6 +256,7 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
         return ProjectImportPreviewResponseSchema.parse({
           ok: true,
           previewToken,
+          sourceKind: "folder",
           sourceRoot: { displayName: basename(preview.rootPath) },
           template: preview.template,
           recognizedTree: preview.structure.nodes.map(importNode),
@@ -283,22 +343,34 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
       try {
         const request = ProjectConfirmImportRequestSchema.parse(args[0]);
         const preview = getPreview(request.previewToken);
-        if (preview === undefined) {
+        if (preview === undefined || preview.ownerId !== event.sender.id) {
           return ProjectConfirmImportResponseSchema.parse({
             ok: false,
             error: {
               code: "not_found",
-              message: "The import preview expired. Preview the folder again.",
+              message:
+                "The import preview expired. Select the source and preview it again.",
               retryable: true,
             },
           });
         }
+        if (preview.document && request.mode !== "copy")
+          throw new DocumentImportError("unsupported");
         const project =
           request.mode === "copy"
             ? await (async () => {
                 const destinationParent =
                   await options.directoryPicker.chooseCopyDestination();
                 if (destinationParent === undefined) return undefined;
+                if (preview.document) {
+                  await assertImportSourceUnchanged(preview.document);
+                  return options.projectService.createProject(
+                    destinationParent,
+                    preview.document.title,
+                    preview.template,
+                    preview.document.plan.documents,
+                  );
+                }
                 return options.projectService.confirmImport({
                   mode: "copy",
                   rootPath: preview.rootPath,

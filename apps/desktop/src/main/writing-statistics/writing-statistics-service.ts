@@ -2,6 +2,10 @@ import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import {
+  WritingStatisticsHistoryRequestSchema,
+  WritingStatisticsHistorySchema,
+  type WritingStatisticsHistoryRequest,
+  type WritingStatisticsHistory,
   WritingStatisticsRecordSchema,
   WritingStatisticsRequestSchema,
   WritingStatisticsSnapshotSchema,
@@ -28,6 +32,38 @@ export class WritingStatisticsService {
 
   constructor(private readonly root: string) {}
 
+  history(
+    request: WritingStatisticsHistoryRequest,
+  ): Promise<WritingStatisticsHistory> {
+    return this.enqueue(async () => {
+      const { projectId, endDay } =
+        WritingStatisticsHistoryRequestSchema.parse(request);
+      // These are date labels, not instants. UTC arithmetic avoids DST gaps.
+      const end = new Date(`${endDay}T00:00:00.000Z`);
+      const days = [];
+      for (let offset = 6; offset >= 0; offset--) {
+        const date = new Date(end);
+        date.setUTCDate(date.getUTCDate() - offset);
+        const day = date.toISOString().slice(0, 10);
+        const data = await this.readDay(projectId, day);
+        days.push({
+          day,
+          netCharacters: Object.values(data.sessions).reduce(
+            (total, session) => total + session.netCharacters,
+            0,
+          ),
+        });
+      }
+      return WritingStatisticsHistorySchema.parse({
+        days,
+        netCharacters: days.reduce(
+          (total, day) => total + day.netCharacters,
+          0,
+        ),
+      });
+    });
+  }
+
   get(request: WritingStatisticsRequest): Promise<WritingStatisticsSnapshot> {
     return this.enqueue(() =>
       this.access(WritingStatisticsRequestSchema.parse(request)),
@@ -50,13 +86,16 @@ export class WritingStatisticsService {
     return result;
   }
 
-  private async access(
-    request: WritingStatisticsRequest | WritingStatisticsRecord,
-  ): Promise<WritingStatisticsSnapshot> {
-    const path = join(this.root, request.projectId, `${request.day}.json`);
-    let data: z.infer<typeof DayFileSchema>;
+  private async readDay(
+    projectId: string,
+    day: string,
+  ): Promise<z.infer<typeof DayFileSchema>> {
     try {
-      data = DayFileSchema.parse(JSON.parse(await readFile(path, "utf8")));
+      return DayFileSchema.parse(
+        JSON.parse(
+          await readFile(join(this.root, projectId, `${day}.json`), "utf8"),
+        ),
+      );
     } catch (error) {
       if (!(
         error instanceof Error &&
@@ -64,8 +103,15 @@ export class WritingStatisticsService {
         error.code === "ENOENT"
       ))
         throw error;
-      data = { schemaVersion: 1, sessions: {} };
+      return { schemaVersion: 1, sessions: {} };
     }
+  }
+
+  private async access(
+    request: WritingStatisticsRequest | WritingStatisticsRecord,
+  ): Promise<WritingStatisticsSnapshot> {
+    const path = join(this.root, request.projectId, `${request.day}.json`);
+    const data = await this.readDay(request.projectId, request.day);
     const previous = data.sessions[request.sessionId];
     const changed =
       "sequence" in request && request.sequence > (previous?.sequence ?? 0);

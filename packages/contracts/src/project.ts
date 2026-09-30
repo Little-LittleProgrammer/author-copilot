@@ -46,6 +46,7 @@ export const ProjectOperationErrorCodeSchema = z.enum([
   "invalid_path",
   "io_error",
   "invalid_metadata",
+  "invalid_import",
 ]);
 
 export type ProjectOperationErrorCode = z.infer<
@@ -115,6 +116,8 @@ export type ProjectUpdateResponse = z.infer<typeof ProjectUpdateResponseSchema>;
 
 export const ProjectImportPreviewRequestSchema = z.strictObject({
   template: ProjectTemplateSchema,
+  sourceKind: z.enum(["folder", "file"]).default("folder"),
+  splitChapters: z.boolean().default(true),
 });
 
 export type ProjectImportPreviewRequest = z.infer<
@@ -155,16 +158,35 @@ export type ProjectImportUnclassifiedFile = z.infer<
 >;
 
 export const ProjectImportPreviewResponseSchema = z.discriminatedUnion("ok", [
-  z.strictObject({
-    ok: z.literal(true),
-    previewToken: MainProcessTokenSchema,
-    sourceRoot: z.strictObject({
-      displayName: DisplayNameSchema,
-    }),
-    template: ProjectTemplateSchema,
-    recognizedTree: z.array(ProjectImportRecognizedNodeSchema),
-    unclassifiedFiles: z.array(ProjectImportUnclassifiedFileSchema),
-  }),
+  z
+    .strictObject({
+      ok: z.literal(true),
+      previewToken: MainProcessTokenSchema,
+      sourceKind: z.enum(["folder", "file"]),
+      document: z
+        .strictObject({
+          format: z.enum(["txt", "doc", "docx"]),
+          textPreview: z.string().max(2000),
+          characterCount: z.number().int().nonnegative(),
+          splitChapters: z.boolean(),
+          matchedChapterCount: z.number().int().nonnegative().max(2000),
+        })
+        .optional(),
+      sourceRoot: z.strictObject({
+        displayName: DisplayNameSchema,
+      }),
+      template: ProjectTemplateSchema,
+      recognizedTree: z.array(ProjectImportRecognizedNodeSchema),
+      unclassifiedFiles: z.array(ProjectImportUnclassifiedFileSchema),
+    })
+    .refine(
+      (preview) =>
+        (preview.sourceKind === "file") === (preview.document !== undefined),
+      {
+        message:
+          "File imports require a document preview; folder imports must omit it.",
+      },
+    ),
   ProjectOperationFailureSchema,
 ]);
 

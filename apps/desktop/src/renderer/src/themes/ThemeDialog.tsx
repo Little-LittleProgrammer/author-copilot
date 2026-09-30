@@ -17,15 +17,15 @@ const themes: readonly {
   readonly label: MessageKey;
 }[] = [
   {
-    colors: ["#fbfaf8", "#276b59", "#202429"],
+    colors: ["#f7f8fa", "#1e71ef", "#202429"],
     id: "light",
     label: "themeLight",
   },
-  { colors: ["#222427", "#64b69d", "#eef0f1"], id: "dark", label: "themeDark" },
+  { colors: ["#28292d", "#76a9ff", "#eceef2"], id: "dark", label: "themeDark" },
   { colors: ["#f7f4f2", "#a34d4b", "#29272a"], id: "dawn", label: "themeDawn" },
   { colors: ["#171819", "#d2a857", "#f2eee4"], id: "ink", label: "themeInk" },
   {
-    colors: ["#f3f4f5", "#276b59", "#ffffff"],
+    colors: ["#f3f4f5", "#1e71ef", "#ffffff"],
     id: "custom",
     label: "themeCustom",
   },
@@ -158,7 +158,7 @@ export function ThemeDialog({
                 type="button"
                 onClick={() =>
                   controller.setCustomTheme({
-                    accent: "#276b59",
+                    accent: "#1e71ef",
                     background: "#f3f4f5",
                     surface: "#ffffff",
                     text: "#202429",

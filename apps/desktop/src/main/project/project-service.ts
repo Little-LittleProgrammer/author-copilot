@@ -43,6 +43,7 @@ import type {
   AppliedBatchDocument,
   DocumentBatchWrite,
   ImportPreview,
+  InitialProjectDocument,
   ProjectEventPublisher,
   ProjectDocument,
   ProjectMetadata,
@@ -269,6 +270,7 @@ export class ProjectService {
     parentPath: string,
     title: string,
     template: ProjectTemplate,
+    initialDocuments?: readonly InitialProjectDocument[],
   ): Promise<RegisteredProject> {
     const canonicalParent = await canonicalDirectory(parentPath);
     const safeTitle = validateTitle(title);
@@ -283,17 +285,33 @@ export class ProjectService {
     await assertPathDoesNotExist(rootPath);
     await mkdir(stagingPath, { mode: 0o700 });
     try {
-      if (template === "novel") {
-        const chapterPath = join(stagingPath, "第一卷", "第一章");
-        await mkdir(chapterPath, { recursive: true });
-        await writeFile(join(chapterPath, "01-正文.md"), "", {
-          encoding: "utf8",
-          flag: "wx",
-        });
-      } else {
-        const actPath = join(stagingPath, "第一幕");
-        await mkdir(actPath);
-        await writeFile(join(actPath, "01-第一场.md"), "", {
+      const documents = initialDocuments ?? [
+        {
+          relativePath:
+            template === "novel"
+              ? "第一卷/第一章/01-正文.md"
+              : "第一幕/01-第一场.md",
+          content: "",
+        },
+      ];
+      if (documents.length === 0 || documents.length > 2000)
+        throw new ProjectServiceError("Invalid initial document count.");
+      const paths = new Set<string>();
+      for (const document of documents) {
+        const segments = document.relativePath.split("/");
+        if (
+          segments.length !== (template === "novel" ? 3 : 2) ||
+          !segments.at(-1)?.endsWith(".md")
+        )
+          throw new InvalidProjectPathError("Invalid initial document path.");
+        for (const segment of segments) validateProjectEntryName(segment);
+        const key = document.relativePath.toLowerCase();
+        if (paths.has(key))
+          throw new InvalidProjectPathError("Duplicate initial document path.");
+        paths.add(key);
+        const target = join(stagingPath, ...segments);
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, document.content, {
           encoding: "utf8",
           flag: "wx",
         });

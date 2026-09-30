@@ -1,4 +1,8 @@
 import {
+  ConversationRequestSchema,
+  ConversationResponseSchema,
+} from "./conversation.js";
+import {
   AiSettingsRequestSchema,
   AiSettingsResponseSchema,
 } from "./ai-settings.js";
@@ -108,12 +112,16 @@ import {
 } from "./version.js";
 
 import {
+  WritingStatisticsHistoryRequestSchema,
+  WritingStatisticsHistoryResponseSchema,
   WritingStatisticsRequestSchema,
   WritingStatisticsRecordSchema,
   WritingStatisticsResponseSchema,
 } from "./writing-statistics.js";
 
 export const IPC_INVOKE_CHANNELS = {
+  conversation: "assistant:conversation",
+  writingStatisticsHistory: "writing-statistics:history",
   writingStatisticsGet: "writing-statistics:get",
   writingStatisticsRecord: "writing-statistics:record",
   aiSettings: "ai:settings",
@@ -174,6 +182,8 @@ export const IPC_EVENT_CHANNELS = {
 } as const;
 
 export const IPC_INVOKE_CHANNEL_NAMES = [
+  IPC_INVOKE_CHANNELS.conversation,
+  IPC_INVOKE_CHANNELS.writingStatisticsHistory,
   IPC_INVOKE_CHANNELS.writingStatisticsGet,
   IPC_INVOKE_CHANNELS.writingStatisticsRecord,
   IPC_INVOKE_CHANNELS.aiSettings,
@@ -247,6 +257,14 @@ export type IpcEventChannel = z.infer<typeof IpcEventChannelSchema>;
 export type IpcChannel = z.infer<typeof IpcChannelSchema>;
 
 export const IPC_INVOKE_CONTRACTS = {
+  [IPC_INVOKE_CHANNELS.conversation]: {
+    request: ConversationRequestSchema,
+    response: ConversationResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.writingStatisticsHistory]: {
+    request: WritingStatisticsHistoryRequestSchema,
+    response: WritingStatisticsHistoryResponseSchema,
+  },
   [IPC_INVOKE_CHANNELS.writingStatisticsGet]: {
     request: WritingStatisticsRequestSchema,
     response: WritingStatisticsResponseSchema,

@@ -59,7 +59,10 @@ The editor footer shows today's net manual character activity for the current
 work and an estimated typing rate. Activity is stored locally by Main and survives
 restarts; IME preedit, AI edits and document reloads are excluded. See the
 [writing statistics guide](reports/2026-09-19-writing-statistics.md) for counting,
-idle time, unsaved drafts and persistence failure behavior.
+idle time, unsaved drafts and persistence failure behavior. The **7-day trend**
+entry opens daily signed net counts and their total for this work, including today.
+Missing days show zero; unreadable history shows a retry state. See the
+[seven-day history guide](reports/2026-09-27-writing-history.md).
 
 Platform package commands:
 

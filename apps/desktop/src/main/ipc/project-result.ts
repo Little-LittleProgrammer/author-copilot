@@ -13,6 +13,8 @@ import {
   SymbolicLinkNotAllowedError,
 } from "../project/index.js";
 
+import { DocumentImportError } from "../project/document-import.js";
+
 function failure(error: ProjectOperationError): ProjectOperationFailure {
   return { ok: false, error };
 }
@@ -28,6 +30,14 @@ export function cancelledOperation(): ProjectOperationFailure {
 export function projectOperationFailure(
   error: unknown,
 ): ProjectOperationFailure {
+  if (error instanceof DocumentImportError) {
+    return failure({
+      code: "invalid_import",
+      message: "The selected document could not be imported.",
+      retryable: true,
+      details: { reason: error.reason },
+    });
+  }
   if (error instanceof DocumentConflictError) {
     return failure({
       code: "conflict",

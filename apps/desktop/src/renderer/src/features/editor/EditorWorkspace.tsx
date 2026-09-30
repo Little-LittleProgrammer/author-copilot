@@ -1,7 +1,5 @@
-import { AiConnectionSelector } from "../assistant/AiSettingsDialog.js";
-import { AgentPanel } from "../assistant/AgentPanel.js";
-import { useState, type JSX } from "react";
-import { X } from "lucide-react";
+import { useState, type JSX, type ReactNode } from "react";
+import { BookOpen, Palette, Sparkles, X } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog.js";
 import { WritingEditor } from "./WritingEditor.js";
 import type {
@@ -20,12 +18,17 @@ import type {
 } from "../project/types.js";
 import { VersionHistoryPanel } from "../version/VersionHistoryPanel.js";
 
+import { ThemeDialog } from "../../themes/ThemeDialog.js";
+import { useTheme } from "../../themes/index.js";
+
 interface EditorWorkspaceProps {
+  readonly sidebar: ReactNode;
   readonly onAgentBusyChange: (busy: boolean) => void;
   readonly activeProject: ProjectSummary | undefined;
   readonly aiContext: readonly StructureNode[];
   readonly content: string;
   readonly document: DocumentSnapshot | undefined;
+  readonly documentTitle: string | undefined;
   readonly dirty: boolean;
   readonly error: string | undefined;
   readonly loading: boolean;
@@ -99,11 +102,15 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
     versionWarning,
     versionRefreshKey,
   } = props;
+  const themeController = useTheme();
+  const [themeOpen, setThemeOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
-  const [assistantMode, setAssistantMode] = useState<
-    "chat" | "agent" | "knowledge"
-  >("chat");
+  const [assistantMode, setAssistantMode] = useState<"chat" | "knowledge">(
+    "chat",
+  );
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewHost, setPreviewHost] = useState<HTMLDivElement | null>(null);
   const roleLabels: Readonly<Record<StructureNode["role"], MessageKey>> = {
     act: "structureRoleAct",
     chapter: "structureRoleChapter",
@@ -111,71 +118,11 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
     unclassified: "structureRoleDocument",
     volume: "structureRoleVolume",
   };
-  const documentName = document?.path
-    .split(/[\\/]/)
-    .at(-1)
-    ?.replace(/\.md$/iu, "");
+  const documentName =
+    props.documentTitle ??
+    document?.path.split(/[\\/]/).at(-1)?.replace(/\.md$/iu, "");
   return (
     <main className="editor-pane">
-      <header className="editor-header">
-        <div className="document-title">
-          <span className="eyebrow">{activeProject?.name ?? t("editor")}</span>
-          <h2>{documentName ?? t("documentEmpty")}</h2>
-        </div>
-        <div className="editor-status" aria-live="polite">
-          {versionNotice !== undefined ? (
-            <span
-              className={`max-w-52 overflow-hidden text-ellipsis whitespace-nowrap ${versionWarning ? "text-destructive" : "text-primary"}`}
-              title={versionNotice}
-            >
-              {versionNotice}
-            </span>
-          ) : dirty ? (
-            <span className="dirty-indicator">{t("unsaved")}</span>
-          ) : document !== undefined ? (
-            <span>{t("saved")}</span>
-          ) : null}
-          {dirty ? (
-            <button type="button" className="text-button" onClick={onDiscard}>
-              {t("discard")}
-            </button>
-          ) : null}
-          <Button
-            type="button"
-            className="h-8 min-w-[78px] text-xs"
-            variant="outline"
-            size="sm"
-            data-testid="save-version"
-            disabled={
-              activeProject === undefined ||
-              dirty ||
-              saving ||
-              loading ||
-              proposalApplying
-            }
-            title={dirty ? t("versionSaveDocumentFirst") : t("saveVersion")}
-            onClick={onCreateVersion}
-          >
-            {t("saveVersion")}
-          </Button>
-          <button
-            type="button"
-            className="button primary save-button"
-            data-testid="save-document"
-            disabled={
-              !dirty ||
-              saving ||
-              loading ||
-              proposalApplying ||
-              document === undefined
-            }
-            onClick={onSave}
-          >
-            {saving ? t("saving") : t("save")}
-          </button>
-        </div>
-      </header>
-
       {error !== undefined ? (
         <div className="editor-alert" role="alert">
           <span>{error}</span>
@@ -186,10 +133,68 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
       ) : null}
 
       <WritingEditor
+        onPreviewHost={setPreviewHost}
+        sidebar={props.sidebar}
+        documentTitle={documentName}
+        onOpenTheme={() => setThemeOpen(true)}
+        toolbarActions={
+          <div className="editor-status" aria-live="polite">
+            {versionNotice !== undefined ? (
+              <span
+                className={`max-w-52 overflow-hidden text-ellipsis whitespace-nowrap ${versionWarning ? "text-destructive" : "text-primary"}`}
+                title={versionNotice}
+              >
+                {versionNotice}
+              </span>
+            ) : dirty ? (
+              <span className="dirty-indicator">{t("unsaved")}</span>
+            ) : document !== undefined ? (
+              <span>{t("saved")}</span>
+            ) : null}
+            {dirty ? (
+              <button type="button" className="text-button" onClick={onDiscard}>
+                {t("discard")}
+              </button>
+            ) : null}
+            <Button
+              type="button"
+              className="h-8 min-w-[78px] text-xs"
+              variant="outline"
+              size="sm"
+              data-testid="save-version"
+              disabled={
+                activeProject === undefined ||
+                dirty ||
+                saving ||
+                loading ||
+                proposalApplying
+              }
+              title={dirty ? t("versionSaveDocumentFirst") : t("saveVersion")}
+              onClick={onCreateVersion}
+            >
+              {t("saveVersion")}
+            </Button>
+            <button
+              type="button"
+              className="button primary save-button"
+              data-testid="save-document"
+              disabled={
+                !dirty ||
+                saving ||
+                loading ||
+                proposalApplying ||
+                document === undefined
+              }
+              onClick={onSave}
+            >
+              {saving ? t("saving") : t("save")}
+            </button>
+          </div>
+        }
         content={content}
         projectId={activeProject?.id}
         documentPath={document?.path}
-        readOnly={loading || proposalApplying}
+        readOnly={loading || proposalApplying || previewOpen}
         loading={loading}
         assistantOpen={assistantOpen}
         onChange={onChange}
@@ -209,35 +214,6 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
           hidden={!assistantOpen}
           aria-label={t("aiChat")}
         >
-          <header className="assistant-dock-header">
-            <strong>{t("aiChat")}</strong>
-            <button
-              type="button"
-              aria-label={t("close")}
-              onClick={() => setAssistantOpen(false)}
-            >
-              <X size={16} />
-            </button>
-          </header>
-          <AiConnectionSelector t={t} />
-          <nav className="assistant-mode-tabs" aria-label={t("aiChat")}>
-            {(
-              [
-                ["chat", "assistantChatMode"],
-                ["agent", "assistantAgentMode"],
-                ["knowledge", "assistantKnowledgeMode"],
-              ] as const
-            ).map(([mode, label]) => (
-              <button
-                type="button"
-                key={mode}
-                aria-pressed={assistantMode === mode}
-                onClick={() => setAssistantMode(mode)}
-              >
-                {t(label)}
-              </button>
-            ))}
-          </nav>
           {proposalReview !== undefined ? (
             <button
               type="button"
@@ -257,9 +233,22 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
                 hidden={assistantMode !== "chat"}
               >
                 <ChatPanel
-                  canPropose={
-                    !dirty && !saving && !loading && !proposalApplying
+                  previewHost={previewHost}
+                  onPreviewOpenChange={setPreviewOpen}
+                  key={activeProject.id}
+                  projectName={activeProject.name}
+                  blocked={
+                    dirty ||
+                    saving ||
+                    loading ||
+                    repositoryBusy ||
+                    proposalApplying
                   }
+                  refreshKey={versionRefreshKey}
+                  onBusyChange={props.onAgentBusyChange}
+                  onFilesChanged={onRecoveryRestored}
+                  onClose={() => setAssistantOpen(false)}
+                  onKnowledge={() => setAssistantMode("knowledge")}
                   contextPaths={aiContext.map((node) => node.path)}
                   content={content}
                   documentPath={document?.path}
@@ -272,24 +261,24 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
               </div>
               <div
                 className="assistant-view"
-                hidden={assistantMode !== "agent"}
-              >
-                <AgentPanel
-                  projectId={activeProject.id}
-                  projectName={activeProject.name}
-                  refreshKey={versionRefreshKey}
-                  blocked={
-                    dirty || saving || repositoryBusy || proposalApplying
-                  }
-                  onBusyChange={props.onAgentBusyChange}
-                  onFilesChanged={onRecoveryRestored}
-                  t={t}
-                />
-              </div>
-              <div
-                className="assistant-view"
                 hidden={assistantMode !== "knowledge"}
               >
+                <header className="assistant-dock-header">
+                  <button
+                    type="button"
+                    onClick={() => setAssistantMode("chat")}
+                  >
+                    {t("chatBack")}
+                  </button>
+                  <strong>{t("assistantKnowledgeMode")}</strong>
+                  <button
+                    type="button"
+                    aria-label={t("close")}
+                    onClick={() => setAssistantOpen(false)}
+                  >
+                    <X size={16} />
+                  </button>
+                </header>
                 <KnowledgePanel
                   onOpenSource={onOpenKnowledgeSource}
                   projectId={activeProject.id}
@@ -320,7 +309,44 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
             </>
           )}
         </aside>
+        <nav className="editor-tool-rail" aria-label={t("writingTools")}>
+          {(
+            [
+              ["chat", "assistantChatMode", Sparkles],
+              ["knowledge", "assistantKnowledgeMode", BookOpen],
+            ] as const
+          ).map(([mode, label, Icon]) => (
+            <button
+              key={mode}
+              type="button"
+              aria-label={`${t("openPanel")}: ${t(label)}`}
+              aria-pressed={assistantOpen && assistantMode === mode}
+              onClick={() => {
+                setAssistantOpen(!assistantOpen || assistantMode !== mode);
+                setAssistantMode(mode);
+              }}
+            >
+              <Icon size={18} />
+              <span>{t(label)}</span>
+            </button>
+          ))}
+          <span className="rail-divider" />
+          <button
+            type="button"
+            onClick={() => setThemeOpen(true)}
+            aria-label={t("themeSettings")}
+          >
+            <Palette size={18} />
+            <span>{t("editorBackground")}</span>
+          </button>
+        </nav>
       </WritingEditor>
+      <ThemeDialog
+        controller={themeController}
+        open={themeOpen}
+        onClose={() => setThemeOpen(false)}
+        t={t}
+      />
       <Dialog
         open={historyOpen || proposalOpen}
         onOpenChange={(open) => {

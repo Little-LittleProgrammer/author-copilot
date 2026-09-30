@@ -50,6 +50,8 @@ catalog:
   vite: "8.1.4"
   vitest: "4.1.10"
   zod: "4.4.3"
+  word-extractor: "1.0.4"
+  "@types/word-extractor": "1.0.6"
   mongodb: "7.6.0"
   redis: "6.2.1"
   nodemailer: "10.0.9"

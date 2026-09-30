@@ -170,6 +170,7 @@ export function buildAgentSdkOptions(options: {
     disallowedTools: [...DISALLOWED_AGENT_SDK_TOOLS],
     canUseTool: permissionGate(options),
     permissionMode: "dontAsk",
+    includePartialMessages: true,
     mcpServers: { [AGENT_MCP_SERVER_NAME]: options.mcpServer },
     strictMcpConfig: true,
     settingSources: [],

@@ -51,7 +51,9 @@ async function fixture() {
   const capabilities = new AgentCapabilityService({});
   const terminal = deferred<AgentTaskTerminalEvent>();
   const runtime = {
-    execute: vi.fn(async () => terminal.promise),
+    execute: vi.fn<(input: unknown) => Promise<AgentTaskTerminalEvent>>(
+      async () => terminal.promise,
+    ),
     cancel: vi.fn(() => true),
     shutdown: vi.fn(),
   };
@@ -110,6 +112,33 @@ afterEach(async () => {
 });
 
 describe("Agent task desktop lifecycle", () => {
+  it("carries conversation and current file context into the next Agent run", async () => {
+    const fx = await fixture();
+    const capability = await fx.service.start(
+      {
+        ...fx.request,
+        documentPath: "scene.md",
+        selection: { startLine: 2, endLine: 4 },
+        history: [
+          { role: "user", content: "Discuss the rain" },
+          { role: "assistant", content: "Use distant thunder" },
+        ],
+      },
+      1,
+      () => undefined,
+    );
+    await vi.waitFor(() => expect(fx.runtime.execute).toHaveBeenCalledOnce());
+    const input = fx.runtime.execute.mock.calls[0]?.[0] as unknown as {
+      prompt: string;
+    };
+    expect(input.prompt).toContain("Use distant thunder");
+    expect(input.prompt).toContain("scene.md");
+    expect(input.prompt).toContain('"startLine":2');
+    expect(input.prompt).toContain("Latest user request:\nEdit the scene");
+    fx.terminal.resolve(cancelled(capability.taskId));
+    await fx.service.shutdown();
+  });
+
   it("reserves the project before credential lookup and releases only its own start", async () => {
     const fx = await fixture();
     const key = deferred<string | null>();

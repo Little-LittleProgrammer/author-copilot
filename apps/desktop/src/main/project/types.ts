@@ -12,6 +12,11 @@ export interface RegisteredProject {
   readonly registeredAt: string;
 }
 
+export interface InitialProjectDocument {
+  readonly relativePath: string;
+  readonly content: string;
+}
+
 export interface ProjectDocument {
   readonly kind: "document";
   readonly name: string;

@@ -16,7 +16,13 @@ export default defineConfig({
     ],
     build: {
       rolldownOptions: {
-        input: resolve(import.meta.dirname, "src/main/index.ts"),
+        input: {
+          index: resolve(import.meta.dirname, "src/main/index.ts"),
+          "document-import-worker": resolve(
+            import.meta.dirname,
+            "src/main/project/document-import-worker.ts",
+          ),
+        },
       },
     },
   },

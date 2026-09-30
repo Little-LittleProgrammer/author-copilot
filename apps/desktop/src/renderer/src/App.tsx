@@ -259,7 +259,6 @@ function ProjectApp({
   readonly context: Extract<TabContext, { kind: "project" }>;
 }): JSX.Element {
   const { t } = useI18n();
-  useTheme();
   const [project, setProject] = useState(() => mapProject(context.project));
   const [runtime, setRuntime] = useState<RuntimeInfo>();
 

@@ -66,7 +66,8 @@ export class WritingStatisticsTracker {
   constructor(
     private readonly projectId: string,
     private readonly sessionId: string,
-    private readonly api: AuthorCopilotApi["writingStatistics"] | undefined,
+    private readonly api:
+      Pick<AuthorCopilotApi["writingStatistics"], "get" | "record"> | undefined,
     private readonly clock: () => Date = () => new Date(),
   ) {}
 

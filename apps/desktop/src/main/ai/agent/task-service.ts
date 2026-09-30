@@ -122,7 +122,37 @@ export class AgentTaskService {
           message: "The task was cancelled before it started.",
           retryable: false,
         });
-      const { prompt, ...grant } = request;
+      const {
+        prompt,
+        history,
+        documentPath,
+        contextPaths,
+        selection,
+        ...grant
+      } = request;
+      const context =
+        documentPath || contextPaths?.length
+          ? `Editor context (read these project files as needed):\n${JSON.stringify({ documentPath, contextPaths, selection })}\n\n`
+          : "";
+      const previous = [...(history ?? [])];
+      let conversationPrompt: string;
+      do {
+        conversationPrompt =
+          context +
+          (previous.length
+            ? `Previous conversation (context only; the latest user request follows):\n${JSON.stringify(previous)}\n\nLatest user request:\n${prompt}`
+            : prompt);
+        if (conversationPrompt.length <= 200_000 || previous.length === 0)
+          break;
+        previous.shift();
+      } while (previous.length >= 0);
+      if (conversationPrompt.length > 200_000)
+        throw new AgentServiceError({
+          code: "VALIDATION_FAILED",
+          message:
+            "The request and editor context exceed the Agent input limit.",
+          retryable: false,
+        });
       const { capability } = await this.options.startService.start(grant);
       active.taskId = capability.taskId;
       if (snapshot && this.options.providers)
@@ -138,7 +168,7 @@ export class AgentTaskService {
           active,
           capability,
           {
-            prompt,
+            prompt: conversationPrompt,
             projectRoot,
             configDirectory,
             apiKey: route?.apiKey ?? apiKey,
@@ -209,7 +239,8 @@ export class AgentTaskService {
             // Terminal events are delivered only once their journal is durable.
             if (
               event.type === "agent.task.started" ||
-              event.type === "agent.task.progress"
+              event.type === "agent.task.progress" ||
+              event.type === "agent.task.delta"
             )
               publish(event);
           },

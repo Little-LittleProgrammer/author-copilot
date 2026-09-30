@@ -1,3 +1,11 @@
+import {
+  AiContextPathsSchema,
+  AiContextSelectionSchema,
+} from "./ai-context.js";
+import {
+  AiChatHistoryMessageSchema,
+  AI_CHAT_MAX_HISTORY_MESSAGES,
+} from "./ai-chat.js";
 import { z } from "zod";
 import {
   AgentTaskCapabilityGrantRequestSchema,
@@ -10,6 +18,13 @@ import { RelativeProjectPathSchema } from "./project.js";
 export const AgentStartRequestSchema =
   AgentTaskCapabilityGrantRequestSchema.safeExtend({
     prompt: z.string().trim().min(1).max(200_000),
+    documentPath: RelativeProjectPathSchema.optional(),
+    contextPaths: AiContextPathsSchema.optional(),
+    selection: AiContextSelectionSchema.optional(),
+    history: z
+      .array(AiChatHistoryMessageSchema)
+      .max(AI_CHAT_MAX_HISTORY_MESSAGES)
+      .optional(),
   });
 export const AgentProjectRequestSchema = z.strictObject({
   projectId: z.uuid(),

@@ -44,7 +44,7 @@ const customVariables = [
 ] as const;
 
 const defaultCustomTheme: CustomTheme = {
-  accent: "#276b59",
+  accent: "#1e71ef",
   background: "#f3f4f5",
   surface: "#ffffff",
   text: "#202429",
@@ -52,10 +52,10 @@ const defaultCustomTheme: CustomTheme = {
 
 const canvasColors: Readonly<Record<Theme, string>> = {
   custom: defaultCustomTheme.background,
-  dark: "#222427",
+  dark: "#28292d",
   dawn: "#f7f4f2",
   ink: "#171819",
-  light: "#fbfaf8",
+  light: "#f7f8fa",
 };
 
 function isTheme(value: unknown): value is Theme {

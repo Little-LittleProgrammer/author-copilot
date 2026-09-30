@@ -5,6 +5,8 @@
     "types": ["node", "electron-vite/node"]
   },
   "include": [
+    "src/renderer/src/features/assistant/conversation-state.ts",
+    "src/renderer/src/features/assistant/line-diff.ts",
     "electron.vite.config.ts",
     "eslint.config.ts",
     "playwright.config.ts",
@@ -15,6 +17,8 @@
     "src/shared/**/*.ts",
     "src/renderer/src/features/editor/editor-text.ts",
     "src/renderer/src/features/editor/writing-statistics.ts",
+    "src/renderer/src/features/project/structure-presentation.ts",
+    "src/renderer/src/features/project/types.ts",
     "tests/**/*.ts"
   ]
 }

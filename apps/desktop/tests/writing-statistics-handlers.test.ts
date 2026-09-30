@@ -18,6 +18,66 @@ vi.mock("electron", () => ({
 import { registerWritingStatisticsHandlers } from "../src/main/ipc/writing-statistics-handlers.js";
 
 describe("writing statistics IPC", () => {
+  it("guards history reads and sanitizes storage errors", async () => {
+    const projectId = "10000000-0000-4000-8000-000000000001";
+    const trustedRendererUrl = "file:///app/renderer/index.html";
+    const frame = { url: trustedRendererUrl };
+    const event = { senderFrame: frame, sender: { id: 42, mainFrame: frame } };
+    const request = { projectId, endDay: "2026-09-27" };
+    const history = {
+      days: Array.from({ length: 7 }, (_, index) => ({
+        day: `2026-09-${21 + index}`,
+        netCharacters: -2,
+      })),
+      netCharacters: -14,
+    };
+    const service = { history: vi.fn(async () => history) };
+    const manager = {
+      getContext: vi.fn(() => ({ kind: "project", project: { projectId } })),
+    };
+    registerWritingStatisticsHandlers({
+      trustedRendererUrl,
+      service: service as unknown as WritingStatisticsService,
+      getTabManager: () => manager as unknown as TabManager,
+    });
+    const read = handlers.get(IPC_INVOKE_CHANNELS.writingStatisticsHistory)!;
+    for (const senderFrame of [
+      { url: "https://foreign.invalid" },
+      { ...frame },
+      null,
+    ]) {
+      await expect(read({ ...event, senderFrame }, request)).rejects.toThrow();
+    }
+    await expect(read(event, request, "extra")).rejects.toThrow();
+    for (const changes of [
+      { projectId: "20000000-0000-4000-8000-000000000001" },
+      { projectId: "../escape" },
+      { endDay: "2026-02-30" },
+      { content: "private text" },
+      { days: 10000 },
+    ]) {
+      expect(await read(event, { ...request, ...changes })).toEqual({
+        ok: false,
+        error: "invalid_request",
+      });
+    }
+    manager.getContext.mockReturnValueOnce({
+      kind: "center",
+      project: { projectId },
+    });
+    expect(await read(event, request)).toEqual({
+      ok: false,
+      error: "invalid_request",
+    });
+    expect(service.history).not.toHaveBeenCalled();
+    expect(await read(event, request)).toEqual({ ok: true, history });
+    service.history.mockRejectedValueOnce(new Error("private path"));
+    expect(await read(event, request)).toEqual({
+      ok: false,
+      error: "unavailable",
+    });
+  });
+
   it("enforces renderer origin, frame, project ownership and strict payloads before storage", async () => {
     const projectId = "10000000-0000-4000-8000-000000000001";
     const trustedRendererUrl = "file:///app/renderer/index.html";

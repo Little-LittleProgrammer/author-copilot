@@ -47,6 +47,7 @@ export function ProjectDialog({
   const [projectType, setProjectType] = useState<ProjectType>("novel");
   const [importMode, setImportMode] = useState<"copy" | "in_place">("in_place");
   const [preview, setPreview] = useState<ImportPreview | null>();
+  const [splitChapters, setSplitChapters] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [reassignDuplicate, setReassignDuplicate] = useState(false);
@@ -71,7 +72,7 @@ export function ProjectDialog({
       const project =
         kind === "import"
           ? await api.confirmImport({
-              mode: importMode,
+              mode: preview?.sourceKind === "file" ? "copy" : importMode,
               previewToken: preview?.previewToken ?? "",
               ...(importMode === "in_place" && reassignDuplicate
                 ? { reassignProjectId: true }
@@ -91,14 +92,30 @@ export function ProjectDialog({
         setReassignDuplicate(true);
         setError(t("duplicateProject"));
       } else {
-        setError(errorMessage(reason, t("errorGeneric")));
+        setError(importError(reason));
       }
     } finally {
       setBusy(false);
     }
   };
 
-  const inspectFolder = async (): Promise<void> => {
+  const importError = (reason: unknown): string => {
+    if (reason instanceof ProjectApiError && reason.code === "invalid_import") {
+      const keys: Readonly<Record<string, MessageKey>> = {
+        unsupported: "importUnsupported",
+        too_large: "importTooLarge",
+        unreadable: "importUnreadable",
+        empty: "importEmpty",
+        changed: "importChanged",
+        too_many_chapters: "importTooManyChapters",
+      };
+      return t(keys[reason.importReason ?? ""] ?? "importUnreadable");
+    }
+    return errorMessage(reason, t("errorGeneric"));
+  };
+  const inspectSource = async (
+    sourceKind: "folder" | "file",
+  ): Promise<void> => {
     const api = getProjectApi();
     if (api === undefined) {
       setError(t("projectApiUnavailable"));
@@ -107,10 +124,17 @@ export function ProjectDialog({
     setBusy(true);
     setError(undefined);
     setReassignDuplicate(false);
+    setPreview(undefined);
     try {
-      setPreview(await api.previewImport(projectType));
+      const next = await api.previewImport(
+        projectType,
+        sourceKind,
+        splitChapters,
+      );
+      setPreview(next);
+      if (next?.sourceKind === "file") setImportMode("copy");
     } catch (reason) {
-      setError(errorMessage(reason, t("errorGeneric")));
+      setError(importError(reason));
     } finally {
       setBusy(false);
     }
@@ -120,7 +144,7 @@ export function ProjectDialog({
   return (
     <dialog
       ref={dialogRef}
-      className="project-dialog"
+      className={`project-dialog${kind === "import" ? " import-dialog" : ""}`}
       onCancel={onClose}
       onClose={onClose}
     >
@@ -150,22 +174,49 @@ export function ProjectDialog({
               <span>{t("project")}</span>
               <select
                 value={projectType}
-                onChange={(event) =>
-                  setProjectType(event.target.value as ProjectType)
-                }
+                disabled={busy}
+                onChange={(event) => {
+                  setProjectType(event.target.value as ProjectType);
+                  setPreview(undefined);
+                  setError(undefined);
+                }}
               >
                 <option value="novel">{t("projectTypeNovel")}</option>
                 <option value="screenplay">{t("projectTypeScreenplay")}</option>
               </select>
             </label>
-            <button
-              className="button secondary inspect-button"
-              type="button"
-              disabled={busy}
-              onClick={() => void inspectFolder()}
-            >
-              {t("selectFolder")}
-            </button>
+            <label className="import-split-option">
+              <input
+                type="checkbox"
+                checked={splitChapters}
+                disabled={busy}
+                onChange={(event) => {
+                  setSplitChapters(event.target.checked);
+                  if (preview?.sourceKind === "file") setPreview(undefined);
+                  setError(undefined);
+                }}
+              />
+              <span>{t("importAutoSplit")}</span>
+            </label>
+            <p className="field-note">{t("importSplitHint")}</p>
+            <div className="import-source-actions">
+              <button
+                className="button secondary inspect-button"
+                type="button"
+                disabled={busy}
+                onClick={() => void inspectSource("folder")}
+              >
+                {t("selectFolder")}
+              </button>
+              <button
+                className="button secondary"
+                type="button"
+                disabled={busy}
+                onClick={() => void inspectSource("file")}
+              >
+                {t("importSelectFile")}
+              </button>
+            </div>
             {busy ? <p className="dialog-state">{t("importing")}</p> : null}
             {!busy && preview === null ? (
               <p className="dialog-state">{t("importNoPreview")}</p>
@@ -206,7 +257,33 @@ export function ProjectDialog({
                 ) : null}
               </div>
             ) : null}
-            {preview !== undefined && preview !== null ? (
+            {preview?.document ? (
+              <section className="import-document-preview">
+                <strong>
+                  {t("importTextPreview")} ·{" "}
+                  {preview.document.format.toUpperCase()} ·{" "}
+                  {preview.document.characterCount} {t("editorWordCount")}
+                </strong>
+                <p className="field-note" data-testid="import-split-summary">
+                  {t(
+                    !preview.document.splitChapters
+                      ? "importSplitOff"
+                      : preview.document.matchedChapterCount === 0
+                        ? "importSplitNoMatches"
+                        : "importSplitMatched",
+                  )}
+                  {preview.document.splitChapters &&
+                  preview.document.matchedChapterCount > 0
+                    ? ` ${preview.document.matchedChapterCount}`
+                    : ""}
+                </p>
+                <pre>{preview.document.textPreview}</pre>
+                <p className="field-note">{t("importDocumentHint")}</p>
+              </section>
+            ) : null}
+            {preview !== undefined &&
+            preview !== null &&
+            preview.sourceKind === "folder" ? (
               <label>
                 <span>{t("importMode")}</span>
                 <select

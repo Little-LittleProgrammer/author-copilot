@@ -1,5 +1,5 @@
-import { Check, Pencil, Sparkles, Trash2, X } from "lucide-react";
-import { useState, type FormEvent, type JSX } from "react";
+import { Check, Pencil, Search, Sparkles, Trash2, X } from "lucide-react";
+import { useMemo, useState, type FormEvent, type JSX } from "react";
 import { ContextMenu as ContextMenuPrimitive } from "radix-ui";
 
 import type { MessageKey } from "../../i18n/index.js";
@@ -23,6 +23,7 @@ interface ProjectSidebarProps {
 
 function TreeNode({
   activePath,
+  forceExpanded,
   aiContextPaths,
   canMutate,
   node,
@@ -33,6 +34,7 @@ function TreeNode({
   t,
 }: {
   readonly activePath: string | undefined;
+  readonly forceExpanded: boolean;
   readonly aiContextPaths: ReadonlySet<string>;
   readonly canMutate: boolean;
   readonly node: StructureNode;
@@ -114,13 +116,16 @@ function TreeNode({
               <button
                 className="tree-row-main"
                 type="button"
-                aria-expanded={isDocument ? undefined : expanded}
+                title={node.name}
+                aria-expanded={
+                  isDocument ? undefined : expanded || forceExpanded
+                }
                 onClick={() =>
                   isDocument ? onSelect(node) : setExpanded((value) => !value)
                 }
               >
                 <span className="tree-disclosure" aria-hidden="true">
-                  {isDocument ? "·" : expanded ? "⌄" : "›"}
+                  {isDocument ? "·" : expanded || forceExpanded ? "⌄" : "›"}
                 </span>
                 <span className="tree-name">
                   {node.role === "unclassified" ? t("unclassified") : node.name}
@@ -177,12 +182,15 @@ function TreeNode({
           </ContextMenuPrimitive.Portal>
         </ContextMenuPrimitive.Root>
       )}
-      {!isDocument && expanded && node.children !== undefined ? (
+      {!isDocument &&
+      (expanded || forceExpanded) &&
+      node.children !== undefined ? (
         <ul>
           {node.children.map((child) => (
             <TreeNode
               key={child.id}
               activePath={activePath}
+              forceExpanded={forceExpanded}
               aiContextPaths={aiContextPaths}
               canMutate={canMutate}
               node={child}
@@ -215,11 +223,22 @@ export function ProjectSidebar(props: ProjectSidebarProps): JSX.Element {
     t,
   } = props;
   const [infoOpen, setInfoOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const visibleStructure = useMemo(() => {
+    const term = query.trim().toLocaleLowerCase();
+    if (!term) return structure;
+    const filter = (nodes: readonly StructureNode[]): StructureNode[] =>
+      nodes.flatMap((node) => {
+        if (node.name.toLocaleLowerCase().includes(term)) return [node];
+        const children = filter(node.children ?? []);
+        return children.length ? [{ ...node, children }] : [];
+      });
+    return filter(structure);
+  }, [query, structure]);
 
   return (
     <aside className="sidebar" aria-label={t("projects")}>
       <div className="sidebar-section project-section editor-project-summary">
-        <span className="eyebrow">{t("currentWork")}</span>
         <div className="project-summary-title">
           <strong>{activeProject.name}</strong>
           <button
@@ -240,17 +259,30 @@ export function ProjectSidebar(props: ProjectSidebarProps): JSX.Element {
       </div>
 
       <div className="sidebar-section structure-section">
+        <label className="directory-search">
+          <Search size={14} aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            aria-label={t("directorySearch")}
+            placeholder={t("directorySearch")}
+          />
+        </label>
         <div className="section-heading">
-          <span>{t("structure")}</span>
+          <span>{t("chapterDirectory")}</span>
         </div>
-        {structure.length === 0 && !loading ? (
-          <p className="sidebar-note">{t("documentEmpty")}</p>
+        {visibleStructure.length === 0 && !loading ? (
+          <p className="sidebar-note">
+            {query.trim() ? t("directoryEmpty") : t("documentEmpty")}
+          </p>
         ) : null}
         <ul className="structure-tree">
-          {structure.map((node) => (
+          {visibleStructure.map((node) => (
             <TreeNode
               key={node.id}
               activePath={activeDocumentPath}
+              forceExpanded={query.trim().length > 0}
               aiContextPaths={aiContextPaths}
               canMutate={canMutateStructure}
               node={node}

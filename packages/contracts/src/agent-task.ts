@@ -28,6 +28,11 @@ export const AgentTaskProgressEventSchema = AgentTaskEventBaseSchema.extend({
   phase: AgentTaskProgressPhaseSchema,
 });
 
+export const AgentTaskDeltaEventSchema = AgentTaskEventBaseSchema.extend({
+  type: z.literal("agent.task.delta"),
+  text: z.string().min(1).max(100_000),
+});
+
 export const AgentTaskCompletedEventSchema = AgentTaskEventBaseSchema.extend({
   type: z.literal("agent.task.completed"),
   summary: z.string().max(AGENT_TASK_MAX_SUMMARY_CHARACTERS),
@@ -50,6 +55,7 @@ export const AgentTaskFailedEventSchema = AgentTaskEventBaseSchema.extend({
 export const AgentTaskEventSchema = z.discriminatedUnion("type", [
   AgentTaskStartedEventSchema,
   AgentTaskProgressEventSchema,
+  AgentTaskDeltaEventSchema,
   AgentTaskCompletedEventSchema,
   AgentTaskCancelledEventSchema,
   AgentTaskFailedEventSchema,

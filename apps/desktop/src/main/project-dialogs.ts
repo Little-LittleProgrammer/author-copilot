@@ -2,6 +2,7 @@ import { BrowserWindow, dialog, type OpenDialogOptions } from "electron";
 
 export interface ProjectDirectoryPicker {
   chooseCreateParent(): Promise<string | undefined>;
+  chooseImportFile(): Promise<string | undefined>;
   chooseImportSource(): Promise<string | undefined>;
   chooseCopyDestination(): Promise<string | undefined>;
 }
@@ -28,6 +29,19 @@ export function createProjectDirectoryPicker(): ProjectDirectoryPicker {
         title: "Choose where to create the project",
         buttonLabel: "Choose folder",
       }),
+    chooseImportFile: async () => {
+      const options: OpenDialogOptions = {
+        title: "Import TXT or Word document",
+        buttonLabel: "Preview import",
+        properties: ["openFile"],
+        filters: [{ name: "TXT / Word", extensions: ["txt", "docx", "doc"] }],
+      };
+      const owner = BrowserWindow.getFocusedWindow();
+      const result = owner
+        ? await dialog.showOpenDialog(owner, options)
+        : await dialog.showOpenDialog(options);
+      return result.canceled ? undefined : result.filePaths[0];
+    },
     chooseImportSource: () =>
       chooseDirectory({
         title: "Choose a Markdown project folder",
@@ -53,6 +67,7 @@ export function createFixedProjectDirectoryPicker(
   return {
     chooseCreateParent: async () => directories.createParent,
     chooseImportSource: async () => directories.importSource,
+    chooseImportFile: async () => directories.importSource,
     chooseCopyDestination: async () => directories.copyDestination,
   };
 }

@@ -267,6 +267,17 @@ export class AgentTaskRuntimeService {
 
       for await (const message of sdkQuery) {
         if (active.closing) break;
+        if (
+          message.type === "stream_event" &&
+          message.event.type === "content_block_delta" &&
+          message.event.delta.type === "text_delta" &&
+          message.event.delta.text
+        ) {
+          this.emit(events, {
+            type: "agent.task.delta",
+            text: message.event.delta.text.slice(0, 100_000),
+          });
+        }
         this.emitProgress(events, sdkProgressPhase(message));
         if (message.type === "result") sdkResult = message;
       }

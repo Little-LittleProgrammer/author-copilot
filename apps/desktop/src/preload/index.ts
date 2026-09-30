@@ -1,4 +1,8 @@
 import {
+  ConversationResponseSchema,
+  type ConversationRequest,
+} from "@author-copilot/contracts";
+import {
   AiSettingsResponseSchema,
   type AiSettingsRequest,
 } from "@author-copilot/contracts";
@@ -84,6 +88,8 @@ import {
 } from "@author-copilot/contracts";
 import {
   WritingStatisticsResponseSchema,
+  WritingStatisticsHistoryResponseSchema,
+  type WritingStatisticsHistoryRequest,
   type WritingStatisticsRequest,
   type WritingStatisticsRecord,
 } from "@author-copilot/contracts";
@@ -110,6 +116,13 @@ function subscribe<T>(
 
 const api: AuthorCopilotApi = Object.freeze({
   writingStatistics: Object.freeze({
+    history: async (request: WritingStatisticsHistoryRequest) =>
+      WritingStatisticsHistoryResponseSchema.parse(
+        await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.writingStatisticsHistory,
+          request,
+        ),
+      ),
     get: async (request: WritingStatisticsRequest) =>
       WritingStatisticsResponseSchema.parse(
         await ipcRenderer.invoke(
@@ -163,6 +176,10 @@ const api: AuthorCopilotApi = Object.freeze({
     }),
   }),
   assistant: Object.freeze({
+    conversation: async (request: ConversationRequest) =>
+      ConversationResponseSchema.parse(
+        await ipcRenderer.invoke(IPC_INVOKE_CHANNELS.conversation, request),
+      ),
     agent: Object.freeze({
       start: async (request: AgentStartRequest) =>
         AgentStartResponseSchema.parse(

@@ -12,6 +12,9 @@ import {
   ChevronLeft,
   ChevronRight,
   History,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Palette,
   Redo2,
   Search,
   Type,
@@ -25,8 +28,13 @@ import { FindReplaceWindow } from "./FindReplaceWindow.js";
 import { findTextMatches, formatManuscript } from "./editor-text.js";
 import { useWritingStatistics } from "./use-writing-statistics.js";
 import { countWritingCharacters } from "./writing-statistics.js";
+import { WritingHistoryDialog } from "./WritingHistoryDialog.js";
 
 interface WritingEditorProps {
+  readonly sidebar: ReactNode;
+  readonly toolbarActions: ReactNode;
+  readonly documentTitle: string | undefined;
+  readonly onOpenTheme: () => void;
   readonly content: string;
   readonly documentPath: string | undefined;
   readonly projectId: string | undefined;
@@ -41,6 +49,7 @@ interface WritingEditorProps {
   readonly onToggleAssistant: () => void;
   readonly onSave: () => void;
   readonly children: ReactNode;
+  readonly onPreviewHost: (element: HTMLDivElement | null) => void;
   readonly t: (key: MessageKey) => string;
 }
 
@@ -80,6 +89,10 @@ function loadFont(): FontSettings {
 }
 
 export function WritingEditor({
+  sidebar,
+  toolbarActions,
+  documentTitle,
+  onOpenTheme,
   content,
   documentPath,
   projectId,
@@ -92,14 +105,18 @@ export function WritingEditor({
   onToggleAssistant,
   onSave,
   children,
+  onPreviewHost,
   t,
 }: WritingEditorProps): JSX.Element {
   const editor = useRef<HTMLTextAreaElement>(null);
+  const writingHistoryButton = useRef<HTMLButtonElement>(null);
   const compositionStart = useRef<string | undefined>(undefined);
   const findInput = useRef<HTMLInputElement>(null);
   const [font, setFont] = useState(loadFont);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [fontOpen, setFontOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [writingHistoryOpen, setWritingHistoryOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [replacement, setReplacement] = useState("");
   const [activeMatch, setActiveMatch] = useState(0);
@@ -241,70 +258,90 @@ export function WritingEditor({
         role="toolbar"
         aria-label={t("editorToolbar")}
       >
-        <button
-          type="button"
-          aria-expanded={fontOpen}
-          onClick={() => {
-            setFontOpen(!fontOpen);
-            setSearchOpen(false);
-          }}
-        >
-          <Type size={16} />
-          {t("editorFont")}
-          <ChevronDown size={12} />
-        </button>
-        <span className="toolbar-divider" />
-        <button
-          type="button"
-          aria-label={t("editorUndo")}
-          title={`${t("editorUndo")} (⌘/Ctrl+Z)`}
-          disabled={disabled || history.past.length === 0}
-          onClick={() => undo()}
-        >
-          <Undo2 size={16} />
-        </button>
-        <button
-          type="button"
-          aria-label={t("editorRedo")}
-          title={`${t("editorRedo")} (⌘/Ctrl+Shift+Z)`}
-          disabled={disabled || history.future.length === 0}
-          onClick={() => undo(true)}
-        >
-          <Redo2 size={16} />
-        </button>
-        <span className="toolbar-divider" />
-        <button
-          type="button"
-          disabled={disabled}
-          title={t("editorFormatHint")}
-          onClick={() => edit(formatManuscript(content))}
-        >
-          <AlignLeft size={16} />
-          {t("editorFormat")}
-        </button>
-        <button
-          type="button"
-          aria-expanded={searchOpen}
-          disabled={documentPath === undefined}
-          onClick={() => (searchOpen ? setSearchOpen(false) : openSearch())}
-        >
-          <Search size={16} />
-          {t("editorFindReplace")}
-        </button>
-        <button type="button" onClick={onHistory}>
-          <History size={16} />
-          {t("versionHistory")}
-        </button>
-        <button
-          type="button"
-          className="assistant-toggle"
-          aria-expanded={assistantOpen}
-          aria-controls="assistant-dock"
-          onClick={onToggleAssistant}
-        >
-          <WandSparkles size={16} />
-          {t("aiChat")}
-        </button>
+        <div className="writing-toolbar-tools">
+          <button
+            type="button"
+            aria-expanded={fontOpen}
+            onClick={() => {
+              setFontOpen(!fontOpen);
+              setSearchOpen(false);
+            }}
+          >
+            <Type size={16} />
+            {t("editorFont")}
+            <ChevronDown size={12} />
+          </button>
+          <button type="button" onClick={onOpenTheme}>
+            <Palette size={16} />
+            {t("editorBackground")}
+          </button>
+          <span className="toolbar-divider" />
+          <button
+            type="button"
+            aria-label={t("editorUndo")}
+            title={`${t("editorUndo")} (⌘/Ctrl+Z)`}
+            disabled={disabled || history.past.length === 0}
+            onClick={() => undo()}
+          >
+            <Undo2 size={16} />
+          </button>
+          <button
+            type="button"
+            aria-label={t("editorRedo")}
+            title={`${t("editorRedo")} (⌘/Ctrl+Shift+Z)`}
+            disabled={disabled || history.future.length === 0}
+            onClick={() => undo(true)}
+          >
+            <Redo2 size={16} />
+          </button>
+          <span className="toolbar-divider" />
+          <button
+            type="button"
+            disabled={disabled}
+            title={t("editorFormatHint")}
+            onClick={() => edit(formatManuscript(content))}
+          >
+            <AlignLeft size={16} />
+            {t("editorFormat")}
+          </button>
+          <span className="toolbar-spacer" />
+          <button
+            type="button"
+            aria-pressed={!sidebarOpen}
+            onClick={() => setSidebarOpen((open) => !open)}
+          >
+            {sidebarOpen ? (
+              <PanelLeftClose size={16} />
+            ) : (
+              <PanelLeftOpen size={16} />
+            )}
+            {t("chapterDirectory")}
+          </button>
+          <button
+            type="button"
+            aria-expanded={searchOpen}
+            disabled={documentPath === undefined}
+            onClick={() => (searchOpen ? setSearchOpen(false) : openSearch())}
+          >
+            <Search size={16} />
+            {t("editorFindReplace")}
+          </button>
+          <button type="button" onClick={onHistory}>
+            <History size={16} />
+            {t("versionHistory")}
+          </button>
+          <button
+            type="button"
+            className="assistant-toggle"
+            aria-expanded={assistantOpen}
+            aria-controls="assistant-dock"
+            onClick={onToggleAssistant}
+          >
+            <WandSparkles size={16} />
+            {t("aiChat")}
+          </button>
+        </div>
+        {toolbarActions}
       </div>
       {fontOpen ? (
         <div className="editor-options" aria-label={t("editorFont")}>
@@ -452,6 +489,9 @@ export function WritingEditor({
         </div>
       </FindReplaceWindow>
       <div className={`editor-split ${assistantOpen ? "with-assistant" : ""}`}>
+        <div className="editor-directory" hidden={!sidebarOpen}>
+          {sidebar}
+        </div>
         <section className="manuscript-pane" aria-label={t("content")}>
           {documentPath === undefined ? (
             <div className="empty-editor">
@@ -462,6 +502,7 @@ export function WritingEditor({
             </div>
           ) : (
             <>
+              <h1 className="manuscript-heading">{documentTitle}</h1>
               <textarea
                 ref={editor}
                 className="manuscript-input"
@@ -586,6 +627,15 @@ export function WritingEditor({
                       </strong>{" "}
                       {t("writingRateUnit")}
                     </span>
+                    <button
+                      type="button"
+                      className="text-button"
+                      aria-haspopup="dialog"
+                      ref={writingHistoryButton}
+                      onClick={() => setWritingHistoryOpen(true)}
+                    >
+                      {t("writingHistory")}
+                    </button>
                     {writingStats.failed ? (
                       <button
                         type="button"
@@ -609,9 +659,20 @@ export function WritingEditor({
               </footer>
             </>
           )}
+          <div className="copilot-preview-host" ref={onPreviewHost} />
         </section>
         {children}
       </div>
+      {writingHistoryOpen && projectId !== undefined ? (
+        <WritingHistoryDialog
+          key={projectId}
+          projectId={projectId}
+          tracker={writingStats.tracker}
+          onClose={() => setWritingHistoryOpen(false)}
+          onReturnFocus={() => writingHistoryButton.current?.focus()}
+          t={t}
+        />
+      ) : null}
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import {
   IPC_INVOKE_CHANNELS,
+  WritingStatisticsHistoryRequestSchema,
+  WritingStatisticsHistoryResponseSchema,
   WritingStatisticsRecordSchema,
   WritingStatisticsRequestSchema,
   WritingStatisticsResponseSchema,
@@ -15,6 +17,7 @@ export function registerWritingStatisticsHandlers(options: {
   getTabManager: () => TabManager | undefined;
 }): void {
   for (const channel of [
+    IPC_INVOKE_CHANNELS.writingStatisticsHistory,
     IPC_INVOKE_CHANNELS.writingStatisticsGet,
     IPC_INVOKE_CHANNELS.writingStatisticsRecord,
   ]) {
@@ -33,9 +36,11 @@ export function registerWritingStatisticsHandlers(options: {
           expectedArgumentCount: 1,
         });
         const schema =
-          channel === IPC_INVOKE_CHANNELS.writingStatisticsRecord
-            ? WritingStatisticsRecordSchema
-            : WritingStatisticsRequestSchema;
+          channel === IPC_INVOKE_CHANNELS.writingStatisticsHistory
+            ? WritingStatisticsHistoryRequestSchema
+            : channel === IPC_INVOKE_CHANNELS.writingStatisticsRecord
+              ? WritingStatisticsRecordSchema
+              : WritingStatisticsRequestSchema;
         const request = schema.safeParse(args[0]);
         const context = options.getTabManager()?.getContext(event.sender.id);
         if (
@@ -49,12 +54,23 @@ export function registerWritingStatisticsHandlers(options: {
           });
         }
         try {
+          if (channel === IPC_INVOKE_CHANNELS.writingStatisticsHistory) {
+            const history = await options.service.history(
+              WritingStatisticsHistoryRequestSchema.parse(request.data),
+            );
+            return WritingStatisticsHistoryResponseSchema.parse({
+              ok: true,
+              history,
+            });
+          }
           const snapshot =
             channel === IPC_INVOKE_CHANNELS.writingStatisticsRecord
               ? await options.service.record(
                   WritingStatisticsRecordSchema.parse(request.data),
                 )
-              : await options.service.get(request.data);
+              : await options.service.get(
+                  WritingStatisticsRequestSchema.parse(request.data),
+                );
           return WritingStatisticsResponseSchema.parse({ ok: true, snapshot });
         } catch {
           return WritingStatisticsResponseSchema.parse({

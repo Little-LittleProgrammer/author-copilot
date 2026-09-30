@@ -1,3 +1,5 @@
+import type { ConversationStore } from "./ai/conversation-store.js";
+import { registerConversationHandlers } from "./ipc/conversation-handlers.js";
 import type { ProviderService } from "./ai/provider-service.js";
 import { registerAiSettingsHandlers } from "./ipc/ai-settings-handlers.js";
 import type { AgentTaskService } from "./ai/agent/task-service.js";
@@ -31,6 +33,7 @@ import { registerWritingStatisticsHandlers } from "./ipc/writing-statistics-hand
 import type { WritingStatisticsService } from "./writing-statistics/writing-statistics-service.js";
 
 export interface IpcHandlerOptions {
+  readonly conversationStore: ConversationStore;
   readonly writingStatisticsService: WritingStatisticsService;
   readonly providerService: ProviderService;
   readonly agentService: AgentTaskService;
@@ -83,6 +86,11 @@ export function registerIpcHandlers(
     trustedRendererUrl,
     service: options.writingStatisticsService,
     getTabManager: options.getTabManager,
+  });
+  registerConversationHandlers({
+    trustedRendererUrl,
+    store: options.conversationStore,
+    projects: options.projectService,
   });
   registerAiSettingsHandlers(options.providerService, trustedRendererUrl);
   registerAiCredentialIpcHandlers({

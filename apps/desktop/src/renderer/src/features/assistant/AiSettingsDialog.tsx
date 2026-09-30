@@ -472,8 +472,10 @@ export function AiSettingsDialog({
 
 export function AiConnectionSelector({
   t,
+  compact = false,
 }: {
   readonly t: (key: MessageKey) => string;
+  readonly compact?: boolean;
 }): JSX.Element {
   const { state, error: loadError, reload } = useAiSettings();
   const [open, setOpen] = useState(false);
@@ -521,6 +523,27 @@ export function AiConnectionSelector({
       setBusy(false);
     }
   }
+  if (compact)
+    return (
+      <div className="copilot-model-selector">
+        <button
+          type="button"
+          aria-label={t("aiModel")}
+          title={selection?.model ?? t("aiSettings")}
+          onClick={() => setOpen(true)}
+        >
+          {selection?.model ?? t("aiModel")} <span aria-hidden="true">⌄</span>
+        </button>
+        {open ? (
+          <Dialog open onOpenChange={setOpen}>
+            <DialogContent closeLabel={t("close")} aria-describedby={undefined}>
+              <DialogTitle>{t("aiConnection")}</DialogTitle>
+              <AiConnectionSelector t={t} />
+            </DialogContent>
+          </Dialog>
+        ) : null}
+      </div>
+    );
   return (
     <div className="ai-connection-selector">
       <div>

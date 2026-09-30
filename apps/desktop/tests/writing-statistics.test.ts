@@ -36,6 +36,91 @@ afterEach(async () => {
 });
 
 describe("writing statistics persistence", () => {
+  it("reads seven ordered days with zero gaps, signed totals and queued writes across a leap month", async () => {
+    const { root, service, request } = await fixture();
+    await service.record({
+      ...request,
+      day: "2024-02-27",
+      sequence: 1,
+      netCharacters: 999,
+    });
+    await service.record({
+      ...request,
+      day: "2024-02-28",
+      sequence: 1,
+      netCharacters: 100,
+    });
+    await service.record({
+      ...request,
+      day: "2024-02-29",
+      sequence: 1,
+      netCharacters: -20,
+    });
+    await service.record({
+      ...request,
+      projectId: randomUUID(),
+      day: "2024-03-05",
+      sequence: 1,
+      netCharacters: 999,
+    });
+    const write = service.record({
+      ...request,
+      day: "2024-03-05",
+      sequence: 1,
+      netCharacters: 10,
+    });
+    const history = await service.history({
+      projectId: request.projectId,
+      endDay: "2024-03-05",
+    });
+    await write;
+    expect(history).toEqual({
+      days: [
+        { day: "2024-02-28", netCharacters: 100 },
+        { day: "2024-02-29", netCharacters: -20 },
+        { day: "2024-03-01", netCharacters: 0 },
+        { day: "2024-03-02", netCharacters: 0 },
+        { day: "2024-03-03", netCharacters: 0 },
+        { day: "2024-03-04", netCharacters: 0 },
+        { day: "2024-03-05", netCharacters: 10 },
+      ],
+      netCharacters: 90,
+    });
+    expect(
+      await new WritingStatisticsService(root).history({
+        projectId: request.projectId,
+        endDay: "2024-03-05",
+      }),
+    ).toEqual(history);
+    // A historical failure must not become a misleading zero or partial total.
+    const path = join(root, request.projectId, "2024-02-29.json");
+    await writeFile(path, "damaged");
+    await expect(
+      service.history({ projectId: request.projectId, endDay: "2024-03-05" }),
+    ).rejects.toThrow();
+    expect(await readFile(path, "utf8")).toBe("damaged");
+  });
+
+  it.each([
+    ["2026-01-03", "2025-12-28"],
+    ["2026-03-10", "2026-03-04"],
+    ["2026-11-03", "2026-10-28"],
+  ])(
+    "keeps calendar boundaries for a week ending %s",
+    async (endDay, firstDay) => {
+      const { service, request } = await fixture();
+      const history = await service.history({
+        projectId: request.projectId,
+        endDay,
+      });
+      expect(history.days).toHaveLength(7);
+      expect(history.days[0]?.day).toBe(firstDay);
+      expect(history.days[6]?.day).toBe(endDay);
+      expect(history.days.every((day) => day.netCharacters === 0)).toBe(true);
+      expect(history.netCharacters).toBe(0);
+    },
+  );
+
   it("keeps signed net totals through restarts, sessions, retries and out-of-order requests", async () => {
     const { root, service, request } = await fixture();
     expect(await service.get(request)).toMatchObject({ netCharacters: 0 });

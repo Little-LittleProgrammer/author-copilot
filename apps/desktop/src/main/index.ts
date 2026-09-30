@@ -1,3 +1,4 @@
+import { ConversationStore } from "./ai/conversation-store.js";
 import { ApiBaseUrlSchema } from "@author-copilot/contracts";
 import { ProviderService } from "./ai/provider-service.js";
 import { PlatformClient } from "./platform/platform-client.js";
@@ -282,6 +283,9 @@ app.whenReady().then(async () => {
     installProductionCsp(session.defaultSession);
   }
   registerIpcHandlers(target.url, {
+    conversationStore: new ConversationStore(
+      join(app.getPath("userData"), "conversations"),
+    ),
     writingStatisticsService,
     providerService,
     agentService,

@@ -18,13 +18,48 @@ import {
   TaskProgressEventSchema,
   VersionBranchListResponseSchema,
   VersionBranchSwitchRequestSchema,
+  WritingStatisticsHistoryRequestSchema,
+  WritingStatisticsHistoryResponseSchema,
 } from "../src/index.js";
 
 const taskId = "20000000-0000-4000-8000-000000000001";
 
 describe("IPC contracts", () => {
+  it("bounds writing history to a valid seven-day request and strict response", () => {
+    const request = { projectId: taskId, endDay: "2026-01-01" };
+    expect(WritingStatisticsHistoryRequestSchema.parse(request)).toEqual(
+      request,
+    );
+    for (const changes of [
+      { endDay: "0000-01-01" },
+      { endDay: "2026-02-30" },
+      { endDay: "../path" },
+      { days: 1000 },
+    ]) {
+      expect(
+        WritingStatisticsHistoryRequestSchema.safeParse({
+          ...request,
+          ...changes,
+        }).success,
+      ).toBe(false);
+    }
+    expect(
+      WritingStatisticsHistoryResponseSchema.safeParse({
+        ok: true,
+        history: { days: [], netCharacters: 0 },
+      }).success,
+    ).toBe(false);
+    expect(
+      WritingStatisticsHistoryResponseSchema.safeParse({
+        ok: false,
+        error: "unavailable",
+        path: "/private",
+      }).success,
+    ).toBe(false);
+  });
+
   it("keeps every declared channel in the validated whitelist", () => {
-    expect(IPC_CHANNEL_NAMES).toHaveLength(54);
+    expect(IPC_CHANNEL_NAMES).toHaveLength(56);
     for (const channel of IPC_CHANNEL_NAMES) {
       expect(IpcChannelSchema.parse(channel)).toBe(channel);
     }

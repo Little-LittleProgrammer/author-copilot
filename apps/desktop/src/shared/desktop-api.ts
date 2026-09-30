@@ -1,4 +1,8 @@
 import type {
+  ConversationRequest,
+  ConversationResponse,
+} from "@author-copilot/contracts";
+import type {
   AiSettingsRequest,
   AiSettingsResponse,
 } from "@author-copilot/contracts";
@@ -77,12 +81,17 @@ import type {
 
 import type {
   WritingStatisticsRequest,
+  WritingStatisticsHistoryRequest,
+  WritingStatisticsHistoryResponse,
   WritingStatisticsRecord,
   WritingStatisticsResponse,
 } from "@author-copilot/contracts";
 
 export interface AuthorCopilotApi {
   readonly writingStatistics: {
+    readonly history: (
+      request: WritingStatisticsHistoryRequest,
+    ) => Promise<WritingStatisticsHistoryResponse>;
     readonly get: (
       request: WritingStatisticsRequest,
     ) => Promise<WritingStatisticsResponse>;
@@ -106,6 +115,9 @@ export interface AuthorCopilotApi {
     };
   };
   readonly assistant: {
+    readonly conversation: (
+      request: ConversationRequest,
+    ) => Promise<ConversationResponse>;
     readonly agent: {
       readonly start: (
         request: AgentStartRequest,

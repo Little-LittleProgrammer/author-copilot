@@ -31,6 +31,48 @@ export const WritingStatisticsResponseSchema = z.discriminatedUnion("ok", [
   }),
 ]);
 
+export const WritingStatisticsHistoryRequestSchema = z.strictObject({
+  projectId: z.uuid(),
+  // Leave room for six preceding calendar days, including at the ISO lower bound.
+  endDay: z.iso.date().refine((day) => day >= "0000-01-07"),
+});
+
+export const WritingStatisticsHistorySchema = z.strictObject({
+  days: z
+    .array(
+      z.strictObject({
+        day: z.iso.date(),
+        netCharacters: z.int(),
+      }),
+    )
+    .length(7),
+  netCharacters: z.int(),
+});
+
+export const WritingStatisticsHistoryResponseSchema = z.discriminatedUnion(
+  "ok",
+  [
+    z.strictObject({
+      ok: z.literal(true),
+      history: WritingStatisticsHistorySchema,
+    }),
+    z.strictObject({
+      ok: z.literal(false),
+      error: z.enum(["invalid_request", "unavailable"]),
+    }),
+  ],
+);
+
+export type WritingStatisticsHistoryRequest = z.infer<
+  typeof WritingStatisticsHistoryRequestSchema
+>;
+export type WritingStatisticsHistory = z.infer<
+  typeof WritingStatisticsHistorySchema
+>;
+export type WritingStatisticsHistoryResponse = z.infer<
+  typeof WritingStatisticsHistoryResponseSchema
+>;
+
 export type WritingStatisticsRequest = z.infer<
   typeof WritingStatisticsRequestSchema
 >;

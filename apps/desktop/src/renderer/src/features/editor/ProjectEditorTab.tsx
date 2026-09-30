@@ -304,8 +304,8 @@ export function ProjectEditorTab({
       setError(undefined);
       try {
         const renamed = await api.renameEntry({
-          name,
-          path: node.path,
+          name: `${node.namePrefix ?? ""}${name}`,
+          path: node.entryPath ?? node.path,
           projectId: project.id,
         });
         setDocument((current) => {
@@ -375,11 +375,12 @@ export function ProjectEditorTab({
       setLoading(true);
       setError(undefined);
       try {
-        await api.deleteEntry({ path: node.path, projectId: project.id });
-        const deletedPrefix = `${node.path}/`;
+        const entryPath = node.entryPath ?? node.path;
+        await api.deleteEntry({ path: entryPath, projectId: project.id });
+        const deletedPrefix = `${entryPath}/`;
         if (
           document !== undefined &&
-          (document.path === node.path ||
+          (document.path === entryPath ||
             document.path.startsWith(deletedPrefix))
         ) {
           setDocument(undefined);
@@ -389,7 +390,7 @@ export function ProjectEditorTab({
           (current) =>
             new Set(
               [...current].filter(
-                (path) => path !== node.path && !path.startsWith(deletedPrefix),
+                (path) => path !== entryPath && !path.startsWith(deletedPrefix),
               ),
             ),
         );
@@ -568,28 +569,35 @@ export function ProjectEditorTab({
   return (
     <div className="project-editor-tab">
       <div className="workspace">
-        <ProjectSidebar
-          activeDocumentPath={document?.path}
-          activeProject={project}
-          aiContextPaths={aiContextPaths}
-          canMutateStructure={!dirty && !loading}
-          loading={
-            loading || repositoryChanging || proposalApplying || agentBusy
-          }
-          onDeleteEntry={deleteEntry}
-          onRenameEntry={renameEntry}
-          onSelectDocument={selectDocument}
-          onToggleAiContext={toggleAiContext}
-          onUpdateProject={updateProject}
-          structure={structure}
-          t={t}
-        />
         <EditorWorkspace
+          sidebar={
+            <ProjectSidebar
+              activeDocumentPath={document?.path}
+              activeProject={project}
+              aiContextPaths={aiContextPaths}
+              canMutateStructure={!dirty && !loading}
+              loading={
+                loading || repositoryChanging || proposalApplying || agentBusy
+              }
+              onDeleteEntry={deleteEntry}
+              onRenameEntry={renameEntry}
+              onSelectDocument={selectDocument}
+              onToggleAiContext={toggleAiContext}
+              onUpdateProject={updateProject}
+              structure={structure}
+              t={t}
+            />
+          }
           onAgentBusyChange={setAgentBusy}
           activeProject={project}
           aiContext={aiContextNodes}
           content={content}
           document={document}
+          documentTitle={
+            flattenStructure(structure).find(
+              (node) => node.path === document?.path,
+            )?.name
+          }
           dirty={dirty}
           error={error}
           loading={
