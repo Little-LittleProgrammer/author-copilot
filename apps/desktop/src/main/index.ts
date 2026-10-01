@@ -38,6 +38,7 @@ import {
 import { resolveGitRuntime } from "./git-runtime.js";
 import { registerIpcHandlers } from "./ipc.js";
 import { WritingStatisticsService } from "./writing-statistics/writing-statistics-service.js";
+import { CreativeNotesService } from "./creative-notes/creative-notes-service.js";
 
 import { KnowledgeService } from "./knowledge/index.js";
 import {
@@ -57,6 +58,7 @@ import {
 } from "./window-options.js";
 
 let writingStatisticsService: WritingStatisticsService | undefined;
+let creativeNotesService: CreativeNotesService | undefined;
 let mainWindow: BrowserWindow | undefined;
 let tabManager: TabManager | undefined;
 let quitRequested = false;
@@ -140,6 +142,9 @@ app.whenReady().then(async () => {
   const target = rendererTarget();
   writingStatisticsService = new WritingStatisticsService(
     join(app.getPath("userData"), "writing-statistics"),
+  );
+  creativeNotesService = new CreativeNotesService(
+    join(app.getPath("userData"), "creative-notes"),
   );
   const domainEvents = new DesktopDomainEvents();
   const gitOperationQueue = new ProjectOperationQueue();
@@ -287,6 +292,7 @@ app.whenReady().then(async () => {
       join(app.getPath("userData"), "conversations"),
     ),
     writingStatisticsService,
+    creativeNotesService,
     providerService,
     agentService,
     aiOrchestrator,
@@ -354,6 +360,7 @@ app.on("will-quit", (event) => {
       void Promise.all([
         agentService.shutdown(),
         writingStatisticsService?.drain(),
+        creativeNotesService?.drain(),
       ]).finally(() => {
         agentShutdownComplete = true;
         setImmediate(() => app.quit());

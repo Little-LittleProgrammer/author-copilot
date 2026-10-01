@@ -1661,6 +1661,59 @@ test("persists manual writing statistics without counting reloads or IME preedit
   }
 });
 
+test("persists creative notes for the active work", async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "author-creative-notes-"));
+  const application = await launchApplication(temporaryRoot);
+  const title = "创作资料验收";
+  try {
+    const { center } = await enterWorkspace(application);
+    await center.getByRole("button", { name: /新建小说|New novel/u }).click();
+    await center.getByTestId("project-name").fill(title);
+    await center.getByTestId("project-dialog-submit").click();
+    const page = await rendererPage(application, "project");
+    await page.getByRole("button", { name: "第一章", exact: true }).click();
+    await page
+      .getByRole("button", {
+        name: /打开面板.*创作资料|Open panel.*Creative notes/u,
+      })
+      .click();
+    const panel = page.getByTestId("creative-notes-panel");
+    await expect(panel).toContainText(/创作资料|Creative notes/u);
+    await panel.getByRole("button", { name: /新建资料|New note/u }).click();
+    await panel.locator("select").selectOption("outline");
+    await panel.locator("input").fill("第一幕");
+    await panel.locator("textarea").fill("暴雨抵达港口，主角收到一封信。");
+    await panel.getByRole("button", { name: /保存资料|Save note/u }).click();
+    await expect(panel.getByRole("button", { name: /^第一幕/u })).toBeVisible();
+    await panel.locator("input").fill("第一幕（修订）");
+    await panel.locator("textarea").fill("暴雨抵达港口，主角收到一封匿名信。");
+    await panel.getByRole("button", { name: /保存资料|Save note/u }).click();
+    await expect(
+      panel.getByRole("button", { name: /^第一幕（修订）/u }),
+    ).toBeVisible();
+    await page.reload();
+    await page.getByRole("button", { name: "第一章", exact: true }).click();
+    await page
+      .getByRole("button", {
+        name: /打开面板.*创作资料|Open panel.*Creative notes/u,
+      })
+      .click();
+    const restored = page.getByTestId("creative-notes-panel");
+    await expect(
+      restored.getByRole("button", { name: /^第一幕（修订）/u }),
+    ).toBeVisible();
+    await restored.getByRole("button", { name: /^第一幕（修订）/u }).click();
+    page.once("dialog", (dialog) => void dialog.accept());
+    await restored.getByRole("button", { name: /删除|Delete/u }).click();
+    await expect(
+      restored.getByRole("button", { name: /^第一幕（修订）/u }),
+    ).toHaveCount(0);
+  } finally {
+    await application.close();
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
 test("keeps AI beside the manuscript and supports writing toolbar operations", async () => {
   const temporaryRoot = await mkdtemp(
     join(tmpdir(), "author-copilot-toolbar-"),

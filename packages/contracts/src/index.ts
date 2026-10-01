@@ -19,5 +19,6 @@ export * from "./agent-workflow.js";
 export * from "./ai-settings.js";
 
 export * from "./writing-statistics.js";
+export * from "./creative-notes.js";
 
 export * from "./conversation.js";

@@ -89,6 +89,15 @@ import type {
   WritingGoalResponse,
   WritingGoalSetRequest,
 } from "@author-copilot/contracts";
+import type {
+  CreativeNoteCreateRequest,
+  CreativeNoteDeleteRequest,
+  CreativeNoteDeleteResponse,
+  CreativeNoteResponse,
+  CreativeNoteUpdateRequest,
+  CreativeNotesListResponse,
+  CreativeNotesProjectRequest,
+} from "@author-copilot/contracts";
 
 export interface AuthorCopilotApi {
   readonly writingStatistics: {
@@ -107,6 +116,20 @@ export interface AuthorCopilotApi {
     readonly set: (
       request: WritingGoalSetRequest,
     ) => Promise<WritingGoalResponse>;
+  };
+  readonly creativeNotes: {
+    readonly list: (
+      request: CreativeNotesProjectRequest,
+    ) => Promise<CreativeNotesListResponse>;
+    readonly create: (
+      request: CreativeNoteCreateRequest,
+    ) => Promise<CreativeNoteResponse>;
+    readonly update: (
+      request: CreativeNoteUpdateRequest,
+    ) => Promise<CreativeNoteResponse>;
+    readonly delete: (
+      request: CreativeNoteDeleteRequest,
+    ) => Promise<CreativeNoteDeleteResponse>;
   };
   readonly aiSettings: (
     request: AiSettingsRequest,

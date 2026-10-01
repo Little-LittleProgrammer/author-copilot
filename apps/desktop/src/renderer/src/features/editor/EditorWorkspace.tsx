@@ -1,5 +1,5 @@
 import { useState, type JSX, type ReactNode } from "react";
-import { BookOpen, Palette, Sparkles, X } from "lucide-react";
+import { BookOpen, NotebookPen, Palette, Sparkles, X } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog.js";
 import { WritingEditor } from "./WritingEditor.js";
 import type {
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button.js";
 import type { MessageKey } from "../../i18n/index.js";
 import { KnowledgePanel } from "../assistant/KnowledgePanel.js";
 import { ChatPanel } from "../assistant/ChatPanel.js";
+import { CreativeNotesPanel } from "../assistant/CreativeNotesPanel.js";
 import { ChangeReviewPanel } from "../change-review/ChangeReviewPanel.js";
 import type {
   DocumentSnapshot,
@@ -105,9 +106,9 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
   const themeController = useTheme();
   const [themeOpen, setThemeOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
-  const [assistantMode, setAssistantMode] = useState<"chat" | "knowledge">(
-    "chat",
-  );
+  const [assistantMode, setAssistantMode] = useState<
+    "chat" | "knowledge" | "notes"
+  >("chat");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewHost, setPreviewHost] = useState<HTMLDivElement | null>(null);
@@ -306,6 +307,16 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
                   )}
                 </section>
               </div>
+              <div
+                className="assistant-view"
+                hidden={assistantMode !== "notes"}
+              >
+                <CreativeNotesPanel
+                  key={activeProject.id}
+                  projectId={activeProject.id}
+                  t={t}
+                />
+              </div>
             </>
           )}
         </aside>
@@ -314,6 +325,7 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
             [
               ["chat", "assistantChatMode", Sparkles],
               ["knowledge", "assistantKnowledgeMode", BookOpen],
+              ["notes", "creativeNotesMode", NotebookPen],
             ] as const
           ).map(([mode, label, Icon]) => (
             <button

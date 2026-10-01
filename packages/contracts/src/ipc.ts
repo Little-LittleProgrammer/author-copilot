@@ -121,6 +121,15 @@ import {
   WritingGoalResponseSchema,
   WritingGoalSetRequestSchema,
 } from "./writing-statistics.js";
+import {
+  CreativeNoteCreateRequestSchema,
+  CreativeNoteDeleteRequestSchema,
+  CreativeNoteDeleteResponseSchema,
+  CreativeNoteResponseSchema,
+  CreativeNoteUpdateRequestSchema,
+  CreativeNotesListResponseSchema,
+  CreativeNotesProjectRequestSchema,
+} from "./creative-notes.js";
 
 export const IPC_INVOKE_CHANNELS = {
   conversation: "assistant:conversation",
@@ -129,6 +138,10 @@ export const IPC_INVOKE_CHANNELS = {
   writingStatisticsRecord: "writing-statistics:record",
   writingGoalGet: "writing-goal:get",
   writingGoalSet: "writing-goal:set",
+  creativeNotesList: "creative-notes:list",
+  creativeNoteCreate: "creative-notes:create",
+  creativeNoteUpdate: "creative-notes:update",
+  creativeNoteDelete: "creative-notes:delete",
   aiSettings: "ai:settings",
   agentRetain: "agent:retain",
   agentCancel: "agent:cancel",
@@ -193,6 +206,10 @@ export const IPC_INVOKE_CHANNEL_NAMES = [
   IPC_INVOKE_CHANNELS.writingStatisticsRecord,
   IPC_INVOKE_CHANNELS.writingGoalGet,
   IPC_INVOKE_CHANNELS.writingGoalSet,
+  IPC_INVOKE_CHANNELS.creativeNotesList,
+  IPC_INVOKE_CHANNELS.creativeNoteCreate,
+  IPC_INVOKE_CHANNELS.creativeNoteUpdate,
+  IPC_INVOKE_CHANNELS.creativeNoteDelete,
   IPC_INVOKE_CHANNELS.aiSettings,
   IPC_INVOKE_CHANNELS.agentRetain,
   IPC_INVOKE_CHANNELS.agentCancel,
@@ -287,6 +304,22 @@ export const IPC_INVOKE_CONTRACTS = {
   [IPC_INVOKE_CHANNELS.writingGoalSet]: {
     request: WritingGoalSetRequestSchema,
     response: WritingGoalResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.creativeNotesList]: {
+    request: CreativeNotesProjectRequestSchema,
+    response: CreativeNotesListResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.creativeNoteCreate]: {
+    request: CreativeNoteCreateRequestSchema,
+    response: CreativeNoteResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.creativeNoteUpdate]: {
+    request: CreativeNoteUpdateRequestSchema,
+    response: CreativeNoteResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.creativeNoteDelete]: {
+    request: CreativeNoteDeleteRequestSchema,
+    response: CreativeNoteDeleteResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.agentRetain]: {
     request: AgentRetainRequestSchema,

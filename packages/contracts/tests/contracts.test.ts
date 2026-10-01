@@ -23,6 +23,9 @@ import {
   WritingGoalRequestSchema,
   WritingGoalSetRequestSchema,
   WritingGoalResponseSchema,
+  CreativeNoteCreateRequestSchema,
+  CreativeNoteResponseSchema,
+  CreativeNotesListResponseSchema,
 } from "../src/index.js";
 
 const taskId = "20000000-0000-4000-8000-000000000001";
@@ -88,11 +91,48 @@ describe("IPC contracts", () => {
   });
 
   it("keeps every declared channel in the validated whitelist", () => {
-    expect(IPC_CHANNEL_NAMES).toHaveLength(58);
+    expect(IPC_CHANNEL_NAMES).toHaveLength(62);
     for (const channel of IPC_CHANNEL_NAMES) {
       expect(IpcChannelSchema.parse(channel)).toBe(channel);
     }
     expect(IpcChannelSchema.safeParse("fs:read-any-file").success).toBe(false);
+  });
+
+  it("keeps creative notes strict and bounded", () => {
+    const request = {
+      projectId: taskId,
+      kind: "outline" as const,
+      title: "Opening",
+      content: "A storm reaches the harbor.",
+    };
+    expect(CreativeNoteCreateRequestSchema.parse(request)).toEqual(request);
+    expect(
+      CreativeNoteCreateRequestSchema.safeParse({
+        ...request,
+        extra: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      CreativeNotesListResponseSchema.safeParse({
+        ok: true,
+        notes: [
+          {
+            id: taskId,
+            kind: "note",
+            title: "Note",
+            content: "Text",
+            createdAt: "2026-10-01T00:00:00.000Z",
+            updatedAt: "2026-10-01T00:00:00.000Z",
+          },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      CreativeNoteResponseSchema.safeParse({
+        ok: true,
+        note: { ...request, id: taskId },
+      }).success,
+    ).toBe(false);
   });
 
   it("validates native tab contexts and state", () => {

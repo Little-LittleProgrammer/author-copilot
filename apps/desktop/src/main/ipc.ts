@@ -31,10 +31,13 @@ import type { TabManager } from "./tabs/index.js";
 
 import { registerWritingStatisticsHandlers } from "./ipc/writing-statistics-handlers.js";
 import type { WritingStatisticsService } from "./writing-statistics/writing-statistics-service.js";
+import { registerCreativeNotesIpcHandlers } from "./ipc/creative-notes-handlers.js";
+import type { CreativeNotesService } from "./creative-notes/creative-notes-service.js";
 
 export interface IpcHandlerOptions {
   readonly conversationStore: ConversationStore;
   readonly writingStatisticsService: WritingStatisticsService;
+  readonly creativeNotesService: CreativeNotesService;
   readonly providerService: ProviderService;
   readonly agentService: AgentTaskService;
   readonly aiOrchestrator: AiOrchestrator;
@@ -85,6 +88,11 @@ export function registerIpcHandlers(
   registerWritingStatisticsHandlers({
     trustedRendererUrl,
     service: options.writingStatisticsService,
+    getTabManager: options.getTabManager,
+  });
+  registerCreativeNotesIpcHandlers({
+    trustedRendererUrl,
+    service: options.creativeNotesService,
     getTabManager: options.getTabManager,
   });
   registerConversationHandlers({

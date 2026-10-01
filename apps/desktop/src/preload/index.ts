@@ -96,6 +96,15 @@ import {
   type WritingGoalRequest,
   type WritingGoalSetRequest,
 } from "@author-copilot/contracts";
+import {
+  CreativeNoteDeleteResponseSchema,
+  CreativeNoteResponseSchema,
+  CreativeNotesListResponseSchema,
+  type CreativeNoteCreateRequest,
+  type CreativeNoteDeleteRequest,
+  type CreativeNoteUpdateRequest,
+  type CreativeNotesProjectRequest,
+} from "@author-copilot/contracts";
 import { contextBridge, ipcRenderer } from "electron";
 
 import type { AuthorCopilotApi } from "../shared/desktop-api.js";
@@ -149,6 +158,36 @@ const api: AuthorCopilotApi = Object.freeze({
     set: async (request: WritingGoalSetRequest) =>
       WritingGoalResponseSchema.parse(
         await ipcRenderer.invoke(IPC_INVOKE_CHANNELS.writingGoalSet, request),
+      ),
+  }),
+  creativeNotes: Object.freeze({
+    list: async (request: CreativeNotesProjectRequest) =>
+      CreativeNotesListResponseSchema.parse(
+        await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.creativeNotesList,
+          request,
+        ),
+      ),
+    create: async (request: CreativeNoteCreateRequest) =>
+      CreativeNoteResponseSchema.parse(
+        await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.creativeNoteCreate,
+          request,
+        ),
+      ),
+    update: async (request: CreativeNoteUpdateRequest) =>
+      CreativeNoteResponseSchema.parse(
+        await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.creativeNoteUpdate,
+          request,
+        ),
+      ),
+    delete: async (request: CreativeNoteDeleteRequest) =>
+      CreativeNoteDeleteResponseSchema.parse(
+        await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.creativeNoteDelete,
+          request,
+        ),
       ),
   }),
   system: Object.freeze({
