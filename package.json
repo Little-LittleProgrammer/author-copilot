@@ -5,7 +5,7 @@
   "description": "Local-first writing workspace with controlled AI assistance",
   "packageManager": "pnpm@11.7.0",
   "engines": {
-    "node": ">=24.16.0"
+    "node": ">=24.21.0"
   },
   "scripts": {
     "boundaries": "node tooling/scripts/check-boundaries.mjs",
@@ -31,7 +31,7 @@
     "typescript": "catalog:"
   },
   "volta": {
-    "node": "24.16.0",
+    "node": "24.21.0",
     "pnpm": "11.7.0"
   }
 }

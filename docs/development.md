@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 24.16.0
+- Node.js 24.21.0
 - pnpm 11.7.0
 
 ## Workspace
