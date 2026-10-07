@@ -3963,6 +3963,105 @@ input[type="search"]::-webkit-search-cancel-button {
 .copilot-composer:focus-within {
   border-color: var(--accent);
 }
+.creative-note-picker {
+  padding: 8px 10px 0;
+  font-size: 12px;
+  min-width: 0;
+}
+.creative-note-picker button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  min-height: 24px;
+}
+.creative-note-picker button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.creative-note-reference-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.creative-note-reference-chips > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding-left: 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  min-width: 0;
+}
+.creative-note-reference-chips > span > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.creative-note-reference-chips > span > button {
+  flex-shrink: 0;
+  width: 24px;
+}
+.creative-note-reference-options {
+  max-height: 180px;
+  overflow-y: auto;
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+}
+.creative-note-reference-options header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--muted);
+}
+.creative-note-reference-options label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 0;
+  cursor: pointer;
+}
+.creative-note-reference-options label > span {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.creative-note-reference-options input {
+  flex-shrink: 0;
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+.creative-note-reference-options small {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.creative-note-reference-warning {
+  margin: 6px 0 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.creative-note-snapshots details {
+  padding: 5px 0;
+}
+.creative-note-snapshots time {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+.creative-note-snapshots pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+  margin: 6px 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
 .copilot-context {
   display: flex;
   flex-wrap: wrap;

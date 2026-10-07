@@ -329,6 +329,17 @@ const messages = {
     creativeNotesConflict:
       "This note changed elsewhere. Reload it before saving.",
     creativeNotesDeleteConfirm: "Delete this creative note?",
+    creativeNotesDiscardConfirm:
+      "Discard unsaved changes to this creative note?",
+    creativeNotesReference: "Reference notes",
+    creativeNotesReferenced: "Referenced notes",
+    creativeNotesRemoveReference: "Remove reference",
+    creativeNotesReferenceRefresh: "Reload creative notes",
+    creativeNotesReferenceTruncated: "Truncated",
+    creativeNotesReferenceLimit:
+      "Long notes include only the first 4,000 characters.",
+    creativeNotesReferenceMissing:
+      "A selected note was deleted. Remove it from the references and try again.",
 
     comingSoon: "Soon",
     create: "Create",
@@ -836,6 +847,14 @@ const messages = {
     creativeNotesUnavailable: "创作资料读取或保存失败。",
     creativeNotesConflict: "资料已在其他位置修改，请重新加载后再保存。",
     creativeNotesDeleteConfirm: "确定删除这条创作资料吗？",
+    creativeNotesDiscardConfirm: "放弃这条创作资料尚未保存的修改吗？",
+    creativeNotesReference: "引用资料",
+    creativeNotesReferenced: "已引用资料",
+    creativeNotesRemoveReference: "移除引用",
+    creativeNotesReferenceRefresh: "重新加载创作资料",
+    creativeNotesReferenceTruncated: "已截断",
+    creativeNotesReferenceLimit: "较长资料仅引用正文前 4,000 字符。",
+    creativeNotesReferenceMissing: "所选资料已被删除，请移除该引用后重试。",
 
     comingSoon: "即将开放",
     create: "创建",

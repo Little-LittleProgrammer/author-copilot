@@ -65,6 +65,7 @@ export function ProjectEditorTab({
   const [loading, setLoading] = useState(() => getProjectApi() !== undefined);
   const [saving, setSaving] = useState(false);
   const [agentBusy, setAgentBusy] = useState(false);
+  const [creativeNotesDirty, setCreativeNotesDirty] = useState(false);
   const [repositoryChanging, setRepositoryChanging] = useState(false);
   const [versionNotice, setVersionNotice] = useState<string>();
   const [versionWarning, setVersionWarning] = useState(false);
@@ -93,8 +94,8 @@ export function ProjectEditorTab({
   }, [aiContextPaths, structure]);
 
   useEffect(() => {
-    onDirtyChange(project.id, dirty);
-  }, [dirty, onDirtyChange, project.id]);
+    onDirtyChange(project.id, dirty || creativeNotesDirty);
+  }, [dirty, creativeNotesDirty, onDirtyChange, project.id]);
 
   useEffect(() => {
     localStorage.setItem(
@@ -589,6 +590,7 @@ export function ProjectEditorTab({
             />
           }
           onAgentBusyChange={setAgentBusy}
+          onCreativeNotesDirtyChange={setCreativeNotesDirty}
           activeProject={project}
           aiContext={aiContextNodes}
           content={content}

@@ -14,6 +14,8 @@ import {
   type AiContextSelection,
   type AiPatchReview,
   type ConversationMessage,
+  type CreativeNote,
+  type CreativeNoteReference,
 } from "@author-copilot/contracts";
 import {
   ArrowUp,
@@ -34,8 +36,13 @@ import type { MessageKey } from "../../i18n/index.js";
 import { AiConnectionSelector } from "./AiSettingsDialog.js";
 import { AgentChanges } from "./AgentChanges.js";
 import { getAssistantApi } from "./assistant-api.js";
-import { conversationHistory } from "./conversation-state.js";
+import {
+  conversationHistory,
+  creativeNoteReferences,
+} from "./conversation-state.js";
 import { useConversations } from "./use-conversations.js";
+import { CreativeNotePicker } from "./CreativeNotePicker.js";
+import { getCreativeNotesApi } from "./creative-notes-api.js";
 
 interface ChatPanelProps {
   readonly previewHost: HTMLElement | null;
@@ -75,6 +82,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     t,
   } = props;
   const api = useMemo(() => getAssistantApi(), []);
+  const notesApi = useMemo(() => getCreativeNotesApi(), []);
   const agent = window.authorCopilot.assistant.agent;
   const history = useConversations(projectId, t("chatNewConversation"));
   const latest = useRef({ props, history });
@@ -82,6 +90,9 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     latest.current = { props, history };
   });
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [noteSelections, setNoteSelections] = useState<
+    Record<string, readonly CreativeNote[]>
+  >({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [preview, setPreview] = useState<{ messageId: string; path: string }>();
@@ -116,6 +127,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     return () => onPreviewOpenChange(false);
   }, [onPreviewOpenChange, previewVisible]);
   const instruction = current ? (drafts[current.id] ?? "") : "";
+  const selectedNotes = current ? (noteSelections[current.id] ?? []) : [];
   const working =
     busy || activeConversation !== undefined || agentState.running;
 
@@ -387,12 +399,36 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     setBusy(true);
     setError(undefined);
     follow.current = true;
+    let references: CreativeNoteReference[] = [];
+    try {
+      if (selectedNotes.length > 0) {
+        const available = await notesApi.list(projectId);
+        const fresh = selectedNotes.map((selected) => {
+          const note = available.find((item) => item.id === selected.id);
+          if (!note) throw new Error(t("creativeNotesReferenceMissing"));
+          return note;
+        });
+        references = creativeNoteReferences(fresh);
+        setNoteSelections((items) => ({ ...items, [current.id]: fresh }));
+      }
+    } catch (reason) {
+      setError(
+        reason instanceof Error &&
+          reason.message === t("creativeNotesReferenceMissing")
+          ? reason.message
+          : t("creativeNotesUnavailable"),
+      );
+      sending.current = false;
+      setBusy(false);
+      return;
+    }
     const user: ConversationMessage = {
       id: crypto.randomUUID(),
       role: "user",
       mode: current.mode,
       content: normalized,
       status: "complete",
+      ...(references.length ? { creativeNotes: references } : {}),
     };
     const message: ConversationMessage = {
       id: crypto.randomUUID(),
@@ -429,6 +465,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
             ...(selection ? { selection } : {}),
           },
           contextPaths: [...contextPaths],
+          creativeNotes: references,
           instruction: normalized,
           history: conversationHistory(current.messages),
           retrievalLimit: 5,
@@ -456,6 +493,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
           prompt: normalized,
           ...(documentPath ? { documentPath } : {}),
           contextPaths: [...contextPaths],
+          creativeNotes: references,
           ...(selection ? { selection } : {}),
           history: conversationHistory(current.messages),
           timeoutMs: 300_000,
@@ -819,6 +857,28 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
                       {message.error}
                     </p>
                   ) : null}
+                  {message.creativeNotes?.length ? (
+                    <details className="copilot-sources creative-note-snapshots">
+                      <summary>
+                        {t("creativeNotesReferenced")} ·{" "}
+                        {message.creativeNotes.length}
+                      </summary>
+                      {message.creativeNotes.map((note) => (
+                        <details key={note.id}>
+                          <summary>
+                            {note.title}
+                            {note.originalContentLength > note.content.length
+                              ? ` · ${t("creativeNotesReferenceTruncated")}`
+                              : ""}
+                          </summary>
+                          <time dateTime={note.updatedAt}>
+                            {new Date(note.updatedAt).toLocaleString()}
+                          </time>
+                          <pre>{note.content}</pre>
+                        </details>
+                      ))}
+                    </details>
+                  ) : null}
                   {message.context && message.context.sources.length > 0 ? (
                     <details className="copilot-sources">
                       <summary>
@@ -880,6 +940,20 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
             </button>
           ) : null}
           <div className="copilot-composer">
+            <CreativeNotePicker
+              key={current?.id ?? "new"}
+              projectId={projectId}
+              selected={selectedNotes}
+              onChange={(notes) => {
+                if (current)
+                  setNoteSelections((items) => ({
+                    ...items,
+                    [current.id]: notes,
+                  }));
+              }}
+              disabled={working || !current || !history.loaded}
+              t={t}
+            />
             <div className="copilot-context">
               <button
                 type="button"

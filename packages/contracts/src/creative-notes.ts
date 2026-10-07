@@ -20,6 +20,28 @@ export const CreativeNoteSchema = z.strictObject({
 });
 export type CreativeNote = z.infer<typeof CreativeNoteSchema>;
 
+export const AI_CREATIVE_NOTES_MAX_COUNT = 6;
+export const AI_CREATIVE_NOTE_MAX_CHARACTERS = 4_000;
+
+export const CreativeNoteReferenceSchema = z
+  .strictObject({
+    id: z.uuid(),
+    kind: CreativeNoteKindSchema,
+    title: CreativeNoteTitleSchema,
+    content: z.string().max(AI_CREATIVE_NOTE_MAX_CHARACTERS),
+    updatedAt: z.iso.datetime(),
+    originalContentLength: z.number().int().min(0).max(100_000),
+  })
+  .refine((note) => note.originalContentLength >= note.content.length);
+export type CreativeNoteReference = z.infer<typeof CreativeNoteReferenceSchema>;
+
+export const CreativeNoteReferencesSchema = z
+  .array(CreativeNoteReferenceSchema)
+  .max(AI_CREATIVE_NOTES_MAX_COUNT)
+  .refine(
+    (notes) => new Set(notes.map((note) => note.id)).size === notes.length,
+  );
+
 export const CreativeNotesProjectRequestSchema = z.strictObject({
   projectId: z.uuid(),
 });

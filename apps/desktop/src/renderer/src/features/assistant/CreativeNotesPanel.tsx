@@ -11,6 +11,7 @@ import {
   Lightbulb,
   NotebookPen,
   Plus,
+  RefreshCw,
   Save,
   Trash2,
 } from "lucide-react";
@@ -28,6 +29,7 @@ type NoteFilter = CreativeNoteKind | "all";
 
 interface CreativeNotesPanelProps {
   readonly projectId: string;
+  readonly onDirtyChange: (dirty: boolean) => void;
   readonly t: (key: MessageKey) => string;
 }
 
@@ -40,6 +42,7 @@ const kindLabels: Readonly<Record<CreativeNoteKind, MessageKey>> = {
 
 export function CreativeNotesPanel({
   projectId,
+  onDirtyChange,
   t,
 }: CreativeNotesPanelProps): JSX.Element {
   const api = useMemo(() => getCreativeNotesApi(), []);
@@ -52,6 +55,29 @@ export function CreativeNotesPanel({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
+  const [baseline, setBaseline] = useState({
+    kind: "note" as CreativeNoteKind,
+    title: "",
+    content: "",
+  });
+  const dirty =
+    kind !== baseline.kind ||
+    title !== baseline.title ||
+    content !== baseline.content;
+
+  useEffect(() => {
+    onDirtyChange(dirty || saving);
+  }, [dirty, saving, onDirtyChange]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const preventUnload = (event: BeforeUnloadEvent): void => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", preventUnload);
+    return () => window.removeEventListener("beforeunload", preventUnload);
+  }, [dirty]);
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -79,18 +105,32 @@ export function CreativeNotesPanel({
       : notes.find((note) => note.id === selectedId);
 
   const select = (note: CreativeNote): void => {
+    if (saving || (dirty && !window.confirm(t("creativeNotesDiscardConfirm"))))
+      return;
     setSelectedId(note.id);
     setKind(note.kind);
     setTitle(note.title);
     setContent(note.content);
+    setBaseline({ kind: note.kind, title: note.title, content: note.content });
     setError(undefined);
   };
 
   const create = (): void => {
+    if (saving || (dirty && !window.confirm(t("creativeNotesDiscardConfirm"))))
+      return;
+    reset();
+  };
+
+  const reset = (): void => {
     setSelectedId(undefined);
     setKind(filter === "all" ? "note" : filter);
     setTitle("");
     setContent("");
+    setBaseline({
+      kind: filter === "all" ? "note" : filter,
+      title: "",
+      content: "",
+    });
     setError(undefined);
   };
 
@@ -114,6 +154,14 @@ export function CreativeNotesPanel({
         ...current.filter((entry) => entry.id !== note.id),
       ]);
       setSelectedId(note.id);
+      setKind(note.kind);
+      setTitle(note.title);
+      setContent(note.content);
+      setBaseline({
+        kind: note.kind,
+        title: note.title,
+        content: note.content,
+      });
       setError(undefined);
     } catch (reason) {
       setError(
@@ -129,15 +177,45 @@ export function CreativeNotesPanel({
   const remove = async (): Promise<void> => {
     if (
       selected === undefined ||
+      saving ||
       !window.confirm(t("creativeNotesDeleteConfirm"))
     )
       return;
+    setSaving(true);
     try {
       await api.delete({ projectId, noteId: selected.id });
       setNotes((current) => current.filter((note) => note.id !== selected.id));
-      create();
+      reset();
     } catch {
       setError(t("creativeNotesUnavailable"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reload = async (): Promise<void> => {
+    if (saving || (dirty && !window.confirm(t("creativeNotesDiscardConfirm"))))
+      return;
+    setSaving(true);
+    try {
+      const fresh = await api.list(projectId);
+      setNotes(fresh);
+      const note = fresh.find((item) => item.id === selectedId);
+      if (note) {
+        setKind(note.kind);
+        setTitle(note.title);
+        setContent(note.content);
+        setBaseline({
+          kind: note.kind,
+          title: note.title,
+          content: note.content,
+        });
+        setError(undefined);
+      } else reset();
+    } catch {
+      setError(t("creativeNotesUnavailable"));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -155,9 +233,21 @@ export function CreativeNotesPanel({
           type="button"
           size="icon"
           variant="ghost"
+          title={t("creativeNotesReferenceRefresh")}
+          aria-label={t("creativeNotesReferenceRefresh")}
+          disabled={saving || loading}
+          onClick={() => void reload()}
+        >
+          <RefreshCw size={16} />
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
           title={t("creativeNotesNew")}
           aria-label={t("creativeNotesNew")}
           onClick={create}
+          disabled={saving || loading}
         >
           <Plus size={16} />
         </Button>
@@ -203,6 +293,7 @@ export function CreativeNotesPanel({
               type="button"
               className={`creative-note-item${note.id === selectedId ? " active" : ""}`}
               onClick={() => select(note)}
+              disabled={saving}
             >
               <span>{note.title}</span>
               <small>{t(kindLabels[note.kind])}</small>
@@ -217,6 +308,7 @@ export function CreativeNotesPanel({
             <span>{t("creativeNotesType")}</span>
             <select
               value={kind}
+              disabled={saving || loading}
               onChange={(event) =>
                 setKind(event.target.value as CreativeNoteKind)
               }
@@ -232,6 +324,7 @@ export function CreativeNotesPanel({
             <span>{t("creativeNotesTitleField")}</span>
             <Input
               value={title}
+              disabled={saving || loading}
               maxLength={200}
               onChange={(event) => setTitle(event.target.value)}
               placeholder={t("creativeNotesTitlePlaceholder")}
@@ -241,6 +334,7 @@ export function CreativeNotesPanel({
             <span>{t("creativeNotesContent")}</span>
             <Textarea
               value={content}
+              disabled={saving || loading}
               maxLength={100_000}
               onChange={(event) => setContent(event.target.value)}
               placeholder={t("creativeNotesContentPlaceholder")}
@@ -253,6 +347,7 @@ export function CreativeNotesPanel({
                 size="sm"
                 variant="ghost"
                 onClick={() => void remove()}
+                disabled={saving}
               >
                 <Trash2 size={14} />
                 {t("delete")}

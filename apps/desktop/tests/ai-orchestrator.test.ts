@@ -112,6 +112,39 @@ function orchestrator(
 }
 
 describe("AI orchestrator", () => {
+  it("passes selected snapshots and historical references to the provider", async () => {
+    const note = {
+      id: proposalId,
+      kind: "outline" as const,
+      title: "First act",
+      content: "A letter arrives.",
+      originalContentLength: 17,
+      updatedAt: "2026-10-07T00:00:00.000Z",
+    };
+    const stream = vi.fn<ClaudeTransport["stream"]>(async () => undefined);
+    const service = orchestrator({ stream });
+    await service.start(
+      {
+        ...request,
+        creativeNotes: [note],
+        history: [
+          {
+            role: "user",
+            content: "Previous request",
+            creativeNotes: [{ ...note, title: "Previous outline" }],
+          },
+        ],
+      },
+      () => undefined,
+    );
+    await vi.waitFor(() => expect(stream).toHaveBeenCalledOnce());
+    const messages = stream.mock.calls[0]![0].messages;
+    const supplied = JSON.parse(
+      String(messages.at(-1)?.content).split("\n").slice(1).join("\n"),
+    );
+    expect(supplied.creativeNotes).toEqual([note]);
+    expect(messages[0]?.content).toContain("Previous outline");
+  });
   it("streams sequenced text and returns numbered full-book sources", async () => {
     const events: AiChatEvent[] = [];
     const service = orchestrator({

@@ -25,6 +25,7 @@ import { useTheme } from "../../themes/index.js";
 interface EditorWorkspaceProps {
   readonly sidebar: ReactNode;
   readonly onAgentBusyChange: (busy: boolean) => void;
+  readonly onCreativeNotesDirtyChange: (dirty: boolean) => void;
   readonly activeProject: ProjectSummary | undefined;
   readonly aiContext: readonly StructureNode[];
   readonly content: string;
@@ -314,6 +315,7 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
                 <CreativeNotesPanel
                   key={activeProject.id}
                   projectId={activeProject.id}
+                  onDirtyChange={props.onCreativeNotesDirtyChange}
                   t={t}
                 />
               </div>

@@ -132,13 +132,13 @@ export class CreativeNotesService {
     projectId: string,
     notes: readonly CreativeNote[],
   ): Promise<void> {
+    const stored = NotesFileSchema.parse({
+      schemaVersion: 1,
+      notes: this.sort(notes),
+    });
     const path = this.path(projectId);
     await mkdir(dirname(path), { recursive: true });
-    await atomicWriteFile(
-      path,
-      `${JSON.stringify({ schemaVersion: 1, notes: this.sort(notes) })}\n`,
-      0o600,
-    );
+    await atomicWriteFile(path, `${JSON.stringify(stored)}\n`, 0o600);
   }
 
   private sort(notes: readonly CreativeNote[]): CreativeNote[] {

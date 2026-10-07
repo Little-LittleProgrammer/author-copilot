@@ -23,6 +23,32 @@ afterEach(async () => {
 });
 
 describe("creative notes persistence", () => {
+  it("rejects a 501st note without making existing storage unreadable", async () => {
+    const { root, service, projectId } = await fixture();
+    const note = await service.create({
+      projectId,
+      kind: "note",
+      title: "Draft",
+      content: "One",
+    });
+    const notes = Array.from({ length: 500 }, () => ({
+      ...note,
+      id: randomUUID(),
+    }));
+    const path = join(root, `${projectId}.json`);
+    await writeFile(path, JSON.stringify({ schemaVersion: 1, notes }), "utf8");
+    const before = await readFile(path, "utf8");
+    await expect(
+      service.create({
+        projectId,
+        kind: "note",
+        title: "Overflow",
+        content: "Two",
+      }),
+    ).rejects.toThrow();
+    expect(await readFile(path, "utf8")).toBe(before);
+    expect(await service.list({ projectId })).toHaveLength(500);
+  });
   it("creates, updates, sorts and isolates notes per project", async () => {
     const { root, service, projectId } = await fixture();
     const note = await service.create({

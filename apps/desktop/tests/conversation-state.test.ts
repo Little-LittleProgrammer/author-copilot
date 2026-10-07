@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { ConversationMessage } from "@author-copilot/contracts";
 import { describe, expect, it } from "vitest";
-import { conversationHistory } from "../src/renderer/src/features/assistant/conversation-state.js";
+import {
+  conversationHistory,
+  creativeNoteReferences,
+} from "../src/renderer/src/features/assistant/conversation-state.js";
 import {
   lineDiff,
   splitDiff,
@@ -19,6 +22,31 @@ const message = (
   mode: "ask",
 });
 describe("conversation continuity", () => {
+  it("captures bounded note snapshots and carries shortened references into later turns", () => {
+    const note = {
+      id: randomUUID(),
+      kind: "outline" as const,
+      title: "Opening",
+      content: "x".repeat(5_000),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const creativeNotes = creativeNoteReferences([note]);
+    expect(creativeNotes[0]?.content).toHaveLength(4_000);
+    expect(creativeNotes[0]?.originalContentLength).toBe(5_000);
+    note.content = "Changed";
+    expect(creativeNotes[0]?.content).toHaveLength(4_000);
+    const history = conversationHistory([
+      { ...message("user", "Continue"), creativeNotes },
+      message("assistant", "A storm arrives"),
+    ]);
+    expect(history[0]?.creativeNotes?.[0]).toMatchObject({
+      title: "Opening",
+      originalContentLength: 5_000,
+    });
+    expect(history[0]?.creativeNotes?.[0]?.content).toHaveLength(500);
+    expect(creativeNotes[0]?.content).toHaveLength(4_000);
+  });
   it("carries completed Ask and Agent turns while excluding interrupted requests and marking undone edits", () => {
     expect(
       conversationHistory([

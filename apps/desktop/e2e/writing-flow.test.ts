@@ -721,8 +721,14 @@ test("initializes and searches the local whole-work index with source navigation
 test("streams a BYOK Claude answer and opens its local source", async () => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
   const receivedKeys: string[] = [];
+  const receivedBodies: string[] = [];
   const server = createServer((request, response) => {
     receivedKeys.push(String(request.headers["x-api-key"] ?? ""));
+    let body = "";
+    request.on("data", (chunk) => {
+      body += String(chunk);
+    });
+    request.on("end", () => receivedBodies.push(body));
     response.writeHead(200, {
       "content-type": "text/event-stream",
       connection: "close",
@@ -817,18 +823,93 @@ test("streams a BYOK Claude answer and opens its local source", async () => {
       timeout: 10_000,
     });
     await openAssistant(page);
+    const note = await page.evaluate(async () => {
+      const api = (
+        window as unknown as Window & { authorCopilot: AuthorCopilotApi }
+      ).authorCopilot;
+      const context = await api.tabs.getContext();
+      if (context.kind !== "project") throw new Error("Missing project");
+      const projectId = context.project.projectId;
+      const result = await api.creativeNotes.create({
+        projectId,
+        kind: "outline",
+        title: "第一幕 · 暴雨与匿名来信",
+        content: "最初内容",
+      });
+      if (!result.ok) throw new Error(result.error);
+      await api.creativeNotes.create({
+        projectId,
+        kind: "note",
+        title: "未选择的秘密资料",
+        content: "不可发送的隐藏剧情",
+      });
+      return { ...result.note, projectId };
+    });
+    const picker = page.getByTestId("creative-note-picker");
+    await picker
+      .getByRole("button", { name: /引用资料|Reference notes/u, exact: true })
+      .click();
+    await picker
+      .getByRole("checkbox", { name: note.title, exact: true })
+      .check();
+    const referencedContent = `原始引用：${"暴雨中的匿名信。".repeat(600)}`;
+    await page.evaluate(
+      async ({ note, content }) => {
+        const api = (
+          window as unknown as Window & { authorCopilot: AuthorCopilotApi }
+        ).authorCopilot;
+        const result = await api.creativeNotes.update({
+          projectId: note.projectId,
+          noteId: note.id,
+          kind: note.kind,
+          title: note.title,
+          content,
+          expectedUpdatedAt: note.updatedAt,
+        });
+        if (!result.ok) throw new Error(result.error);
+      },
+      { note, content: referencedContent },
+    );
+    await picker
+      .getByRole("button", { name: /引用资料|Reference notes/u, exact: true })
+      .click();
     await page.getByTestId("ai-chat-input").fill("白塔钟声");
     await page.getByTestId("ai-chat-send").click();
     await expect(page.getByTestId("ai-chat-panel")).toContainText(
       "林舟记得白塔钟声。[1]",
     );
-    await page.locator(".copilot-sources summary").click();
+    await expect.poll(() => receivedBodies.length).toBe(1);
+    const sent = JSON.parse(receivedBodies[0]!);
+    const sentContext = JSON.parse(
+      sent.messages.at(-1).content.split("\n").slice(1).join("\n"),
+    );
+    expect(sentContext.creativeNotes).toMatchObject([
+      {
+        id: note.id,
+        title: note.title,
+        originalContentLength: referencedContent.length,
+      },
+    ]);
+    expect(sentContext.creativeNotes[0].content).toBe(
+      referencedContent.slice(0, 4_000),
+    );
+    expect(receivedBodies[0]).not.toContain("不可发送的隐藏剧情");
+    const snapshots = page.locator(".creative-note-snapshots");
+    await snapshots.locator(":scope > summary").click();
+    await snapshots.locator("details > summary").click();
+    await expect(snapshots.locator("pre")).toHaveText(
+      referencedContent.slice(0, 4_000),
+    );
+    await expect(snapshots).toContainText(/已截断|Truncated/u);
+    await page
+      .locator(".copilot-message.assistant .copilot-sources > summary")
+      .click();
     const source = page
       .locator(".copilot-sources")
       .getByRole("button", { name: /01-正文/u });
     await expect(source).toBeVisible();
     await page.screenshot({
-      path: "test-results/m5-3-streaming-chat.png",
+      path: "test-results/creative-note-references.png",
       fullPage: true,
     });
     await source.click();
@@ -838,6 +919,45 @@ test("streams a BYOK Claude answer and opens its local source", async () => {
       "林舟记得白塔钟声。[1]",
     );
     expect(receivedKeys).toEqual([apiKey]);
+    await application.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]?.setSize(880, 700),
+    );
+    await expect(picker).toBeVisible();
+    const pickerBounds = await picker.boundingBox();
+    assert(pickerBounds);
+    expect(
+      await picker.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: "test-results/creative-note-references-narrow.png",
+    });
+    await application.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]?.setSize(1280, 850),
+    );
+    await page.evaluate(async ({ projectId, id }) => {
+      const api = (
+        window as unknown as Window & { authorCopilot: AuthorCopilotApi }
+      ).authorCopilot;
+      const result = await api.creativeNotes.delete({ projectId, noteId: id });
+      if (!result.ok) throw new Error(result.error);
+    }, note);
+    await page.getByTestId("ai-chat-input").fill("资料已删除");
+    await page.getByTestId("ai-chat-send").click();
+    await expect(page.getByRole("alert")).toContainText(
+      /所选资料已被删除|A selected note was deleted/u,
+    );
+    await expect(page.getByTestId("ai-chat-input")).toHaveValue("资料已删除");
+    expect(receivedBodies).toHaveLength(1);
+    await picker
+      .getByRole("button", {
+        name: new RegExp(
+          `移除引用: ${note.title}|Remove reference: ${note.title}`,
+          "u",
+        ),
+      })
+      .click();
     await page
       .getByRole("button", { name: /新建对话|New chat/u, exact: true })
       .click();
@@ -865,11 +985,18 @@ test("streams a BYOK Claude answer and opens its local source", async () => {
     await page.reload();
     await openAssistant(page);
     await expect(page.getByTestId("ai-chat-panel")).toContainText("白塔的往事");
+    await page.locator(".creative-note-snapshots > summary").click();
+    await page.locator(".creative-note-snapshots details > summary").click();
+    await expect(page.locator(".creative-note-snapshots pre")).toHaveText(
+      referencedContent.slice(0, 4_000),
+    );
     await page.getByRole("button", { name: "第一章", exact: true }).click();
     await page.getByTestId("ai-chat-input").fill("接着说");
     await page.getByTestId("ai-chat-send").click();
     await expect(page.locator(".copilot-message.assistant")).toHaveCount(2);
     await expect(page.locator(".copilot-progress")).toHaveCount(0);
+    await expect.poll(() => receivedBodies.length).toBe(2);
+    expect(receivedBodies[1]).toContain("原始引用");
     await page
       .getByRole("button", { name: /对话历史|Chat history/u, exact: true })
       .click();
@@ -1244,6 +1371,30 @@ test("runs the native Agent SDK through controlled tools, keeps a version, and c
     ).toBeVisible();
     // Startup must initialize Git without committing this existing draft.
     await openAssistant(page, "agent");
+    await page.evaluate(async () => {
+      const api = (
+        window as unknown as Window & { authorCopilot: AuthorCopilotApi }
+      ).authorCopilot;
+      const context = await api.tabs.getContext();
+      if (context.kind !== "project") throw new Error("Missing project");
+      const result = await api.creativeNotes.create({
+        projectId: context.project.projectId,
+        kind: "outline",
+        title: "雨夜改稿依据",
+        content: "钟声来自港口，主角不能提前知道信的署名。",
+      });
+      if (!result.ok) throw new Error(result.error);
+    });
+    const notePicker = page.getByTestId("creative-note-picker");
+    await notePicker
+      .getByRole("button", { name: /引用资料|Reference notes/u, exact: true })
+      .click();
+    await notePicker
+      .getByRole("checkbox", { name: "雨夜改稿依据", exact: true })
+      .check();
+    await notePicker
+      .getByRole("button", { name: /引用资料|Reference notes/u, exact: true })
+      .click();
     await page.getByTestId("ai-chat-input").fill("加强雨夜描写。");
     expect(bodies).toHaveLength(0);
     await page.getByTestId("ai-chat-send").click();
@@ -1251,6 +1402,11 @@ test("runs the native Agent SDK through controlled tools, keeps a version, and c
       page.locator(".copilot-message.assistant").last(),
     ).toContainText(/已完成本次受控改稿/u, { timeout: 45_000 });
     expect(await readFile(documentPath, "utf8")).toBe(replacement);
+    expect(
+      bodies.some((body) =>
+        body.includes("钟声来自港口，主角不能提前知道信的署名。"),
+      ),
+    ).toBe(true);
     await page.locator(".copilot-changed-file").last().click();
     await expect(page.getByTestId("agent-before")).toContainText(baseline);
     await expect(page.getByTestId("agent-after")).toContainText(replacement);
@@ -1299,7 +1455,8 @@ test("runs the native Agent SDK through controlled tools, keeps a version, and c
       bodies.some(
         (body) =>
           body.includes("Previous conversation") &&
-          body.includes("加强雨夜描写"),
+          body.includes("加强雨夜描写") &&
+          body.includes("雨夜改稿依据"),
       ),
     ).toBe(true);
     expect(await readFile(documentPath, "utf8")).toBe(replacement);
@@ -1666,7 +1823,7 @@ test("persists creative notes for the active work", async () => {
   const application = await launchApplication(temporaryRoot);
   const title = "创作资料验收";
   try {
-    const { center } = await enterWorkspace(application);
+    const { center, shell } = await enterWorkspace(application);
     await center.getByRole("button", { name: /新建小说|New novel/u }).click();
     await center.getByTestId("project-name").fill(title);
     await center.getByTestId("project-dialog-submit").click();
@@ -1691,6 +1848,21 @@ test("persists creative notes for the active work", async () => {
     await expect(
       panel.getByRole("button", { name: /^第一幕（修订）/u }),
     ).toBeVisible();
+    await panel.locator("input").fill("尚未保存的修改");
+    const projectTab = shell
+      .locator(".app-tabs")
+      .getByRole("tab", { name: title });
+    await expect(projectTab.locator(".app-tab-dirty")).toBeVisible();
+    page.once("dialog", (dialog) => void dialog.dismiss());
+    await panel.getByRole("button", { name: /新建资料|New note/u }).click();
+    await expect(panel.locator("input")).toHaveValue("尚未保存的修改");
+    page.once("dialog", (dialog) => void dialog.accept());
+    await panel.getByRole("button", { name: /^第一幕（修订）/u }).click();
+    await expect(panel.locator("input")).toHaveValue("第一幕（修订）");
+    await expect(projectTab.locator(".app-tab-dirty")).toHaveCount(0);
+    await page.screenshot({
+      path: "test-results/creative-notes-unsaved-protection.png",
+    });
     await page.reload();
     await page.getByRole("button", { name: "第一章", exact: true }).click();
     await page

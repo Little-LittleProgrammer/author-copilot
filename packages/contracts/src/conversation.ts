@@ -2,6 +2,7 @@ import { z } from "zod";
 import { AiChatContextMetadataSchema } from "./ai-chat.js";
 import { AgentReviewSchema } from "./agent-workflow.js";
 import { AppErrorSchema } from "./errors.js";
+import { CreativeNoteReferencesSchema } from "./creative-notes.js";
 
 export const ConversationMessageSchema = z.strictObject({
   id: z.uuid(),
@@ -18,6 +19,7 @@ export const ConversationMessageSchema = z.strictObject({
   runId: z.uuid().optional(),
   taskId: z.uuid().optional(),
   context: AiChatContextMetadataSchema.optional(),
+  creativeNotes: CreativeNoteReferencesSchema.optional(),
   review: AgentReviewSchema.optional(),
   resolution: z.enum(["kept", "undone"]).optional(),
   error: z.string().max(10_000).optional(),

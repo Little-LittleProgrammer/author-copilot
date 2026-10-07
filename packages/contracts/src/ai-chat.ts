@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CreativeNoteReferencesSchema } from "./creative-notes.js";
 
 import {
   AiCurrentDocumentContextSchema,
@@ -18,6 +19,7 @@ export const AI_CHAT_MAX_MESSAGE_CHARACTERS = 20_000;
 export const AiChatHistoryMessageSchema = z.strictObject({
   role: z.enum(["user", "assistant"]),
   content: z.string().trim().min(1).max(AI_CHAT_MAX_MESSAGE_CHARACTERS),
+  creativeNotes: CreativeNoteReferencesSchema.optional(),
 });
 
 export type AiChatHistoryMessage = z.infer<typeof AiChatHistoryMessageSchema>;
@@ -27,6 +29,7 @@ export const AiChatStartRequestSchema = z.strictObject({
   mode: z.enum(["chat", "proposal"]).optional(),
   currentDocument: AiCurrentDocumentContextSchema,
   contextPaths: AiContextPathsSchema.optional(),
+  creativeNotes: CreativeNoteReferencesSchema.optional(),
   instruction: AiInstructionSchema,
   history: z
     .array(AiChatHistoryMessageSchema)

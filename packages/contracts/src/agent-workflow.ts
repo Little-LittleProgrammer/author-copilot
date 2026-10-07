@@ -7,6 +7,7 @@ import {
   AI_CHAT_MAX_HISTORY_MESSAGES,
 } from "./ai-chat.js";
 import { z } from "zod";
+import { CreativeNoteReferencesSchema } from "./creative-notes.js";
 import {
   AgentTaskCapabilityGrantRequestSchema,
   AgentTaskCapabilitySchema,
@@ -20,6 +21,7 @@ export const AgentStartRequestSchema =
     prompt: z.string().trim().min(1).max(200_000),
     documentPath: RelativeProjectPathSchema.optional(),
     contextPaths: AiContextPathsSchema.optional(),
+    creativeNotes: CreativeNoteReferencesSchema.optional(),
     selection: AiContextSelectionSchema.optional(),
     history: z
       .array(AiChatHistoryMessageSchema)

@@ -241,7 +241,11 @@ export class AiOrchestrator {
               platform: route.platform,
             }
           : {}),
-        messages: providerMessages(context, request.history),
+        messages: providerMessages(
+          context,
+          request.history,
+          request.creativeNotes,
+        ),
         signal: run.controller.signal,
         system: AUTHOR_COPILOT_SYSTEM_PROMPT,
         timeoutMs: this.timeoutMs,
