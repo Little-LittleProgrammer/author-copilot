@@ -1,0 +1,443 @@
+import type { ProjectCreateEntryRequest } from "@author-copilot/contracts";
+import { CreateEntryDialog } from "./CreateEntryDialog.js";
+import { createEntryLabel } from "./structure-presentation.js";
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Pencil,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useMemo, useState, type FormEvent, type JSX } from "react";
+import { ContextMenu as ContextMenuPrimitive } from "radix-ui";
+
+import type { MessageKey } from "../../i18n/index.js";
+import { ProjectInfoDialog } from "./ProjectInfoDialog.js";
+import type { ProjectSummary, StructureNode } from "./types.js";
+
+interface ProjectSidebarProps {
+  readonly activeDocumentPath: string | undefined;
+  readonly activeProject: ProjectSummary;
+  readonly aiContextPaths: ReadonlySet<string>;
+  readonly canMutateStructure: boolean;
+  readonly loading: boolean;
+  readonly onCreateEntry: (
+    input: Omit<ProjectCreateEntryRequest, "projectId">,
+  ) => Promise<void>;
+  readonly onMoveEntry: (
+    node: StructureNode,
+    direction: "up" | "down",
+  ) => Promise<void>;
+  readonly onDeleteEntry: (node: StructureNode) => Promise<void>;
+  readonly onRenameEntry: (node: StructureNode, name: string) => Promise<void>;
+  readonly onSelectDocument: (node: StructureNode) => void;
+  readonly onToggleAiContext: (node: StructureNode) => void;
+  readonly onUpdateProject: (title: string) => Promise<void>;
+  readonly structure: readonly StructureNode[];
+  readonly t: (key: MessageKey) => string;
+}
+
+function TreeNode({
+  activePath,
+  forceExpanded,
+  aiContextPaths,
+  canMutate,
+  node,
+  onCreate,
+  onMove,
+  moveAvailability,
+  onDelete,
+  onRename,
+  onSelect,
+  onToggleAiContext,
+  t,
+}: {
+  readonly activePath: string | undefined;
+  readonly forceExpanded: boolean;
+  readonly aiContextPaths: ReadonlySet<string>;
+  readonly canMutate: boolean;
+  readonly node: StructureNode;
+  readonly onCreate: (
+    role: ProjectCreateEntryRequest["role"],
+    parentPath?: string,
+  ) => void;
+  readonly onMove: (
+    node: StructureNode,
+    direction: "up" | "down",
+  ) => Promise<void>;
+  readonly moveAvailability: ReadonlyMap<
+    string,
+    { up: boolean; down: boolean }
+  >;
+  readonly onDelete: (node: StructureNode) => Promise<void>;
+  readonly onRename: (node: StructureNode, name: string) => Promise<void>;
+  readonly onSelect: (node: StructureNode) => void;
+  readonly onToggleAiContext: (node: StructureNode) => void;
+  readonly t: (key: MessageKey) => string;
+}): JSX.Element {
+  const [expanded, setExpanded] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(node.name);
+  const [busy, setBusy] = useState(false);
+  const isDocument = node.kind === "document";
+  const isAiContext = aiContextPaths.has(node.path);
+  const isProjectEntry = node.role !== "unclassified";
+  const canEditNode = canMutate && isProjectEntry;
+  const childRole =
+    node.role === "volume"
+      ? "chapter"
+      : node.role === "chapter" || node.role === "act"
+        ? "scene"
+        : undefined;
+  const moves = moveAvailability.get(node.path);
+
+  const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    const nextName = name.trim();
+    if (nextName.length === 0 || nextName === node.name) {
+      setName(node.name);
+      setEditing(false);
+      return;
+    }
+    setBusy(true);
+    try {
+      await onRename(node, nextName);
+      setEditing(false);
+    } catch {
+      // The editor surface presents the structured project error.
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <li>
+      {editing ? (
+        <form
+          className="tree-rename-form"
+          onSubmit={(event) => void submit(event)}
+        >
+          <input
+            autoFocus
+            aria-label={t("rename")}
+            maxLength={252}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setName(node.name);
+                setEditing(false);
+              }
+            }}
+          />
+          <button type="submit" aria-label={t("confirmRename")} disabled={busy}>
+            <Check size={13} />
+          </button>
+          <button
+            type="button"
+            aria-label={t("cancelRename")}
+            disabled={busy}
+            onClick={() => {
+              setName(node.name);
+              setEditing(false);
+            }}
+          >
+            <X size={13} />
+          </button>
+        </form>
+      ) : (
+        <ContextMenuPrimitive.Root>
+          <ContextMenuPrimitive.Trigger asChild>
+            <div
+              className={`tree-row${activePath === node.path ? " active" : ""}${isAiContext ? " ai-context" : ""}`}
+            >
+              <button
+                className="tree-row-main"
+                type="button"
+                title={node.name}
+                aria-expanded={
+                  isDocument ? undefined : expanded || forceExpanded
+                }
+                onClick={() =>
+                  isDocument ? onSelect(node) : setExpanded((value) => !value)
+                }
+              >
+                <span className="tree-disclosure" aria-hidden="true">
+                  {isDocument ? "·" : expanded || forceExpanded ? "⌄" : "›"}
+                </span>
+                <span className="tree-name">
+                  {node.role === "unclassified" ? t("unclassified") : node.name}
+                </span>
+                {isAiContext ? (
+                  <Sparkles
+                    className="tree-ai-indicator"
+                    size={11}
+                    aria-label={t("inAiContext")}
+                  />
+                ) : null}
+              </button>
+              {canEditNode ? (
+                <button
+                  className="tree-rename-button"
+                  type="button"
+                  aria-label={`${t("rename")}: ${node.name}`}
+                  title={t("rename")}
+                  onClick={() => setEditing(true)}
+                >
+                  <Pencil size={12} />
+                </button>
+              ) : null}
+            </div>
+          </ContextMenuPrimitive.Trigger>
+          <ContextMenuPrimitive.Portal>
+            <ContextMenuPrimitive.Content className="z-50 min-w-44 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md">
+              {childRole ? (
+                <ContextMenuPrimitive.Item
+                  className="context-menu-item"
+                  disabled={!canEditNode}
+                  onSelect={() =>
+                    onCreate(childRole, node.entryPath ?? node.path)
+                  }
+                >
+                  <Plus size={14} />
+                  {t(createEntryLabel(childRole))}
+                </ContextMenuPrimitive.Item>
+              ) : null}
+              <ContextMenuPrimitive.Item
+                className="context-menu-item"
+                disabled={!canEditNode || !moves?.up}
+                onSelect={() => void onMove(node, "up")}
+              >
+                <ArrowUp size={14} />
+                {t("moveEntryUp")}
+              </ContextMenuPrimitive.Item>
+              <ContextMenuPrimitive.Item
+                className="context-menu-item"
+                disabled={!canEditNode || !moves?.down}
+                onSelect={() => void onMove(node, "down")}
+              >
+                <ArrowDown size={14} />
+                {t("moveEntryDown")}
+              </ContextMenuPrimitive.Item>
+              <ContextMenuPrimitive.Item
+                className="context-menu-item"
+                disabled={!canEditNode}
+                onSelect={() => setEditing(true)}
+              >
+                <Pencil size={14} />
+                {t("editName")}
+              </ContextMenuPrimitive.Item>
+              <ContextMenuPrimitive.Item
+                className="context-menu-item"
+                disabled={!isProjectEntry}
+                onSelect={() => onToggleAiContext(node)}
+              >
+                <Sparkles size={14} />
+                {isAiContext ? t("removeFromAi") : t("addToAi")}
+              </ContextMenuPrimitive.Item>
+              <ContextMenuPrimitive.Separator className="context-menu-separator" />
+              <ContextMenuPrimitive.Item
+                className="context-menu-item destructive"
+                disabled={!canEditNode}
+                onSelect={() => void onDelete(node)}
+              >
+                <Trash2 size={14} />
+                {t("delete")}
+              </ContextMenuPrimitive.Item>
+            </ContextMenuPrimitive.Content>
+          </ContextMenuPrimitive.Portal>
+        </ContextMenuPrimitive.Root>
+      )}
+      {!isDocument &&
+      (expanded || forceExpanded) &&
+      node.children !== undefined ? (
+        <ul>
+          {node.children.map((child) => (
+            <TreeNode
+              key={child.id}
+              activePath={activePath}
+              forceExpanded={forceExpanded}
+              aiContextPaths={aiContextPaths}
+              canMutate={canMutate}
+              node={child}
+              onCreate={onCreate}
+              onMove={onMove}
+              moveAvailability={moveAvailability}
+              onDelete={onDelete}
+              onRename={onRename}
+              onSelect={onSelect}
+              onToggleAiContext={onToggleAiContext}
+              t={t}
+            />
+          ))}
+        </ul>
+      ) : null}
+    </li>
+  );
+}
+
+export function ProjectSidebar(props: ProjectSidebarProps): JSX.Element {
+  const {
+    activeDocumentPath,
+    activeProject,
+    aiContextPaths,
+    canMutateStructure,
+    loading,
+    onCreateEntry,
+    onMoveEntry,
+    onDeleteEntry,
+    onRenameEntry,
+    onSelectDocument,
+    onToggleAiContext,
+    onUpdateProject,
+    structure,
+    t,
+  } = props;
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [creation, setCreation] = useState<{
+    role: ProjectCreateEntryRequest["role"];
+    parentPath?: string;
+  }>();
+  const beginCreate = (
+    role: ProjectCreateEntryRequest["role"],
+    parentPath?: string,
+  ): void => {
+    setCreation({ role, ...(parentPath === undefined ? {} : { parentPath }) });
+  };
+  const moveAvailability = useMemo(() => {
+    const moves = new Map<string, { up: boolean; down: boolean }>();
+    const visit = (nodes: readonly StructureNode[]): void => {
+      const siblings = nodes.filter((node) => node.role !== "unclassified");
+      siblings.forEach((node, index) => {
+        moves.set(node.path, {
+          up: index > 0,
+          down: index < siblings.length - 1,
+        });
+        visit(node.children ?? []);
+      });
+    };
+    visit(structure);
+    return moves;
+  }, [structure]);
+  const [query, setQuery] = useState("");
+  const visibleStructure = useMemo(() => {
+    const term = query.trim().toLocaleLowerCase();
+    if (!term) return structure;
+    const filter = (nodes: readonly StructureNode[]): StructureNode[] =>
+      nodes.flatMap((node) => {
+        if (node.name.toLocaleLowerCase().includes(term)) return [node];
+        const children = filter(node.children ?? []);
+        return children.length ? [{ ...node, children }] : [];
+      });
+    return filter(structure);
+  }, [query, structure]);
+
+  return (
+    <aside className="sidebar" aria-label={t("projects")}>
+      <div className="sidebar-section project-section editor-project-summary">
+        <div className="project-summary-title">
+          <strong>{activeProject.name}</strong>
+          <button
+            className="project-info-button"
+            type="button"
+            aria-label={t("editWorkInfo")}
+            title={t("editWorkInfo")}
+            onClick={() => setInfoOpen(true)}
+          >
+            <Pencil size={13} />
+          </button>
+        </div>
+        <span>
+          {activeProject.type === "screenplay"
+            ? t("projectTypeScreenplay")
+            : t("projectTypeNovel")}
+        </span>
+      </div>
+
+      <div className="sidebar-section structure-section">
+        <label className="directory-search">
+          <Search size={14} aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            aria-label={t("directorySearch")}
+            placeholder={t("directorySearch")}
+          />
+        </label>
+        <div className="section-heading">
+          <span>{t("chapterDirectory")}</span>
+          <button
+            type="button"
+            className="project-info-button"
+            disabled={!canMutateStructure}
+            aria-label={t(
+              createEntryLabel(
+                activeProject.type === "novel" ? "volume" : "act",
+              ),
+            )}
+            title={t(
+              createEntryLabel(
+                activeProject.type === "novel" ? "volume" : "act",
+              ),
+            )}
+            onClick={() =>
+              beginCreate(activeProject.type === "novel" ? "volume" : "act")
+            }
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+        {visibleStructure.length === 0 && !loading ? (
+          <p className="sidebar-note">
+            {query.trim() ? t("directoryEmpty") : t("documentEmpty")}
+          </p>
+        ) : null}
+        <ul className="structure-tree">
+          {visibleStructure.map((node) => (
+            <TreeNode
+              key={node.id}
+              activePath={activeDocumentPath}
+              forceExpanded={query.trim().length > 0}
+              aiContextPaths={aiContextPaths}
+              canMutate={canMutateStructure}
+              node={node}
+              onCreate={beginCreate}
+              onMove={onMoveEntry}
+              moveAvailability={moveAvailability}
+              onDelete={onDeleteEntry}
+              onRename={onRenameEntry}
+              onSelect={onSelectDocument}
+              onToggleAiContext={onToggleAiContext}
+              t={t}
+            />
+          ))}
+        </ul>
+      </div>
+
+      {creation ? (
+        <CreateEntryDialog
+          role={creation.role}
+          t={t}
+          onClose={() => setCreation(undefined)}
+          onCreate={async (name) => {
+            await onCreateEntry({ ...creation, name });
+            setQuery("");
+          }}
+        />
+      ) : null}
+      <ProjectInfoDialog
+        key={`project-info-${infoOpen ? activeProject.name : "closed"}`}
+        onClose={() => setInfoOpen(false)}
+        onSave={onUpdateProject}
+        open={infoOpen}
+        project={activeProject}
+        t={t}
+      />
+    </aside>
+  );
+}

@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "metadataFile": "author-copilot-git-runtime.json",
+  "targets": {
+    "darwin-arm64": {
+      "platform": "darwin",
+      "arch": "arm64",
+      "version": "2.55.0",
+      "distribution": "source-build",
+      "archive": {
+        "fileName": "git-2.55.0.tar.xz",
+        "url": "https://www.kernel.org/pub/software/scm/git/git-2.55.0.tar.xz",
+        "sha256": "457fdb04dc8728e007d4688695e6912e6f680727920f2a40bf11eacc17505357",
+        "sourceRoot": "git-2.55.0"
+      },
+      "caBundle": {
+        "fileName": "cacert-2026-07-16.pem",
+        "url": "https://curl.se/ca/cacert-2026-07-16.pem",
+        "sha256": "3ff344e30b9b1ed2971044eabb438a08f2e2245ddb5f8ab1a3ad8b63ab4eaf91"
+      },
+      "deploymentTarget": "12.0",
+      "executable": "bin/git",
+      "execPath": "libexec/git-core",
+      "templateDir": "share/git-core/templates",
+      "caBundlePath": "etc/ssl/certs/ca-bundle.crt",
+      "requiredPaths": [
+        { "path": "bin/git", "type": "file" },
+        { "path": "libexec/git-core", "type": "directory" },
+        { "path": "libexec/git-core/git-remote-https", "type": "file" },
+        { "path": "share/git-core/templates", "type": "directory" },
+        { "path": "etc/ssl/certs/ca-bundle.crt", "type": "file" },
+        { "path": "licenses/Git-COPYING", "type": "file" },
+        { "path": "licenses/NOTICE.txt", "type": "file" }
+      ]
+    },
+    "darwin-x64": {
+      "platform": "darwin",
+      "arch": "x64",
+      "version": "2.55.0",
+      "distribution": "source-build",
+      "archive": {
+        "fileName": "git-2.55.0.tar.xz",
+        "url": "https://www.kernel.org/pub/software/scm/git/git-2.55.0.tar.xz",
+        "sha256": "457fdb04dc8728e007d4688695e6912e6f680727920f2a40bf11eacc17505357",
+        "sourceRoot": "git-2.55.0"
+      },
+      "caBundle": {
+        "fileName": "cacert-2026-07-16.pem",
+        "url": "https://curl.se/ca/cacert-2026-07-16.pem",
+        "sha256": "3ff344e30b9b1ed2971044eabb438a08f2e2245ddb5f8ab1a3ad8b63ab4eaf91"
+      },
+      "deploymentTarget": "12.0",
+      "executable": "bin/git",
+      "execPath": "libexec/git-core",
+      "templateDir": "share/git-core/templates",
+      "caBundlePath": "etc/ssl/certs/ca-bundle.crt",
+      "requiredPaths": [
+        { "path": "bin/git", "type": "file" },
+        { "path": "libexec/git-core", "type": "directory" },
+        { "path": "libexec/git-core/git-remote-https", "type": "file" },
+        { "path": "share/git-core/templates", "type": "directory" },
+        { "path": "etc/ssl/certs/ca-bundle.crt", "type": "file" },
+        { "path": "licenses/Git-COPYING", "type": "file" },
+        { "path": "licenses/NOTICE.txt", "type": "file" }
+      ]
+    },
+    "win32-arm64": {
+      "platform": "win32",
+      "arch": "arm64",
+      "version": "2.55.0.windows.3",
+      "distribution": "archive",
+      "archive": {
+        "fileName": "MinGit-2.55.0.3-arm64.zip",
+        "url": "https://github.com/git-for-windows/git/releases/download/v2.55.0.windows.3/MinGit-2.55.0.3-arm64.zip",
+        "sha256": "f7748965d5068e81ad93ca1923650db6742d6e22332b1ae7567a841c59f6bde5"
+      },
+      "executable": "cmd/git.exe",
+      "execPath": "clangarm64/libexec/git-core",
+      "templateDir": "clangarm64/share/git-core/templates",
+      "caBundlePath": "clangarm64/etc/ssl/certs/ca-bundle.crt",
+      "requiredPaths": [
+        { "path": "cmd/git.exe", "type": "file" },
+        { "path": "clangarm64/libexec/git-core", "type": "directory" },
+        { "path": "clangarm64/share/git-core/templates", "type": "directory" },
+        { "path": "clangarm64/etc/ssl/certs/ca-bundle.crt", "type": "file" },
+        { "path": "clangarm64/share/licenses", "type": "directory" },
+        { "path": "usr/bin/sh.exe", "type": "file" },
+        { "path": "LICENSE.txt", "type": "file" }
+      ]
+    },
+    "win32-x64": {
+      "platform": "win32",
+      "arch": "x64",
+      "version": "2.55.0.windows.3",
+      "distribution": "archive",
+      "archive": {
+        "fileName": "MinGit-2.55.0.3-64-bit.zip",
+        "url": "https://github.com/git-for-windows/git/releases/download/v2.55.0.windows.3/MinGit-2.55.0.3-64-bit.zip",
+        "sha256": "f48e2d2dc74a24454adc6d8fd0ac25bf9c2386f19cfb06202b9465aaad4f9f05"
+      },
+      "executable": "cmd/git.exe",
+      "execPath": "mingw64/libexec/git-core",
+      "templateDir": "mingw64/share/git-core/templates",
+      "caBundlePath": "mingw64/etc/ssl/certs/ca-bundle.crt",
+      "requiredPaths": [
+        { "path": "cmd/git.exe", "type": "file" },
+        { "path": "mingw64/libexec/git-core", "type": "directory" },
+        { "path": "mingw64/share/git-core/templates", "type": "directory" },
+        { "path": "mingw64/etc/ssl/certs/ca-bundle.crt", "type": "file" },
+        { "path": "mingw64/share/licenses", "type": "directory" },
+        { "path": "usr/bin/sh.exe", "type": "file" },
+        { "path": "LICENSE.txt", "type": "file" }
+      ]
+    }
+  }
+}
