@@ -1,3 +1,9 @@
+import type {
+  ProjectCreateEntryRequest,
+  ProjectCreateEntryResponse,
+  ProjectMoveEntryRequest,
+} from "@author-copilot/contracts";
+
 export type ProjectType = "novel" | "screenplay";
 
 export interface ProjectSummary {
@@ -62,6 +68,10 @@ export class ProjectApiError extends Error {
 }
 
 export interface ProjectBridge {
+  readonly createEntry: (
+    input: ProjectCreateEntryRequest,
+  ) => Promise<Extract<ProjectCreateEntryResponse, { ok: true }>>;
+  readonly moveEntry: (input: ProjectMoveEntryRequest) => Promise<void>;
   readonly confirmImport: (input: {
     readonly mode: "copy" | "in_place";
     readonly previewToken: string;

@@ -33,6 +33,8 @@ import {
   KnowledgeTaskStartResponseSchema,
   ProjectConfirmImportResponseSchema,
   ProjectCreateResponseSchema,
+  ProjectCreateEntryResponseSchema,
+  ProjectMoveEntryResponseSchema,
   ProjectDeleteEntryResponseSchema,
   ProjectGetStructureResponseSchema,
   ProjectImportPreviewResponseSchema,
@@ -68,6 +70,8 @@ import {
   type KnowledgeSearchRequest,
   type ProjectConfirmImportRequest,
   type ProjectCreateRequest,
+  type ProjectCreateEntryRequest,
+  type ProjectMoveEntryRequest,
   type ProjectDeleteEntryRequest,
   type ProjectGetStructureRequest,
   type ProjectImportPreviewRequest,
@@ -296,6 +300,17 @@ const api: AuthorCopilotApi = Object.freeze({
     }),
   }),
   project: Object.freeze({
+    createEntry: async (request: ProjectCreateEntryRequest) =>
+      ProjectCreateEntryResponseSchema.parse(
+        await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.projectCreateEntry,
+          request,
+        ),
+      ),
+    moveEntry: async (request: ProjectMoveEntryRequest) =>
+      ProjectMoveEntryResponseSchema.parse(
+        await ipcRenderer.invoke(IPC_INVOKE_CHANNELS.projectMoveEntry, request),
+      ),
     create: async (request: ProjectCreateRequest) => {
       const response: unknown = await ipcRenderer.invoke(
         IPC_INVOKE_CHANNELS.projectCreate,

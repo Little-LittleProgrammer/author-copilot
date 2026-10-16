@@ -1,5 +1,6 @@
 import type {
   ProjectImportRecognizedNode,
+  ProjectCreateEntryRequest,
   ProjectStructureNode,
 } from "@author-copilot/contracts";
 import type { ImportPreviewNode, StructureNode } from "./types.js";
@@ -50,4 +51,14 @@ export function presentImportNode(
     name: displayName(node.displayName),
     children: isChapterBody(node) ? [] : node.children.map(presentImportNode),
   };
+}
+
+export function createEntryLabel(role: ProjectCreateEntryRequest["role"]) {
+  const labels = {
+    volume: "newVolume",
+    chapter: "newChapter",
+    act: "newAct",
+    scene: "newScene",
+  } as const;
+  return labels[role];
 }

@@ -315,6 +315,50 @@ export type ProjectRenameEntryResponse = z.infer<
   typeof ProjectRenameEntryResponseSchema
 >;
 
+export const ProjectCreateEntryRequestSchema = z.strictObject({
+  projectId: z.uuid(),
+  parentPath: RelativeProjectPathSchema.optional(),
+  role: ProjectImportNodeRoleSchema,
+  name: z.string().trim().min(1).max(240),
+});
+
+export type ProjectCreateEntryRequest = z.infer<
+  typeof ProjectCreateEntryRequestSchema
+>;
+
+export const ProjectCreateEntryResponseSchema = z.discriminatedUnion("ok", [
+  z.strictObject({
+    ok: z.literal(true),
+    projectId: z.uuid(),
+    relativePath: RelativeProjectPathSchema,
+    documentPath: RelativeProjectPathSchema,
+  }),
+  ProjectOperationFailureSchema,
+]);
+
+export type ProjectCreateEntryResponse = z.infer<
+  typeof ProjectCreateEntryResponseSchema
+>;
+
+export const ProjectMoveEntryRequestSchema = z.strictObject({
+  projectId: z.uuid(),
+  relativePath: RelativeProjectPathSchema,
+  direction: z.enum(["up", "down"]),
+});
+
+export type ProjectMoveEntryRequest = z.infer<
+  typeof ProjectMoveEntryRequestSchema
+>;
+
+export const ProjectMoveEntryResponseSchema = z.discriminatedUnion("ok", [
+  z.strictObject({ ok: z.literal(true), projectId: z.uuid() }),
+  ProjectOperationFailureSchema,
+]);
+
+export type ProjectMoveEntryResponse = z.infer<
+  typeof ProjectMoveEntryResponseSchema
+>;
+
 export const ProjectDeleteEntryRequestSchema = z.strictObject({
   projectId: z.uuid(),
   relativePath: RelativeProjectPathSchema,

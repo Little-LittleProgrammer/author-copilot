@@ -60,6 +60,10 @@ import {
   ProjectConfirmImportRequestSchema,
   ProjectConfirmImportResponseSchema,
   ProjectCreateRequestSchema,
+  ProjectCreateEntryRequestSchema,
+  ProjectCreateEntryResponseSchema,
+  ProjectMoveEntryRequestSchema,
+  ProjectMoveEntryResponseSchema,
   ProjectCreateResponseSchema,
   ProjectDeleteEntryRequestSchema,
   ProjectDeleteEntryResponseSchema,
@@ -156,6 +160,8 @@ export const IPC_INVOKE_CHANNELS = {
   aiProposalApply: "ai-proposal:apply",
   aiProposalDiscard: "ai-proposal:discard",
   projectCreate: "project:create",
+  projectCreateEntry: "project:create-entry",
+  projectMoveEntry: "project:move-entry",
   projectDeleteEntry: "project:delete-entry",
   projectUpdate: "project:update",
   projectPreviewImport: "project:preview-import",
@@ -224,6 +230,8 @@ export const IPC_INVOKE_CHANNEL_NAMES = [
   IPC_INVOKE_CHANNELS.aiProposalApply,
   IPC_INVOKE_CHANNELS.aiProposalDiscard,
   IPC_INVOKE_CHANNELS.projectCreate,
+  IPC_INVOKE_CHANNELS.projectCreateEntry,
+  IPC_INVOKE_CHANNELS.projectMoveEntry,
   IPC_INVOKE_CHANNELS.projectDeleteEntry,
   IPC_INVOKE_CHANNELS.projectUpdate,
   IPC_INVOKE_CHANNELS.projectPreviewImport,
@@ -372,6 +380,14 @@ export const IPC_INVOKE_CONTRACTS = {
   [IPC_INVOKE_CHANNELS.aiProposalDiscard]: {
     request: AiPatchDiscardRequestSchema,
     response: AiPatchDiscardResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.projectCreateEntry]: {
+    request: ProjectCreateEntryRequestSchema,
+    response: ProjectCreateEntryResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.projectMoveEntry]: {
+    request: ProjectMoveEntryRequestSchema,
+    response: ProjectMoveEntryResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.projectCreate]: {
     request: ProjectCreateRequestSchema,

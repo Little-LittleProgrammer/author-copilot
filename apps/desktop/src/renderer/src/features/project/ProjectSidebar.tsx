@@ -1,4 +1,17 @@
-import { Check, Pencil, Search, Sparkles, Trash2, X } from "lucide-react";
+import type { ProjectCreateEntryRequest } from "@author-copilot/contracts";
+import { CreateEntryDialog } from "./CreateEntryDialog.js";
+import { createEntryLabel } from "./structure-presentation.js";
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Pencil,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useMemo, useState, type FormEvent, type JSX } from "react";
 import { ContextMenu as ContextMenuPrimitive } from "radix-ui";
 
@@ -12,6 +25,13 @@ interface ProjectSidebarProps {
   readonly aiContextPaths: ReadonlySet<string>;
   readonly canMutateStructure: boolean;
   readonly loading: boolean;
+  readonly onCreateEntry: (
+    input: Omit<ProjectCreateEntryRequest, "projectId">,
+  ) => Promise<void>;
+  readonly onMoveEntry: (
+    node: StructureNode,
+    direction: "up" | "down",
+  ) => Promise<void>;
   readonly onDeleteEntry: (node: StructureNode) => Promise<void>;
   readonly onRenameEntry: (node: StructureNode, name: string) => Promise<void>;
   readonly onSelectDocument: (node: StructureNode) => void;
@@ -27,6 +47,9 @@ function TreeNode({
   aiContextPaths,
   canMutate,
   node,
+  onCreate,
+  onMove,
+  moveAvailability,
   onDelete,
   onRename,
   onSelect,
@@ -38,6 +61,18 @@ function TreeNode({
   readonly aiContextPaths: ReadonlySet<string>;
   readonly canMutate: boolean;
   readonly node: StructureNode;
+  readonly onCreate: (
+    role: ProjectCreateEntryRequest["role"],
+    parentPath?: string,
+  ) => void;
+  readonly onMove: (
+    node: StructureNode,
+    direction: "up" | "down",
+  ) => Promise<void>;
+  readonly moveAvailability: ReadonlyMap<
+    string,
+    { up: boolean; down: boolean }
+  >;
   readonly onDelete: (node: StructureNode) => Promise<void>;
   readonly onRename: (node: StructureNode, name: string) => Promise<void>;
   readonly onSelect: (node: StructureNode) => void;
@@ -52,6 +87,13 @@ function TreeNode({
   const isAiContext = aiContextPaths.has(node.path);
   const isProjectEntry = node.role !== "unclassified";
   const canEditNode = canMutate && isProjectEntry;
+  const childRole =
+    node.role === "volume"
+      ? "chapter"
+      : node.role === "chapter" || node.role === "act"
+        ? "scene"
+        : undefined;
+  const moves = moveAvailability.get(node.path);
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
@@ -153,6 +195,34 @@ function TreeNode({
           </ContextMenuPrimitive.Trigger>
           <ContextMenuPrimitive.Portal>
             <ContextMenuPrimitive.Content className="z-50 min-w-44 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md">
+              {childRole ? (
+                <ContextMenuPrimitive.Item
+                  className="context-menu-item"
+                  disabled={!canEditNode}
+                  onSelect={() =>
+                    onCreate(childRole, node.entryPath ?? node.path)
+                  }
+                >
+                  <Plus size={14} />
+                  {t(createEntryLabel(childRole))}
+                </ContextMenuPrimitive.Item>
+              ) : null}
+              <ContextMenuPrimitive.Item
+                className="context-menu-item"
+                disabled={!canEditNode || !moves?.up}
+                onSelect={() => void onMove(node, "up")}
+              >
+                <ArrowUp size={14} />
+                {t("moveEntryUp")}
+              </ContextMenuPrimitive.Item>
+              <ContextMenuPrimitive.Item
+                className="context-menu-item"
+                disabled={!canEditNode || !moves?.down}
+                onSelect={() => void onMove(node, "down")}
+              >
+                <ArrowDown size={14} />
+                {t("moveEntryDown")}
+              </ContextMenuPrimitive.Item>
               <ContextMenuPrimitive.Item
                 className="context-menu-item"
                 disabled={!canEditNode}
@@ -194,6 +264,9 @@ function TreeNode({
               aiContextPaths={aiContextPaths}
               canMutate={canMutate}
               node={child}
+              onCreate={onCreate}
+              onMove={onMove}
+              moveAvailability={moveAvailability}
               onDelete={onDelete}
               onRename={onRename}
               onSelect={onSelect}
@@ -214,6 +287,8 @@ export function ProjectSidebar(props: ProjectSidebarProps): JSX.Element {
     aiContextPaths,
     canMutateStructure,
     loading,
+    onCreateEntry,
+    onMoveEntry,
     onDeleteEntry,
     onRenameEntry,
     onSelectDocument,
@@ -223,6 +298,31 @@ export function ProjectSidebar(props: ProjectSidebarProps): JSX.Element {
     t,
   } = props;
   const [infoOpen, setInfoOpen] = useState(false);
+  const [creation, setCreation] = useState<{
+    role: ProjectCreateEntryRequest["role"];
+    parentPath?: string;
+  }>();
+  const beginCreate = (
+    role: ProjectCreateEntryRequest["role"],
+    parentPath?: string,
+  ): void => {
+    setCreation({ role, ...(parentPath === undefined ? {} : { parentPath }) });
+  };
+  const moveAvailability = useMemo(() => {
+    const moves = new Map<string, { up: boolean; down: boolean }>();
+    const visit = (nodes: readonly StructureNode[]): void => {
+      const siblings = nodes.filter((node) => node.role !== "unclassified");
+      siblings.forEach((node, index) => {
+        moves.set(node.path, {
+          up: index > 0,
+          down: index < siblings.length - 1,
+        });
+        visit(node.children ?? []);
+      });
+    };
+    visit(structure);
+    return moves;
+  }, [structure]);
   const [query, setQuery] = useState("");
   const visibleStructure = useMemo(() => {
     const term = query.trim().toLocaleLowerCase();
@@ -271,6 +371,26 @@ export function ProjectSidebar(props: ProjectSidebarProps): JSX.Element {
         </label>
         <div className="section-heading">
           <span>{t("chapterDirectory")}</span>
+          <button
+            type="button"
+            className="project-info-button"
+            disabled={!canMutateStructure}
+            aria-label={t(
+              createEntryLabel(
+                activeProject.type === "novel" ? "volume" : "act",
+              ),
+            )}
+            title={t(
+              createEntryLabel(
+                activeProject.type === "novel" ? "volume" : "act",
+              ),
+            )}
+            onClick={() =>
+              beginCreate(activeProject.type === "novel" ? "volume" : "act")
+            }
+          >
+            <Plus size={14} />
+          </button>
         </div>
         {visibleStructure.length === 0 && !loading ? (
           <p className="sidebar-note">
@@ -286,6 +406,9 @@ export function ProjectSidebar(props: ProjectSidebarProps): JSX.Element {
               aiContextPaths={aiContextPaths}
               canMutate={canMutateStructure}
               node={node}
+              onCreate={beginCreate}
+              onMove={onMoveEntry}
+              moveAvailability={moveAvailability}
               onDelete={onDeleteEntry}
               onRename={onRenameEntry}
               onSelect={onSelectDocument}
@@ -296,6 +419,17 @@ export function ProjectSidebar(props: ProjectSidebarProps): JSX.Element {
         </ul>
       </div>
 
+      {creation ? (
+        <CreateEntryDialog
+          role={creation.role}
+          t={t}
+          onClose={() => setCreation(undefined)}
+          onCreate={async (name) => {
+            await onCreateEntry({ ...creation, name });
+            setQuery("");
+          }}
+        />
+      ) : null}
       <ProjectInfoDialog
         key={`project-info-${infoOpen ? activeProject.name : "closed"}`}
         onClose={() => setInfoOpen(false)}

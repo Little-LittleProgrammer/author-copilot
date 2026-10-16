@@ -4,6 +4,7 @@ import type {
   AiContextSelection,
   AiPatchReview,
   RuntimeInfo,
+  ProjectCreateEntryRequest,
 } from "@author-copilot/contracts";
 
 import type { MessageKey } from "../../i18n/index.js";
@@ -416,6 +417,102 @@ export function ProjectEditorTab({
     ],
   );
 
+  const createEntry = useCallback(
+    async (
+      input: Omit<ProjectCreateEntryRequest, "projectId">,
+    ): Promise<void> => {
+      const api = getProjectApi();
+      if (!api) throw new Error(t("projectApiUnavailable"));
+      if (
+        dirty ||
+        saving ||
+        loading ||
+        proposalApplying ||
+        repositoryChanging ||
+        agentBusy
+      )
+        throw new Error(t("renameSaveFirst"));
+      setLoading(true);
+      setError(undefined);
+      try {
+        const created = await api.createEntry({
+          ...input,
+          projectId: project.id,
+        });
+        await refreshStructure();
+        const snapshot = await api.readDocument({
+          projectId: project.id,
+          path: created.documentPath,
+        });
+        setDocument(snapshot);
+        setContent(snapshot.content);
+        setSelection(undefined);
+        setProposalOpen(false);
+      } catch (reason) {
+        const message =
+          reason instanceof ProjectApiError && reason.code === "conflict"
+            ? t("entryNameExists")
+            : errorMessage(reason, t("errorGeneric"));
+        setError(message);
+        throw new Error(message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      dirty,
+      saving,
+      loading,
+      proposalApplying,
+      repositoryChanging,
+      agentBusy,
+      project.id,
+      refreshStructure,
+      t,
+    ],
+  );
+
+  const moveEntry = useCallback(
+    async (node: StructureNode, direction: "up" | "down"): Promise<void> => {
+      const api = getProjectApi();
+      if (
+        !api ||
+        dirty ||
+        saving ||
+        loading ||
+        proposalApplying ||
+        repositoryChanging ||
+        agentBusy
+      )
+        return;
+      setLoading(true);
+      setError(undefined);
+      try {
+        await api.moveEntry({
+          projectId: project.id,
+          relativePath: node.entryPath ?? node.path,
+          direction,
+        });
+        await refreshStructure();
+      } catch (reason) {
+        setError(errorMessage(reason, t("errorGeneric")));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      dirty,
+      saving,
+      loading,
+      proposalApplying,
+      repositoryChanging,
+      agentBusy,
+      project.id,
+      refreshStructure,
+      t,
+    ],
+  );
+
   const toggleAiContext = useCallback((node: StructureNode): void => {
     setAiContextPaths((current) => {
       const next = new Set(current);
@@ -576,10 +673,19 @@ export function ProjectEditorTab({
               activeDocumentPath={document?.path}
               activeProject={project}
               aiContextPaths={aiContextPaths}
-              canMutateStructure={!dirty && !loading}
+              canMutateStructure={
+                !dirty &&
+                !saving &&
+                !loading &&
+                !repositoryChanging &&
+                !proposalApplying &&
+                !agentBusy
+              }
               loading={
                 loading || repositoryChanging || proposalApplying || agentBusy
               }
+              onCreateEntry={createEntry}
+              onMoveEntry={moveEntry}
               onDeleteEntry={deleteEntry}
               onRenameEntry={renameEntry}
               onSelectDocument={selectDocument}

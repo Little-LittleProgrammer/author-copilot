@@ -17,6 +17,7 @@ import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import {
   CURRENT_PROJECT_SCHEMA_VERSION,
   migrateProjectMetadata,
+  parseProjectMetadata,
   PROJECT_METADATA_FILE_NAME,
 } from "@author-copilot/project-schema";
 
@@ -55,6 +56,16 @@ import type {
   SaveDocumentResult,
 } from "./types.js";
 import { ProjectOperationQueue } from "../git/project-operation-queue.js";
+import type { ProjectCreateEntryRequest } from "@author-copilot/contracts";
+
+type WritingEntry = ProjectStructureNode | ProjectDocument;
+
+function flattenEntries(nodes: readonly WritingEntry[]): WritingEntry[] {
+  return nodes.flatMap((node) => [
+    node,
+    ...(node.kind === "document" ? [] : flattenEntries(node.children)),
+  ]);
+}
 
 export interface ProjectServiceOptions {
   readonly registry: RegistryStore;
@@ -208,7 +219,7 @@ async function writeMetadata(
 ): Promise<void> {
   await atomicWriteFile(
     join(rootPath, PROJECT_METADATA_FILE_NAME),
-    `${JSON.stringify(metadata, undefined, 2)}\n`,
+    `${JSON.stringify(parseProjectMetadata(metadata), undefined, 2)}\n`,
     0o600,
   );
 }
@@ -452,11 +463,219 @@ export class ProjectService {
       if (normalizedTitle.length === 0 || normalizedTitle.length > 200) {
         throw new ProjectServiceError("The project title is invalid.");
       }
-      const metadata = { ...project.metadata, title: normalizedTitle };
+      const metadata = {
+        ...(await this.currentMetadata(project)),
+        title: normalizedTitle,
+      };
       await writeMetadata(project.rootPath, metadata);
       await this.registry.updateMetadata(projectId, metadata);
       return { ...project, metadata };
     });
+  }
+
+  async createEntry(
+    request: ProjectCreateEntryRequest,
+  ): Promise<{ relativePath: string; documentPath: string }> {
+    return this.withProjectLock(request.projectId, async () => {
+      const project = await this.requireProject(request.projectId);
+      const metadata = await this.currentMetadata(project);
+      const structure = await this.getStructure(request.projectId);
+      const entries = flattenEntries(structure.nodes);
+      const parentPath = request.parentPath?.replaceAll("\\", "/");
+      const parent = entries.find((entry) => entry.relativePath === parentPath);
+      const expectedParent =
+        project.metadata.template === "novel"
+          ? {
+              volume: undefined,
+              chapter: "volume",
+              scene: "chapter",
+              act: "invalid",
+            }
+          : {
+              act: undefined,
+              scene: "act",
+              volume: "invalid",
+              chapter: "invalid",
+            };
+      const parentKind = expectedParent[request.role];
+      if (
+        parentKind === "invalid" ||
+        (parentKind === undefined
+          ? parentPath !== undefined
+          : parent?.kind !== parentKind)
+      ) {
+        throw new InvalidProjectPathError(
+          "This entry cannot be created at the selected level.",
+        );
+      }
+      const parentAbsolute =
+        parentPath === undefined
+          ? project.rootPath
+          : (await authorizeExistingEntry(project.rootPath, parentPath))
+              .absolutePath;
+      const name = validateProjectEntryName(
+        request.role === "scene"
+          ? request.name.replace(/\.md$/iu, "")
+          : request.name,
+      );
+      if (name.length > 240)
+        throw new InvalidProjectPathError("The entry name is too long.");
+      const siblings =
+        parent && parent.kind !== "document"
+          ? parent.children
+          : structure.nodes;
+      const normalizedName = name
+        .replace(/^\d{4}-/u, "")
+        .normalize("NFKC")
+        .toLowerCase();
+      const diskName = request.role === "scene" ? `${name}.md` : name;
+      if (
+        Buffer.byteLength(diskName, "utf8") > 255 ||
+        /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu.test(diskName)
+      ) {
+        throw new InvalidProjectPathError(
+          "The name cannot be used on all supported platforms.",
+        );
+      }
+      const diskEntries = await readdir(parentAbsolute);
+      if (
+        siblings.some(
+          (entry) =>
+            entry.name
+              .replace(/^\d{4}-/u, "")
+              .normalize("NFKC")
+              .toLowerCase() === normalizedName,
+        ) ||
+        diskEntries.some(
+          (entry) =>
+            entry.normalize("NFKC").toLowerCase() ===
+            diskName.normalize("NFKC").toLowerCase(),
+        )
+      ) {
+        throw Object.assign(
+          new Error("An entry with this name already exists."),
+          { code: "EEXIST" },
+        );
+      }
+      if (
+        entries.filter((entry) => entry.kind === "document").length +
+          structure.unclassified.length >=
+        2000
+      ) {
+        throw new InvalidProjectPathError(
+          "A work may contain at most 2,000 writing documents.",
+        );
+      }
+      const relativePath =
+        parentPath === undefined ? diskName : `${parentPath}/${diskName}`;
+      const documentPath =
+        request.role === "volume"
+          ? `${relativePath}/第一章/01-正文.md`
+          : request.role === "chapter"
+            ? `${relativePath}/01-正文.md`
+            : request.role === "act"
+              ? `${relativePath}/01-第一场.md`
+              : relativePath;
+      const target = join(parentAbsolute, diskName);
+      // Exclusive creation ensures a failed request never removes an existing entry.
+      if (request.role === "scene")
+        await writeFile(target, "", {
+          encoding: "utf8",
+          flag: "wx",
+          mode: 0o600,
+        });
+      else await mkdir(target, { mode: 0o700 });
+      try {
+        if (request.role !== "scene") {
+          await mkdir(dirname(join(project.rootPath, documentPath)), {
+            recursive: true,
+            mode: 0o700,
+          });
+          await writeFile(join(project.rootPath, documentPath), "", {
+            encoding: "utf8",
+            flag: "wx",
+            mode: 0o600,
+          });
+        }
+        const addedPaths =
+          request.role === "volume"
+            ? [relativePath, `${relativePath}/第一章`, documentPath]
+            : relativePath === documentPath
+              ? [relativePath]
+              : [relativePath, documentPath];
+        await writeMetadata(project.rootPath, {
+          ...metadata,
+          orderedPaths: [
+            ...entries.map((entry) => entry.relativePath),
+            ...addedPaths,
+          ],
+        });
+      } catch (error) {
+        await rm(target, { recursive: true, force: true });
+        throw error;
+      }
+      return { relativePath, documentPath };
+    });
+  }
+
+  async moveEntry(
+    projectId: string,
+    relativePath: string,
+    direction: "up" | "down",
+  ): Promise<void> {
+    await this.withProjectLock(projectId, async () => {
+      const project = await this.requireProject(projectId);
+      const metadata = await this.currentMetadata(project);
+      const structure = await this.getStructure(projectId);
+      const path = relativePath.replaceAll("\\", "/");
+      const entries = flattenEntries(structure.nodes);
+      const entry = entries.find(
+        (candidate) => candidate.relativePath === path,
+      );
+      if (!entry)
+        throw new InvalidProjectPathError(
+          "Only recognized writing entries may be reordered.",
+        );
+      await authorizeExistingEntry(project.rootPath, path);
+      const parentPath = path.includes("/")
+        ? path.slice(0, path.lastIndexOf("/"))
+        : undefined;
+      const parent = entries.find(
+        (candidate) => candidate.relativePath === parentPath,
+      );
+      const siblings =
+        parent && parent.kind !== "document"
+          ? [...parent.children]
+          : [...structure.nodes];
+      const index = siblings.findIndex(
+        (candidate) => candidate.relativePath === path,
+      );
+      const targetIndex = index + (direction === "up" ? -1 : 1);
+      const target = siblings[targetIndex];
+      if (!target) return;
+      const orderedPaths = entries.map((candidate) => candidate.relativePath);
+      const entryIndex = orderedPaths.indexOf(path);
+      const otherIndex = orderedPaths.indexOf(target.relativePath);
+      orderedPaths[entryIndex] = target.relativePath;
+      orderedPaths[otherIndex] = path;
+      await writeMetadata(project.rootPath, { ...metadata, orderedPaths });
+    });
+  }
+
+  private async currentMetadata(
+    project: RegisteredProject,
+  ): Promise<ProjectMetadata> {
+    const metadata =
+      (await readMetadata(project.rootPath)).metadata ?? project.metadata;
+    if (
+      metadata.projectId !== project.projectId ||
+      metadata.template !== project.metadata.template
+    ) {
+      throw new InvalidProjectPathError(
+        "Project metadata no longer matches the registered work.",
+      );
+    }
+    return metadata;
   }
 
   async renameEntry(
@@ -467,6 +686,12 @@ export class ProjectService {
     return this.withProjectLock(projectId, async () => {
       const project = await this.requireProject(projectId);
       await this.assertKnownEntry(project, relativePath);
+      const metadata = await this.currentMetadata(project);
+      const livePaths = new Set(
+        flattenEntries((await this.getStructure(projectId)).nodes).map(
+          (entry) => entry.relativePath,
+        ),
+      );
       const source = await authorizeExistingEntry(
         project.rootPath,
         relativePath,
@@ -482,7 +707,30 @@ export class ProjectService {
       }
       await assertPathDoesNotExist(targetPath);
       await rename(source.absolutePath, targetPath);
-      return relative(project.rootPath, targetPath).split(sep).join("/");
+      const previousPath = relativePath.replaceAll("\\", "/");
+      const nextPath = relative(project.rootPath, targetPath)
+        .split(sep)
+        .join("/");
+      if (metadata.orderedPaths) {
+        try {
+          await writeMetadata(project.rootPath, {
+            ...metadata,
+            orderedPaths: metadata.orderedPaths
+              .filter((path) => livePaths.has(path))
+              .map((path) =>
+                path === previousPath
+                  ? nextPath
+                  : path.startsWith(`${previousPath}/`)
+                    ? `${nextPath}${path.slice(previousPath.length)}`
+                    : path,
+              ),
+          });
+        } catch (error) {
+          await rename(targetPath, source.absolutePath);
+          throw error;
+        }
+      }
+      return nextPath;
     });
   }
 
@@ -495,6 +743,15 @@ export class ProjectService {
         relativePath,
       );
       await validateWritingEntryTree(source.absolutePath);
+      const metadata = await this.currentMetadata(project);
+      const entries = flattenEntries(
+        (await this.getStructure(projectId)).nodes,
+      );
+      // Persist parent identities before deletion so an empty volume remains usable.
+      await writeMetadata(project.rootPath, {
+        ...metadata,
+        orderedPaths: entries.map((entry) => entry.relativePath),
+      });
       await removeWritingEntry(source.absolutePath);
     });
   }
@@ -705,7 +962,12 @@ export class ProjectService {
     await assertPathDoesNotExist(destinationPath);
     try {
       await copyDirectoryWithoutSymlinks(preview.rootPath, stagingPath);
-      const metadata = createMetadata(title, options.template);
+      const metadata = {
+        ...createMetadata(title, options.template),
+        ...(preview.metadata.orderedPaths
+          ? { orderedPaths: preview.metadata.orderedPaths }
+          : {}),
+      };
       await writeMetadata(stagingPath, metadata);
       await assertPathDoesNotExist(destinationPath);
       await rename(stagingPath, destinationPath);

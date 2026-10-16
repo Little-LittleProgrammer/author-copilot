@@ -10,6 +10,10 @@ import {
   ProjectConfirmImportRequestSchema,
   ProjectConfirmImportResponseSchema,
   ProjectCreateRequestSchema,
+  ProjectCreateEntryRequestSchema,
+  ProjectCreateEntryResponseSchema,
+  ProjectMoveEntryRequestSchema,
+  ProjectMoveEntryResponseSchema,
   ProjectCreateResponseSchema,
   ProjectDeleteEntryRequestSchema,
   ProjectDeleteEntryResponseSchema,
@@ -30,6 +34,8 @@ import {
 import { ipcMain, type IpcMainInvokeEvent } from "electron";
 
 import { assertTrustedIpcRequest } from "../ipc-policy.js";
+import { InvalidProjectPathError } from "../project/errors.js";
+import type { TabManager } from "../tabs/index.js";
 import type { ProjectDirectoryPicker } from "../project-dialogs.js";
 import type {
   ProjectService,
@@ -67,6 +73,7 @@ interface PreviewEntry {
 export interface ProjectIpcOptions {
   readonly trustedRendererUrl: string;
   readonly projectService: ProjectService;
+  readonly getTabManager: () => TabManager | undefined;
   readonly directoryPicker: ProjectDirectoryPicker;
   readonly onProjectChanged?: (project: ProjectSummary) => void;
 }
@@ -139,6 +146,60 @@ function structureNode(
 }
 
 export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
+  for (const channel of [
+    IPC_INVOKE_CHANNELS.projectCreateEntry,
+    IPC_INVOKE_CHANNELS.projectMoveEntry,
+  ]) {
+    ipcMain.handle(
+      channel,
+      async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+        authorize(event, channel, args, options.trustedRendererUrl);
+        const responseSchema =
+          channel === IPC_INVOKE_CHANNELS.projectCreateEntry
+            ? ProjectCreateEntryResponseSchema
+            : ProjectMoveEntryResponseSchema;
+        try {
+          const context = options.getTabManager()?.getContext(event.sender.id);
+          const request = (
+            channel === IPC_INVOKE_CHANNELS.projectCreateEntry
+              ? ProjectCreateEntryRequestSchema
+              : ProjectMoveEntryRequestSchema
+          ).parse(args[0]);
+          if (
+            context?.kind !== "project" ||
+            context.project.projectId !== request.projectId
+          ) {
+            throw new InvalidProjectPathError(
+              "This operation is limited to the owning project tab.",
+            );
+          }
+          if (channel === IPC_INVOKE_CHANNELS.projectCreateEntry) {
+            const created = await options.projectService.createEntry(
+              ProjectCreateEntryRequestSchema.parse(request),
+            );
+            return ProjectCreateEntryResponseSchema.parse({
+              ok: true,
+              projectId: request.projectId,
+              ...created,
+            });
+          }
+          const move = ProjectMoveEntryRequestSchema.parse(request);
+          await options.projectService.moveEntry(
+            move.projectId,
+            move.relativePath,
+            move.direction,
+          );
+          return ProjectMoveEntryResponseSchema.parse({
+            ok: true,
+            projectId: request.projectId,
+          });
+        } catch (error) {
+          return responseSchema.parse(projectOperationFailure(error));
+        }
+      },
+    );
+  }
+
   const previews = new Map<string, PreviewEntry>();
 
   const getPreview = (token: string): PreviewEntry | undefined => {

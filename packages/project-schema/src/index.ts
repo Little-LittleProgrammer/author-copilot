@@ -12,6 +12,31 @@ export const ProjectMetadataV1Schema = z.strictObject({
   title: z.string().trim().min(1).max(200),
   template: ProjectTemplateSchema,
   createdAt: z.iso.datetime(),
+  orderedPaths: z
+    .array(
+      z
+        .string()
+        .min(1)
+        .max(2048)
+        .refine(
+          (path) =>
+            !/[\\\0]/u.test(path) &&
+            !path.startsWith("/") &&
+            !/^[a-zA-Z]:/u.test(path) &&
+            path
+              .split("/")
+              .every(
+                (segment) =>
+                  segment !== "" &&
+                  segment !== "." &&
+                  segment !== ".." &&
+                  segment.toLowerCase() !== ".git",
+              ),
+        ),
+    )
+    .max(20000)
+    .refine((paths) => new Set(paths).size === paths.length)
+    .optional(),
 });
 
 export type ProjectMetadataV1 = z.infer<typeof ProjectMetadataV1Schema>;

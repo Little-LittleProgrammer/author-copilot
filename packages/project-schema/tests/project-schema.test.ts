@@ -16,6 +16,27 @@ const validMetadata = {
 } as const;
 
 describe("project metadata schema", () => {
+  it("accepts optional portable ordering and rejects malformed or duplicate paths", () => {
+    expect(
+      parseProjectMetadata({
+        ...validMetadata,
+        orderedPaths: ["第一卷", "第一卷/第一章"],
+      }).orderedPaths,
+    ).toEqual(["第一卷", "第一卷/第一章"]);
+    for (const orderedPaths of [
+      ["../outside"],
+      ["/private/work"],
+      ["C:/work"],
+      [".git/config"],
+      ["a\\b"],
+      ["第一卷", "第一卷"],
+    ]) {
+      expect(
+        ProjectMetadataV1Schema.safeParse({ ...validMetadata, orderedPaths })
+          .success,
+      ).toBe(false);
+    }
+  });
   it.each(["novel", "screenplay"] as const)(
     "accepts the %s template",
     (template) => {

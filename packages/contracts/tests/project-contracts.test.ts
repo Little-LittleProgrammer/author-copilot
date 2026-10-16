@@ -8,6 +8,8 @@ import {
   IPC_INVOKE_CHANNELS,
   ProjectConfirmImportRequestSchema,
   ProjectCreateRequestSchema,
+  ProjectCreateEntryRequestSchema,
+  ProjectMoveEntryRequestSchema,
   ProjectDeleteEntryRequestSchema,
   ProjectImportPreviewResponseSchema,
   ProjectOperationErrorCodeSchema,
@@ -22,6 +24,57 @@ const projectId = "10000000-0000-4000-8000-000000000001";
 const hash = "a".repeat(64);
 
 describe("project contracts", () => {
+  it("limits structure creation and ordering to business requests", () => {
+    expect(
+      ProjectCreateEntryRequestSchema.parse({
+        projectId,
+        role: "chapter",
+        parentPath: "第一卷",
+        name: "新章",
+      }),
+    ).toEqual({
+      projectId,
+      role: "chapter",
+      parentPath: "第一卷",
+      name: "新章",
+    });
+    for (const input of [
+      { projectId, role: "folder", name: "新章" },
+      { projectId, role: "chapter", parentPath: "../外部", name: "新章" },
+      { projectId, role: "volume", name: " ", content: "正文" },
+      {
+        projectId,
+        role: "volume",
+        name: "新卷",
+        absolutePath: "/private/work",
+      },
+    ])
+      expect(ProjectCreateEntryRequestSchema.safeParse(input).success).toBe(
+        false,
+      );
+    expect(
+      ProjectMoveEntryRequestSchema.safeParse({
+        projectId,
+        relativePath: "第一卷",
+        direction: "up",
+      }).success,
+    ).toBe(true);
+    expect(
+      ProjectMoveEntryRequestSchema.safeParse({
+        projectId,
+        relativePath: "第一卷",
+        direction: "down",
+        index: 0,
+      }).success,
+    ).toBe(false);
+    expect(
+      ProjectMoveEntryRequestSchema.safeParse({
+        projectId,
+        relativePath: "第一卷",
+        direction: "left",
+      }).success,
+    ).toBe(false);
+  });
   it("keeps project templates local to the shared contract", () => {
     expect(
       ProjectCreateRequestSchema.parse({

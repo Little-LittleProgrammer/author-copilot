@@ -42,6 +42,10 @@ import type {
   ProjectConfirmImportRequest,
   ProjectConfirmImportResponse,
   ProjectCreateRequest,
+  ProjectCreateEntryRequest,
+  ProjectCreateEntryResponse,
+  ProjectMoveEntryRequest,
+  ProjectMoveEntryResponse,
   ProjectCreateResponse,
   ProjectDeleteEntryRequest,
   ProjectDeleteEntryResponse,
@@ -186,6 +190,12 @@ export interface AuthorCopilotApi {
     };
   };
   readonly project: {
+    readonly createEntry: (
+      request: ProjectCreateEntryRequest,
+    ) => Promise<ProjectCreateEntryResponse>;
+    readonly moveEntry: (
+      request: ProjectMoveEntryRequest,
+    ) => Promise<ProjectMoveEntryResponse>;
     readonly create: (
       request: ProjectCreateRequest,
     ) => Promise<ProjectCreateResponse>;

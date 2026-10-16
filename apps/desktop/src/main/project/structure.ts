@@ -1,5 +1,12 @@
-import { readdir, realpath } from "node:fs/promises";
+import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
+
+import {
+  parseProjectMetadata,
+  PROJECT_METADATA_FILE_NAME,
+} from "@author-copilot/project-schema";
+import { SymbolicLinkNotAllowedError } from "./errors.js";
+import { authorizeExistingEntry } from "./path-policy.js";
 
 import type {
   ProjectDocument,
@@ -160,5 +167,93 @@ export async function buildProjectStructure(
     template === "novel"
       ? buildNovelStructure(documents)
       : buildScreenplayStructure(documents);
-  return { projectId, template, ...structure };
+  // Order lives with the work, so copies and Git branch changes preserve it.
+  let orderedPaths: readonly string[] = [];
+  try {
+    const metadataPath = join(rootPath, PROJECT_METADATA_FILE_NAME);
+    if ((await lstat(metadataPath)).isSymbolicLink()) {
+      throw new SymbolicLinkNotAllowedError(
+        "Project metadata cannot be a symbolic link.",
+      );
+    }
+    orderedPaths =
+      parseProjectMetadata(JSON.parse(await readFile(metadataPath, "utf8")))
+        .orderedPaths ?? [];
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
+      throw error;
+  }
+  // Keep known empty groups visible after their last manuscript is deleted.
+  const nodes = [...structure.nodes];
+  for (const path of orderedPaths) {
+    const segments = path.split("/");
+    if (segments.length > (template === "novel" ? 2 : 1)) continue;
+    const [groupName, chapterName] = segments;
+    if (groupName === undefined) continue;
+    const groupIndex = nodes.findIndex(
+      (node) => node.relativePath === groupName,
+    );
+    const group = nodes[groupIndex];
+    if (
+      group &&
+      (chapterName === undefined ||
+        group.children.some((child) => child.relativePath === path))
+    )
+      continue;
+    try {
+      if ((await authorizeExistingEntry(rootPath, path)).isDocument) continue;
+    } catch (error) {
+      if (
+        error instanceof SymbolicLinkNotAllowedError ||
+        (error instanceof Error && "code" in error && error.code === "ENOENT")
+      )
+        continue;
+      throw error;
+    }
+    const parent: ProjectStructureNode = group ?? {
+      kind: template === "novel" ? "volume" : "act",
+      name: groupName,
+      relativePath: groupName,
+      children: [],
+    };
+    const restored =
+      chapterName === undefined
+        ? parent
+        : {
+            ...parent,
+            children: [
+              ...parent.children,
+              {
+                kind: "chapter" as const,
+                name: chapterName,
+                relativePath: path,
+                children: [],
+              },
+            ],
+          };
+    if (groupIndex < 0) nodes.push(restored);
+    else nodes[groupIndex] = restored;
+  }
+  const positions = new Map(orderedPaths.map((path, index) => [path, index]));
+  const applyOrder = <T extends ProjectStructureNode | ProjectDocument>(
+    nodes: readonly T[],
+  ): T[] =>
+    [...nodes]
+      .sort(
+        (left, right) =>
+          (positions.get(left.relativePath) ?? Infinity) -
+          (positions.get(right.relativePath) ?? Infinity),
+      )
+      .map((node) => ({
+        ...node,
+        ...(node.kind === "document"
+          ? {}
+          : { children: applyOrder(node.children) }),
+      }));
+  return {
+    projectId,
+    template,
+    ...structure,
+    nodes: applyOrder(nodes),
+  };
 }

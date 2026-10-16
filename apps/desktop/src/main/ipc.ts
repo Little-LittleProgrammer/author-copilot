@@ -119,6 +119,7 @@ export function registerIpcHandlers(
   });
   registerProjectIpcHandlers({
     trustedRendererUrl,
+    getTabManager: options.getTabManager,
     projectService: options.projectService,
     directoryPicker: options.directoryPicker,
     onProjectChanged: (project) =>

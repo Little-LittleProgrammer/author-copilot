@@ -96,6 +96,13 @@ export function projectOperationFailure(
       retryable: false,
     });
   }
+  if (nodeCode === "EEXIST") {
+    return failure({
+      code: "conflict",
+      message: "An entry with this name already exists. Choose another name.",
+      retryable: true,
+    });
+  }
 
   return failure({
     code: "io_error",

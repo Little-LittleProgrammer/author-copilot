@@ -4,6 +4,10 @@ import type {
   ProjectConfirmImportRequest,
   ProjectConfirmImportResponse,
   ProjectCreateRequest,
+  ProjectCreateEntryRequest,
+  ProjectCreateEntryResponse,
+  ProjectMoveEntryRequest,
+  ProjectMoveEntryResponse,
   ProjectCreateResponse,
   ProjectDeleteEntryRequest,
   ProjectDeleteEntryResponse,
@@ -32,6 +36,12 @@ import {
 
 interface ProjectWindowApi {
   readonly project?: {
+    readonly createEntry: (
+      input: ProjectCreateEntryRequest,
+    ) => Promise<ProjectCreateEntryResponse>;
+    readonly moveEntry: (
+      input: ProjectMoveEntryRequest,
+    ) => Promise<ProjectMoveEntryResponse>;
     readonly confirmImport: (
       input: ProjectConfirmImportRequest,
     ) => Promise<ProjectConfirmImportResponse>;
@@ -72,6 +82,12 @@ export function getProjectApi(): ProjectBridge | undefined {
   if (raw === undefined) return undefined;
 
   return {
+    async createEntry(input) {
+      return unwrap(await raw.createEntry(input));
+    },
+    async moveEntry(input) {
+      unwrap(await raw.moveEntry(input));
+    },
     async confirmImport(input) {
       const response = await raw.confirmImport(input);
       return mapProject(unwrap(response).project);

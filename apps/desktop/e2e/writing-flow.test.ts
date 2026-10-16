@@ -2841,3 +2841,153 @@ test("clears stale chapter previews when switching to whole-document import", as
     await rm(temporaryRoot, { recursive: true, force: true });
   }
 });
+
+for (const template of ["novel", "screenplay"] as const) {
+  test(`creates and reorders ${template} writing entries through the sidebar`, async () => {
+    const temporaryRoot = await mkdtemp(
+      join(tmpdir(), "author-copilot-structure-"),
+    );
+    const projectTitle = `目录管理-${template}`;
+    const projectRoot = join(temporaryRoot, projectTitle);
+    const application = await launchApplication(temporaryRoot);
+    try {
+      const { center } = await enterWorkspace(application);
+      await center
+        .getByRole("button", {
+          name:
+            template === "novel"
+              ? /新建小说|New novel/u
+              : /新建剧本|New screenplay/u,
+        })
+        .click();
+      await center.getByTestId("project-name").fill(projectTitle);
+      await center.getByTestId("project-dialog-submit").click();
+      const page = await rendererPage(application, "project");
+      const rootName = template === "novel" ? "第一卷" : "第一幕";
+      const rootRole =
+        template === "novel" ? /新建卷|New volume/u : /新建幕|New act/u;
+      const childRole =
+        template === "novel" ? /新建章|New chapter/u : /新建场景|New scene/u;
+      const treeButton = (name: string) =>
+        page
+          .locator(".structure-tree")
+          .getByRole("button", { name, exact: true });
+      const create = async (name: string): Promise<void> => {
+        const dialog = page.getByRole("dialog");
+        await dialog
+          .getByRole("textbox", { name: /名称|Name/u, exact: true })
+          .fill(name);
+        await dialog
+          .getByRole("button", { name: /创建并写作|Create and write/u })
+          .click();
+        await expect(dialog).toHaveCount(0);
+        await expect(page.getByTestId("document-editor")).toBeFocused();
+      };
+      await page.getByRole("button", { name: rootRole, exact: true }).click();
+      await create("新组");
+      await expect(page.getByTestId("document-editor")).toHaveValue("");
+      await treeButton(rootName).click({ button: "right" });
+      await page
+        .getByRole("menuitem", { name: childRole, exact: true })
+        .click();
+      await create("新增篇");
+      await expect(page.locator(".manuscript-heading")).toHaveText("新增篇");
+      const editor = page.getByTestId("document-editor");
+      await editor.fill("新增正文，排序后应保持。");
+      await treeButton("新增篇").click({ button: "right" });
+      await expect(
+        page.getByRole("menuitem", { name: /上移|Move up/u, exact: true }),
+      ).toHaveAttribute("data-disabled", "");
+      await page.keyboard.press("Escape");
+      await expect(
+        page.getByRole("button", { name: rootRole, exact: true }),
+      ).toBeDisabled();
+      await page.getByTestId("save-document").click();
+      await expect(page.getByTestId("save-document")).toBeDisabled();
+      const childPath =
+        template === "novel"
+          ? `${rootName}/新增篇/01-正文.md`
+          : `${rootName}/新增篇.md`;
+      await expect
+        .poll(() => readFile(join(projectRoot, childPath), "utf8"))
+        .toBe("新增正文，排序后应保持。");
+      await treeButton("新增篇").click({ button: "right" });
+      await page
+        .getByRole("menuitem", { name: /上移|Move up/u, exact: true })
+        .click();
+      await expect(
+        page
+          .locator(".structure-tree > li")
+          .first()
+          .locator("ul > li")
+          .first()
+          .locator(".tree-name"),
+      ).toHaveText("新增篇");
+      await expect(editor).toHaveValue("新增正文，排序后应保持。");
+      await treeButton("新增篇").click({ button: "right" });
+      await expect(
+        page.getByRole("menuitem", { name: /上移|Move up/u, exact: true }),
+      ).toHaveAttribute("data-disabled", "");
+      await page
+        .getByRole("menuitem", { name: /下移|Move down/u, exact: true })
+        .click();
+      await treeButton("新组").click({ button: "right" });
+      await page
+        .getByRole("menuitem", { name: /上移|Move up/u, exact: true })
+        .click();
+      await expect(
+        page.locator(".structure-tree > li > .tree-row .tree-name").first(),
+      ).toHaveText("新组");
+      // Duplicate names keep the dialog and existing body intact.
+      await treeButton(rootName).click({ button: "right" });
+      await page
+        .getByRole("menuitem", { name: childRole, exact: true })
+        .click();
+      await page
+        .getByRole("dialog")
+        .getByRole("textbox", { name: /名称|Name/u, exact: true })
+        .fill("新增篇");
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: /创建并写作|Create and write/u })
+        .click();
+      await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+        /同名|already exists/u,
+      );
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: /取消|Cancel/u, exact: true })
+        .click();
+      await page.reload();
+      await expect(
+        page.locator(".structure-tree > li > .tree-row .tree-name").first(),
+      ).toHaveText("新组");
+      await treeButton("新增篇").click();
+      await expect(editor).toHaveValue("新增正文，排序后应保持。");
+      if (template === "novel") {
+        await treeButton("新增篇").click({ button: "right" });
+        await page
+          .getByRole("menuitem", { name: /新建场景|New scene/u, exact: true })
+          .click();
+        await create("第二场景");
+        await expect(page.locator(".manuscript-heading")).toHaveText(
+          "第二场景",
+        );
+        await expect(treeButton("01-正文")).toBeVisible();
+        expect(
+          await readFile(
+            join(projectRoot, rootName, "新增篇", "第二场景.md"),
+            "utf8",
+          ),
+        ).toBe("");
+      }
+      await page.screenshot({
+        path: `test-results/structure-management-${template}.png`,
+        fullPage: true,
+      });
+    } finally {
+      await application.close();
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+}
