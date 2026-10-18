@@ -5,6 +5,7 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  Download,
   Pencil,
   Plus,
   Search,
@@ -20,6 +21,7 @@ import { ProjectInfoDialog } from "./ProjectInfoDialog.js";
 import type { ProjectSummary, StructureNode } from "./types.js";
 
 interface ProjectSidebarProps {
+  readonly onExport: () => void;
   readonly activeDocumentPath: string | undefined;
   readonly activeProject: ProjectSummary;
   readonly aiContextPaths: ReadonlySet<string>;
@@ -341,6 +343,16 @@ export function ProjectSidebar(props: ProjectSidebarProps): JSX.Element {
       <div className="sidebar-section project-section editor-project-summary">
         <div className="project-summary-title">
           <strong>{activeProject.name}</strong>
+          <button
+            className="project-info-button"
+            type="button"
+            aria-label={t("exportManuscript")}
+            title={t("exportManuscript")}
+            disabled={loading}
+            onClick={props.onExport}
+          >
+            <Download size={14} />
+          </button>
           <button
             className="project-info-button"
             type="button"

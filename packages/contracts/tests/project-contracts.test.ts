@@ -10,6 +10,8 @@ import {
   ProjectCreateRequestSchema,
   ProjectCreateEntryRequestSchema,
   ProjectMoveEntryRequestSchema,
+  ProjectExportRequestSchema,
+  ProjectExportResponseSchema,
   ProjectDeleteEntryRequestSchema,
   ProjectImportPreviewResponseSchema,
   ProjectOperationErrorCodeSchema,
@@ -24,6 +26,42 @@ const projectId = "10000000-0000-4000-8000-000000000001";
 const hash = "a".repeat(64);
 
 describe("project contracts", () => {
+  it("limits exports to typed ranges and formats without accepting a destination path", () => {
+    const request = {
+      projectId,
+      scope: "project",
+      format: "docx",
+      locale: "zh-CN",
+    };
+    expect(ProjectExportRequestSchema.parse(request)).toEqual(request);
+    expect(
+      ProjectExportRequestSchema.parse({
+        ...request,
+        scope: "chapter",
+        relativePath: "卷/章",
+      }),
+    ).toMatchObject({ scope: "chapter" });
+    for (const input of [
+      { ...request, scope: "chapter" },
+      { ...request, scope: "chapter", relativePath: "../secret.md" },
+      { ...request, destination: "/tmp/target.docx" },
+      { ...request, relativePath: "卷/章" },
+      { ...request, format: "pdf" },
+      { ...request, locale: "unknown" },
+    ])
+      expect(ProjectExportRequestSchema.safeParse(input).success).toBe(false);
+    expect(
+      ProjectExportResponseSchema.safeParse({
+        ok: true,
+        fileName: "书.docx",
+        documentCount: 2,
+        absolutePath: "/tmp/书.docx",
+      }).success,
+    ).toBe(false);
+    expect(
+      IPC_INVOKE_CONTRACTS[IPC_INVOKE_CHANNELS.projectExport].request,
+    ).toBe(ProjectExportRequestSchema);
+  });
   it("limits structure creation and ordering to business requests", () => {
     expect(
       ProjectCreateEntryRequestSchema.parse({

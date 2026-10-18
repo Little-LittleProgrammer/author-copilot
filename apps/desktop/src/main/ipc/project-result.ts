@@ -14,6 +14,7 @@ import {
 } from "../project/index.js";
 
 import { DocumentImportError } from "../project/document-import.js";
+import { DocumentExportError } from "../project/document-export.js";
 
 function failure(error: ProjectOperationError): ProjectOperationFailure {
   return { ok: false, error };
@@ -30,6 +31,19 @@ export function cancelledOperation(): ProjectOperationFailure {
 export function projectOperationFailure(
   error: unknown,
 ): ProjectOperationFailure {
+  if (error instanceof DocumentExportError) {
+    return failure({
+      code:
+        error.reason === "destination"
+          ? "invalid_path"
+          : error.reason === "changed"
+            ? "conflict"
+            : "io_error",
+      message: "The manuscript could not be exported.",
+      retryable: true,
+      details: { exportReason: error.reason },
+    });
+  }
   if (error instanceof DocumentImportError) {
     return failure({
       code: "invalid_import",

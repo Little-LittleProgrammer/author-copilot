@@ -4,6 +4,8 @@ import type {
   ProjectConfirmImportRequest,
   ProjectConfirmImportResponse,
   ProjectCreateRequest,
+  ProjectExportRequest,
+  ProjectExportResponse,
   ProjectCreateEntryRequest,
   ProjectCreateEntryResponse,
   ProjectMoveEntryRequest,
@@ -36,6 +38,9 @@ import {
 
 interface ProjectWindowApi {
   readonly project?: {
+    readonly export: (
+      input: ProjectExportRequest,
+    ) => Promise<ProjectExportResponse>;
     readonly createEntry: (
       input: ProjectCreateEntryRequest,
     ) => Promise<ProjectCreateEntryResponse>;
@@ -82,6 +87,11 @@ export function getProjectApi(): ProjectBridge | undefined {
   if (raw === undefined) return undefined;
 
   return {
+    async export(input) {
+      const response = await raw.export(input);
+      if (!response.ok && response.error.code === "cancelled") return null;
+      return unwrap(response);
+    },
     async createEntry(input) {
       return unwrap(await raw.createEntry(input));
     },
@@ -183,6 +193,9 @@ function unwrap<T extends { readonly ok: boolean }>(
       error.message,
       typeof error.details?.reason === "string"
         ? error.details.reason
+        : undefined,
+      typeof error.details?.exportReason === "string"
+        ? error.details.exportReason
         : undefined,
     );
   }

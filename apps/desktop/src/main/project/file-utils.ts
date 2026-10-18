@@ -17,7 +17,7 @@ async function syncDirectory(path: string): Promise<void> {
 
 export async function atomicWriteFile(
   targetPath: string,
-  content: string,
+  content: string | Uint8Array,
   mode?: number,
   beforeReplace?: () => void | Promise<void>,
 ): Promise<void> {

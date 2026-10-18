@@ -306,6 +306,12 @@ app.whenReady().then(async () => {
       e2eMode && process.env.AUTHOR_COPILOT_E2E_DIRECTORY !== undefined
         ? createFixedProjectDirectoryPicker({
             createParent: process.env.AUTHOR_COPILOT_E2E_DIRECTORY,
+            ...(process.env.AUTHOR_COPILOT_E2E_EXPORT_DIRECTORY
+              ? {
+                  exportDirectory:
+                    process.env.AUTHOR_COPILOT_E2E_EXPORT_DIRECTORY,
+                }
+              : {}),
             importSource:
               process.env.AUTHOR_COPILOT_E2E_IMPORT_SOURCE ??
               process.env.AUTHOR_COPILOT_E2E_DIRECTORY,

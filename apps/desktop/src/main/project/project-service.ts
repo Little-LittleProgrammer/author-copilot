@@ -56,7 +56,14 @@ import type {
   SaveDocumentResult,
 } from "./types.js";
 import { ProjectOperationQueue } from "../git/project-operation-queue.js";
-import type { ProjectCreateEntryRequest } from "@author-copilot/contracts";
+import type {
+  ProjectCreateEntryRequest,
+  ProjectExportRequest,
+} from "@author-copilot/contracts";
+import {
+  snapshotManuscript,
+  type ManuscriptSnapshot,
+} from "./document-export.js";
 
 type WritingEntry = ProjectStructureNode | ProjectDocument;
 
@@ -451,6 +458,26 @@ export class ProjectService {
       project.rootPath,
       project.metadata.template,
     );
+  }
+
+  async prepareExport(
+    request: ProjectExportRequest,
+  ): Promise<ManuscriptSnapshot> {
+    return this.withProjectLock(request.projectId, async () => {
+      const project = await this.requireProject(request.projectId);
+      const metadata = await this.currentMetadata(project);
+      const structure = await buildProjectStructure(
+        project.projectId,
+        project.rootPath,
+        metadata.template,
+      );
+      return snapshotManuscript(
+        project.rootPath,
+        metadata.title,
+        structure,
+        request,
+      );
+    });
   }
 
   async updateProjectTitle(

@@ -62,6 +62,8 @@ import {
   ProjectCreateRequestSchema,
   ProjectCreateEntryRequestSchema,
   ProjectCreateEntryResponseSchema,
+  ProjectExportRequestSchema,
+  ProjectExportResponseSchema,
   ProjectMoveEntryRequestSchema,
   ProjectMoveEntryResponseSchema,
   ProjectCreateResponseSchema,
@@ -162,6 +164,7 @@ export const IPC_INVOKE_CHANNELS = {
   projectCreate: "project:create",
   projectCreateEntry: "project:create-entry",
   projectMoveEntry: "project:move-entry",
+  projectExport: "project:export",
   projectDeleteEntry: "project:delete-entry",
   projectUpdate: "project:update",
   projectPreviewImport: "project:preview-import",
@@ -232,6 +235,7 @@ export const IPC_INVOKE_CHANNEL_NAMES = [
   IPC_INVOKE_CHANNELS.projectCreate,
   IPC_INVOKE_CHANNELS.projectCreateEntry,
   IPC_INVOKE_CHANNELS.projectMoveEntry,
+  IPC_INVOKE_CHANNELS.projectExport,
   IPC_INVOKE_CHANNELS.projectDeleteEntry,
   IPC_INVOKE_CHANNELS.projectUpdate,
   IPC_INVOKE_CHANNELS.projectPreviewImport,
@@ -384,6 +388,10 @@ export const IPC_INVOKE_CONTRACTS = {
   [IPC_INVOKE_CHANNELS.projectCreateEntry]: {
     request: ProjectCreateEntryRequestSchema,
     response: ProjectCreateEntryResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.projectExport]: {
+    request: ProjectExportRequestSchema,
+    response: ProjectExportResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.projectMoveEntry]: {
     request: ProjectMoveEntryRequestSchema,

@@ -42,6 +42,7 @@ describe("project structure IPC", () => {
       projectService: service as unknown as ProjectService,
       getTabManager: () => manager as unknown as TabManager,
       directoryPicker: {
+        chooseExportDestination: vi.fn(),
         chooseCreateParent: vi.fn(),
         chooseImportSource: vi.fn(),
         chooseCopyDestination: vi.fn(),

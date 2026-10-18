@@ -4,6 +4,30 @@ export type Locale = "en-US" | "zh-CN";
 
 const messages = {
   "en-US": {
+    exportManuscript: "Export manuscript",
+    exportHint:
+      "Export saved manuscript text in directory order. Creative notes and unclassified files are excluded.",
+    exportScope: "Export range",
+    exportWholeWork: "Entire work",
+    exportCurrentChapter: "Current chapter / scene",
+    exportFormat: "File format",
+    exportWordHint:
+      "Word keeps volume, chapter and scene headings. Each subsequent chapter or screenplay scene starts on a new page. Body text is preserved as plain text.",
+    exportTextHint:
+      "Headings and body text are combined in directory order. Markdown preserves the original body markup.",
+    exportSaveFirst: "Save your manuscript changes before exporting.",
+    exportChooseDestination: "Choose location and export",
+    exporting: "Exporting…",
+    exportSuccess: "Exported {name} · {count} manuscript files",
+    exportEmpty: "No recognized manuscript is available for this range.",
+    exportTooLarge:
+      "The manuscript exceeds the export limit (20 MB, 2,000 files or 100,000 lines). Please export individual chapters.",
+    exportChanged: "A file changed during export. Please try again.",
+    exportInvalidDestination:
+      "Choose a file outside registered project folders with the matching extension. Symbolic links cannot be overwritten.",
+    exportFailed:
+      "Export failed. Check the destination permissions and try again.",
+
     chatHistoricalPreview: "History preview",
     chatClosePreview: "Close change preview",
     chatNewConversation: "New chat",
@@ -559,6 +583,27 @@ const messages = {
     taskRecoveryTitle: "Recover Agent task",
   },
   "zh-CN": {
+    exportManuscript: "导出作品",
+    exportHint: "按目录顺序导出已保存的正文。创作资料和未分类文件不包含在内。",
+    exportScope: "导出范围",
+    exportWholeWork: "整部作品",
+    exportCurrentChapter: "当前章节 / 场景",
+    exportFormat: "文件格式",
+    exportWordHint:
+      "Word 保留卷、章和场景标题；后续章节或剧本场景另起一页。正文按纯文本保留。",
+    exportTextHint: "按目录顺序合并标题和正文。Markdown 保留正文原有标记。",
+    exportSaveFirst: "正文还有未保存的修改，请先保存再导出。",
+    exportChooseDestination: "选择位置并导出",
+    exporting: "正在导出…",
+    exportSuccess: "已导出 {name} · {count} 篇文稿",
+    exportEmpty: "此范围没有可导出的已识别正文。",
+    exportTooLarge:
+      "内容超过导出上限（20 MB、2,000 篇或 100,000 行），请按章节分别导出。",
+    exportChanged: "导出期间文件发生变化，请重试。",
+    exportInvalidDestination:
+      "请选择已登记作品文件夹以外的位置，并使用对应扩展名；不能覆盖符号链接。",
+    exportFailed: "导出失败，请检查目标位置的写入权限后重试。",
+
     chatHistoricalPreview: "历史预览",
     chatClosePreview: "关闭改动预览",
     chatNewConversation: "新建对话",

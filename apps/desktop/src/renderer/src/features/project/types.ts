@@ -1,4 +1,6 @@
 import type {
+  ProjectExportRequest,
+  ProjectExportResponse,
   ProjectCreateEntryRequest,
   ProjectCreateEntryResponse,
   ProjectMoveEntryRequest,
@@ -60,6 +62,7 @@ export class ProjectApiError extends Error {
     code: string,
     message: string,
     public readonly importReason?: string,
+    public readonly exportReason?: string,
   ) {
     super(message);
     this.name = "ProjectApiError";
@@ -68,6 +71,9 @@ export class ProjectApiError extends Error {
 }
 
 export interface ProjectBridge {
+  readonly export: (
+    input: ProjectExportRequest,
+  ) => Promise<Extract<ProjectExportResponse, { ok: true }> | null>;
   readonly createEntry: (
     input: ProjectCreateEntryRequest,
   ) => Promise<Extract<ProjectCreateEntryResponse, { ok: true }>>;

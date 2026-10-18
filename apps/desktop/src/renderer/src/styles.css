@@ -406,7 +406,7 @@ input[type="search"]::-webkit-search-cancel-button {
 }
 .project-summary-title {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 26px;
+  grid-template-columns: minmax(0, 1fr) 26px 26px;
   align-items: center;
   gap: 4px;
 }

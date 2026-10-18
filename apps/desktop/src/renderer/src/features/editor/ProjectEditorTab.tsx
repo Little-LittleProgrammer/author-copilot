@@ -9,6 +9,7 @@ import type {
 
 import type { MessageKey } from "../../i18n/index.js";
 import { ProjectSidebar } from "../project/ProjectSidebar.js";
+import { ExportDialog, type ExportSelection } from "../project/ExportDialog.js";
 import { errorMessage, getProjectApi } from "../project/project-api.js";
 import {
   ProjectApiError,
@@ -65,6 +66,9 @@ export function ProjectEditorTab({
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(() => getProjectApi() !== undefined);
   const [saving, setSaving] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportNotice, setExportNotice] = useState<string>();
   const [agentBusy, setAgentBusy] = useState(false);
   const [creativeNotesDirty, setCreativeNotesDirty] = useState(false);
   const [repositoryChanging, setRepositoryChanging] = useState(false);
@@ -229,6 +233,67 @@ export function ProjectEditorTab({
       role: "scene",
     });
   }, [document, selectDocument]);
+
+  const exportManuscript = async (
+    selection: ExportSelection,
+  ): Promise<boolean> => {
+    const api = getProjectApi();
+    if (!api) throw new Error(t("projectApiUnavailable"));
+    if (
+      dirty ||
+      saving ||
+      loading ||
+      exporting ||
+      repositoryChanging ||
+      proposalApplying ||
+      agentBusy
+    )
+      throw new Error(t("exportSaveFirst"));
+    setExporting(true);
+    setExportNotice(undefined);
+    try {
+      const result = await api.export({
+        ...selection,
+        projectId: project.id,
+        locale:
+          window.document.documentElement.lang === "en-US" ? "en-US" : "zh-CN",
+      });
+      if (!result) return false;
+      setExportNotice(
+        t("exportSuccess")
+          .replace("{name}", result.fileName)
+          .replace("{count}", String(result.documentCount)),
+      );
+      return true;
+    } catch (reason) {
+      if (reason instanceof ProjectApiError) {
+        const messages = {
+          empty: "exportEmpty",
+          too_large: "exportTooLarge",
+          changed: "exportChanged",
+          destination: "exportInvalidDestination",
+          failed: "exportFailed",
+        } as const;
+        const key = messages[reason.exportReason as keyof typeof messages];
+        throw new Error(key ? t(key) : t("exportFailed"));
+      }
+      throw reason;
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportChapter = (() => {
+    if (!document) return undefined;
+    const recognized = structure.filter((node) => node.role !== "unclassified");
+    return flattenStructure(recognized).find((node) =>
+      project.type === "novel"
+        ? node.role === "chapter" &&
+          (node.path === document.path ||
+            document.path.startsWith(`${node.path}/`))
+        : node.kind === "document" && node.path === document.path,
+    );
+  })();
 
   const openKnowledgeSource = useCallback(
     (relativePath: string): void => {
@@ -670,6 +735,10 @@ export function ProjectEditorTab({
         <EditorWorkspace
           sidebar={
             <ProjectSidebar
+              onExport={() => {
+                setExportNotice(undefined);
+                setExportDialogOpen(true);
+              }}
               activeDocumentPath={document?.path}
               activeProject={project}
               aiContextPaths={aiContextPaths}
@@ -682,7 +751,11 @@ export function ProjectEditorTab({
                 !agentBusy
               }
               loading={
-                loading || repositoryChanging || proposalApplying || agentBusy
+                loading ||
+                repositoryChanging ||
+                proposalApplying ||
+                agentBusy ||
+                exporting
               }
               onCreateEntry={createEntry}
               onMoveEntry={moveEntry}
@@ -709,7 +782,11 @@ export function ProjectEditorTab({
           dirty={dirty}
           error={error}
           loading={
-            loading || repositoryChanging || proposalApplying || agentBusy
+            loading ||
+            repositoryChanging ||
+            proposalApplying ||
+            agentBusy ||
+            exporting
           }
           onChange={setContent}
           onDiscard={() => {
@@ -725,7 +802,11 @@ export function ProjectEditorTab({
           onRecoveryRestored={reloadAfterRepositoryChange}
           onRepositoryBusyChange={setRepositoryChanging}
           repositoryBusy={
-            repositoryChanging || saving || loading || proposalApplying
+            repositoryChanging ||
+            saving ||
+            loading ||
+            proposalApplying ||
+            exporting
           }
           onSave={save}
           onSelectionChange={setSelection}
@@ -745,8 +826,30 @@ export function ProjectEditorTab({
           versionRefreshKey={versionRefreshKey}
         />
       </div>
+      {exportDialogOpen ? (
+        <ExportDialog
+          currentPath={exportChapter?.path}
+          currentTitle={exportChapter?.name}
+          dirty={dirty}
+          saveError={error}
+          saving={saving}
+          canExport={
+            !dirty &&
+            !saving &&
+            !loading &&
+            !exporting &&
+            !repositoryChanging &&
+            !proposalApplying &&
+            !agentBusy
+          }
+          onSave={save}
+          onExport={exportManuscript}
+          onClose={() => setExportDialogOpen(false)}
+          t={t}
+        />
+      ) : null}
       <footer className="statusbar">
-        <span>{project.name}</span>
+        <span role="status">{exportNotice ?? project.name}</span>
         <span>
           {runtime === undefined
             ? ""

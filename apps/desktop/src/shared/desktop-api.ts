@@ -42,6 +42,8 @@ import type {
   ProjectConfirmImportRequest,
   ProjectConfirmImportResponse,
   ProjectCreateRequest,
+  ProjectExportRequest,
+  ProjectExportResponse,
   ProjectCreateEntryRequest,
   ProjectCreateEntryResponse,
   ProjectMoveEntryRequest,
@@ -190,6 +192,9 @@ export interface AuthorCopilotApi {
     };
   };
   readonly project: {
+    readonly export: (
+      request: ProjectExportRequest,
+    ) => Promise<ProjectExportResponse>;
     readonly createEntry: (
       request: ProjectCreateEntryRequest,
     ) => Promise<ProjectCreateEntryResponse>;

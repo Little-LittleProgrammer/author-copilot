@@ -2991,3 +2991,149 @@ for (const template of ["novel", "screenplay"] as const) {
     }
   });
 }
+
+for (const template of ["novel", "screenplay"] as const) {
+  test(`exports ${template} manuscripts and current chapters in TXT Markdown and Word`, async () => {
+    const temporaryRoot = await mkdtemp(join(tmpdir(), "author-export-"));
+    const title = `导出验收-${template}`;
+    const source = join(temporaryRoot, title);
+    const output = join(temporaryRoot, "交稿");
+    const firstPath =
+      template === "novel" ? "第一卷/第一章/01-正文.md" : "第一幕/第一场.md";
+    const secondPath =
+      template === "novel" ? "第一卷/第一章/第二场景.md" : "第一幕/第二场.md";
+    const nextPath =
+      template === "novel" ? "第一卷/第二章/01-正文.md" : "第二幕/第三场.md";
+    for (const path of [firstPath, secondPath, nextPath])
+      await mkdir(join(source, path, ".."), { recursive: true });
+    await mkdir(output);
+    await writeFile(join(source, firstPath), "待修改正文");
+    await writeFile(join(source, secondPath), "场景补充正文");
+    await writeFile(join(source, nextPath), "先交付的后续章节");
+    await writeFile(join(source, "随记.md"), "不应导出的随记");
+    await writeFile(
+      join(source, "author-copilot.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        projectId: randomUUID(),
+        title,
+        template,
+        createdAt: new Date().toISOString(),
+        orderedPaths:
+          template === "novel"
+            ? [
+                "第一卷",
+                "第一卷/第二章",
+                nextPath,
+                "第一卷/第一章",
+                firstPath,
+                secondPath,
+              ]
+            : ["第二幕", nextPath, "第一幕", firstPath, secondPath],
+      }),
+    );
+    const application = await launchApplication(temporaryRoot, {
+      AUTHOR_COPILOT_E2E_IMPORT_SOURCE: source,
+      AUTHOR_COPILOT_E2E_EXPORT_DIRECTORY: output,
+    });
+    try {
+      const { center } = await enterWorkspace(application);
+      await center
+        .getByRole("button", { name: /导入作品|Import work/u })
+        .click();
+      if (template === "screenplay")
+        await center.getByRole("combobox").selectOption("screenplay");
+      await center
+        .getByRole("button", { name: /选择文件夹|Choose folder/u })
+        .click();
+      await center.getByTestId("project-dialog-submit").click();
+      const page = await rendererPage(application, "project");
+      if (template === "screenplay") {
+        await page.evaluate(() =>
+          localStorage.setItem("author-copilot.locale", "en-US"),
+        );
+        await page.reload();
+      }
+      await page
+        .locator(".structure-tree")
+        .getByRole("button", {
+          name: template === "novel" ? "01-正文" : "第一场",
+          exact: true,
+        })
+        .click();
+      const editor = page.getByTestId("document-editor");
+      await editor.fill("最终交付正文，保留中文与 < & >。\n\n第二段。");
+      const openExport = () =>
+        page
+          .getByRole("button", {
+            name: /导出作品|Export manuscript/u,
+            exact: true,
+          })
+          .click();
+      await openExport();
+      let dialog = page.getByRole("dialog");
+      await expect(dialog.getByTestId("export-submit")).toBeDisabled();
+      await expect(dialog.getByRole("status")).toContainText(
+        /未保存|Save your/u,
+      );
+      await dialog
+        .getByRole("button", { name: /取消|Cancel/u, exact: true })
+        .click();
+      await expect(editor).toHaveValue(
+        "最终交付正文，保留中文与 < & >。\n\n第二段。",
+      );
+      await openExport();
+      dialog = page.getByRole("dialog");
+      await dialog.getByRole("button", { name: /^(保存|Save)$/u }).click();
+      await expect(dialog.getByTestId("export-submit")).toBeEnabled();
+      await page.screenshot({
+        path: `test-results/manuscript-export-${template}.png`,
+        fullPage: true,
+      });
+      await dialog
+        .getByRole("button", { name: /取消|Cancel/u, exact: true })
+        .click();
+      for (const scope of ["project", "chapter"] as const) {
+        for (const format of ["docx", "txt", "md"] as const) {
+          await openExport();
+          dialog = page.getByRole("dialog");
+          await dialog
+            .getByRole("combobox", { name: /导出范围|Export range/u })
+            .selectOption(scope);
+          await dialog
+            .getByRole("combobox", { name: /文件格式|File format/u })
+            .selectOption(format);
+          await dialog.getByTestId("export-submit").click();
+          await expect(dialog).toHaveCount(0);
+          const fileName = `${title}${scope === "chapter" ? (template === "novel" ? "-第一章" : "-第一场") : ""}.${format}`;
+          await expect(page.getByRole("status")).toContainText(fileName);
+          const bytes = await readFile(join(output, fileName));
+          let text = bytes.toString("utf8");
+          if (format === "docx") {
+            const { default: WordExtractor } = await import("word-extractor");
+            text = (await new WordExtractor().extract(bytes)).getBody();
+          }
+          expect(text).toContain("最终交付正文，保留中文与 < & >。");
+          expect(text).not.toContain("不应导出的随记");
+          expect(text).not.toContain("待修改正文");
+          if (scope === "project") {
+            expect(text.indexOf("先交付的后续章节")).toBeLessThan(
+              text.indexOf("最终交付正文"),
+            );
+            expect(text).toContain("场景补充正文");
+          } else {
+            expect(text).not.toContain("先交付的后续章节");
+            if (template === "novel") expect(text).toContain("场景补充正文");
+            else expect(text).not.toContain("场景补充正文");
+          }
+        }
+      }
+      expect(await readFile(join(source, firstPath), "utf8")).toBe(
+        "最终交付正文，保留中文与 < & >。\n\n第二段。",
+      );
+    } finally {
+      await application.close();
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+}

@@ -72,6 +72,8 @@ import {
   type ProjectCreateRequest,
   type ProjectCreateEntryRequest,
   type ProjectMoveEntryRequest,
+  type ProjectExportRequest,
+  ProjectExportResponseSchema,
   type ProjectDeleteEntryRequest,
   type ProjectGetStructureRequest,
   type ProjectImportPreviewRequest,
@@ -300,6 +302,10 @@ const api: AuthorCopilotApi = Object.freeze({
     }),
   }),
   project: Object.freeze({
+    export: async (request: ProjectExportRequest) =>
+      ProjectExportResponseSchema.parse(
+        await ipcRenderer.invoke(IPC_INVOKE_CHANNELS.projectExport, request),
+      ),
     createEntry: async (request: ProjectCreateEntryRequest) =>
       ProjectCreateEntryResponseSchema.parse(
         await ipcRenderer.invoke(

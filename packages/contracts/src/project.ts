@@ -359,6 +359,35 @@ export type ProjectMoveEntryResponse = z.infer<
   typeof ProjectMoveEntryResponseSchema
 >;
 
+export const ProjectExportFormatSchema = z.enum(["txt", "md", "docx"]);
+export type ProjectExportFormat = z.infer<typeof ProjectExportFormatSchema>;
+
+const exportOptions = {
+  projectId: z.uuid(),
+  format: ProjectExportFormatSchema,
+  locale: z.enum(["zh-CN", "en-US"]),
+};
+
+export const ProjectExportRequestSchema = z.discriminatedUnion("scope", [
+  z.strictObject({ ...exportOptions, scope: z.literal("project") }),
+  z.strictObject({
+    ...exportOptions,
+    scope: z.literal("chapter"),
+    relativePath: RelativeProjectPathSchema,
+  }),
+]);
+export type ProjectExportRequest = z.infer<typeof ProjectExportRequestSchema>;
+
+export const ProjectExportResponseSchema = z.discriminatedUnion("ok", [
+  z.strictObject({
+    ok: z.literal(true),
+    fileName: DisplayNameSchema,
+    documentCount: z.number().int().min(1).max(2000),
+  }),
+  ProjectOperationFailureSchema,
+]);
+export type ProjectExportResponse = z.infer<typeof ProjectExportResponseSchema>;
+
 export const ProjectDeleteEntryRequestSchema = z.strictObject({
   projectId: z.uuid(),
   relativePath: RelativeProjectPathSchema,

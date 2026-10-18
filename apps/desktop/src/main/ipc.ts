@@ -19,6 +19,7 @@ import { registerAiCredentialIpcHandlers } from "./ipc/ai-credential-handlers.js
 import { registerAiChatIpcHandlers } from "./ipc/ai-chat-handlers.js";
 import { registerAiProposalIpcHandlers } from "./ipc/ai-proposal-handlers.js";
 import { registerProjectIpcHandlers } from "./ipc/project-handlers.js";
+import { registerProjectExportHandler } from "./ipc/project-export-handlers.js";
 import { registerKnowledgeIpcHandlers } from "./ipc/knowledge-handlers.js";
 import { registerTabIpcHandlers } from "./ipc/tab-handlers.js";
 import { registerTaskRecoveryIpcHandlers } from "./ipc/task-recovery-handlers.js";
@@ -124,6 +125,12 @@ export function registerIpcHandlers(
     directoryPicker: options.directoryPicker,
     onProjectChanged: (project) =>
       options.getTabManager()?.projectChanged(project),
+  });
+  registerProjectExportHandler({
+    trustedRendererUrl,
+    projectService: options.projectService,
+    getTabManager: options.getTabManager,
+    directoryPicker: options.directoryPicker,
   });
   registerKnowledgeIpcHandlers({
     trustedRendererUrl,

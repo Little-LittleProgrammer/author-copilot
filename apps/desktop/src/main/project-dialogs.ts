@@ -1,6 +1,22 @@
-import { BrowserWindow, dialog, type OpenDialogOptions } from "electron";
+import {
+  BrowserWindow,
+  dialog,
+  type OpenDialogOptions,
+  type SaveDialogOptions,
+} from "electron";
+import { join } from "node:path";
+import type { ProjectExportFormat } from "@author-copilot/contracts";
+
+export interface ExportDestinationOptions {
+  readonly fileName: string;
+  readonly format: ProjectExportFormat;
+  readonly locale: "zh-CN" | "en-US";
+}
 
 export interface ProjectDirectoryPicker {
+  chooseExportDestination(
+    options: ExportDestinationOptions,
+  ): Promise<string | undefined>;
   chooseCreateParent(): Promise<string | undefined>;
   chooseImportFile(): Promise<string | undefined>;
   chooseImportSource(): Promise<string | undefined>;
@@ -24,6 +40,26 @@ async function chooseDirectory(
 
 export function createProjectDirectoryPicker(): ProjectDirectoryPicker {
   return {
+    chooseExportDestination: async ({ fileName, format, locale }) => {
+      const chinese = locale === "zh-CN";
+      const options: SaveDialogOptions = {
+        title: chinese ? "导出作品" : "Export manuscript",
+        buttonLabel: chinese ? "导出" : "Export",
+        defaultPath: fileName,
+        filters: [
+          {
+            name: { txt: "TXT", md: "Markdown", docx: "Word" }[format],
+            extensions: [format],
+          },
+        ],
+        properties: ["createDirectory", "showOverwriteConfirmation"],
+      };
+      const owner = BrowserWindow.getFocusedWindow();
+      const result = owner
+        ? await dialog.showSaveDialog(owner, options)
+        : await dialog.showSaveDialog(options);
+      return result.canceled ? undefined : result.filePath;
+    },
     chooseCreateParent: () =>
       chooseDirectory({
         title: "Choose where to create the project",
@@ -56,6 +92,7 @@ export function createProjectDirectoryPicker(): ProjectDirectoryPicker {
 }
 
 export interface FixedProjectDirectories {
+  readonly exportDirectory?: string;
   readonly createParent: string;
   readonly importSource: string;
   readonly copyDestination: string;
@@ -65,6 +102,8 @@ export function createFixedProjectDirectoryPicker(
   directories: FixedProjectDirectories,
 ): ProjectDirectoryPicker {
   return {
+    chooseExportDestination: async ({ fileName }) =>
+      join(directories.exportDirectory ?? directories.createParent, fileName),
     chooseCreateParent: async () => directories.createParent,
     chooseImportSource: async () => directories.importSource,
     chooseImportFile: async () => directories.importSource,

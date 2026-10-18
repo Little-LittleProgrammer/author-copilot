@@ -22,6 +22,10 @@ export default defineConfig({
             import.meta.dirname,
             "src/main/project/document-import-worker.ts",
           ),
+          "document-export-worker": resolve(
+            import.meta.dirname,
+            "src/main/project/document-export-worker.ts",
+          ),
         },
       },
     },
