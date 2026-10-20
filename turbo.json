@@ -1,0 +1,48 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["dist/**", "out/**"]
+    },
+    "clean": {
+      "cache": false
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": [
+        "AUTHOR_COPILOT_*",
+        "MONGODB_URI",
+        "REDIS_URL",
+        "AUTH_SIGNING_SECRET",
+        "RELAY_*",
+        "ANTHROPIC_API_KEY",
+        "SMTP_*",
+        "HOST",
+        "PORT",
+        "NODE_ENV"
+      ]
+    },
+    "lint": {
+      "dependsOn": ["^build"]
+    },
+    "package": {
+      "dependsOn": ["build", "^build"],
+      "cache": false,
+      "outputs": ["release/**"]
+    },
+    "test": {
+      "dependsOn": ["^build"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "@author-copilot/api#test": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "passThroughEnv": ["PLATFORM_INTEGRATION", "MONGODB_URI", "REDIS_URL"]
+    }
+  }
+}
