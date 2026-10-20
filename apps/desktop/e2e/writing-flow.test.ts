@@ -63,8 +63,17 @@ async function rendererPage(
 
 async function enterWorkspace(
   application: ElectronApplication,
+  locale?: "zh-CN" | "en-US",
 ): Promise<{ readonly center: Page; readonly shell: Page }> {
   const shell = await application.firstWindow();
+  if (locale) {
+    await shell.evaluate(
+      (value) => localStorage.setItem("author-copilot.locale", value),
+      locale,
+    );
+    await shell.reload();
+    await expect(shell.locator("html")).toHaveAttribute("lang", locale);
+  }
   await expect(shell.locator(".app-tabs")).toHaveCount(0);
   await shell.getByTestId("continue-local").click();
   const center = await rendererPage(application, "center");
@@ -669,54 +678,59 @@ test("fills the writing page and edits work, volume, chapter, and document names
   }
 });
 
-test("initializes and searches the local whole-work index with source navigation", async () => {
-  const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
-  const application = await launchApplication(temporaryRoot);
+for (const locale of ["zh-CN", "en-US"] as const) {
+  test(`initializes and searches the local whole-work index with source navigation (${locale})`, async () => {
+    const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
+    const application = await launchApplication(temporaryRoot);
 
-  try {
-    const { center } = await enterWorkspace(application);
-    await center.getByRole("button", { name: /新建小说|New novel/u }).click();
-    await center.getByTestId("project-name").fill("索引证据");
-    await center.getByTestId("project-dialog-submit").click();
-    const page = await rendererPage(application, "project");
-    await page.getByRole("button", { name: "第一章", exact: true }).click();
-    await page
-      .getByTestId("document-editor")
-      .fill("# 雨夜\n\n白塔钟声响起，林舟在旧站台等候。\n");
-    await page.getByTestId("save-document").click();
-    await expect(
-      page.getByText(/已保存|Saved/u, { exact: true }),
-    ).toBeVisible();
+    try {
+      const { center } = await enterWorkspace(application, locale);
+      await center.getByRole("button", { name: /新建小说|New novel/u }).click();
+      await center.getByTestId("project-name").fill("索引证据");
+      await center.getByTestId("project-dialog-submit").click();
+      const page = await rendererPage(application, "project");
+      await page.getByRole("button", { name: "第一章", exact: true }).click();
+      await page
+        .getByTestId("document-editor")
+        .fill("# 雨夜\n\n白塔钟声响起，林舟在旧站台等候。\n");
+      await page.getByTestId("save-document").click();
+      await expect(
+        page.getByText(/已保存|Saved/u, { exact: true }),
+      ).toBeVisible();
 
-    await openAssistant(page, "knowledge");
-    page.once("dialog", (dialog) => dialog.accept());
-    await page
-      .getByRole("button", { name: /初始化|Initialize/u, exact: true })
-      .click();
-    await expect(
-      page.getByTestId("knowledge-panel").getByText(/^(可用|Ready)$/u),
-    ).toBeVisible({
-      timeout: 10_000,
-    });
-    await page
-      .getByRole("searchbox", { name: /检索|Search/u })
-      .fill("白塔钟声");
-    await page
-      .getByRole("button", { name: /检索|Search/u, exact: true })
-      .click();
-    const result = page.getByRole("button", { name: /白塔钟声/u });
-    await expect(result).toContainText("第一卷", { timeout: 10_000 });
-    await page.screenshot({
-      path: "test-results/m4-knowledge-index.png",
-      fullPage: true,
-    });
-    await result.click();
-    await expect(page.getByTestId("document-editor")).toHaveValue(/白塔钟声/u);
-  } finally {
-    await application.close();
-    await rm(temporaryRoot, { recursive: true, force: true });
-  }
-});
+      await openAssistant(page, "knowledge");
+      page.once("dialog", (dialog) => dialog.accept());
+      await page
+        .getByRole("button", { name: /初始化|Initialize/u, exact: true })
+        .click();
+      await expect(
+        page.getByTestId("knowledge-panel").getByText(/^(可用|Ready)$/u),
+      ).toBeVisible({
+        timeout: 10_000,
+      });
+      await page
+        .getByTestId("knowledge-panel")
+        .getByRole("searchbox", { name: /^(检索|Search)$/u })
+        .fill("白塔钟声");
+      await page
+        .getByRole("button", { name: /检索|Search/u, exact: true })
+        .click();
+      const result = page.getByRole("button", { name: /白塔钟声/u });
+      await expect(result).toContainText("第一卷", { timeout: 10_000 });
+      await page.screenshot({
+        path: "test-results/m4-knowledge-index.png",
+        fullPage: true,
+      });
+      await result.click();
+      await expect(page.getByTestId("document-editor")).toHaveValue(
+        /白塔钟声/u,
+      );
+    } finally {
+      await application.close();
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+}
 
 test("streams a BYOK Claude answer and opens its local source", async () => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
@@ -2670,8 +2684,13 @@ test("invalidates file previews on template changes and detects changed source f
   }
 });
 
-for (const format of ["txt", "doc", "docx"] as const) {
-  test(`splits a single ${format} into the previewed volumes and chapters`, async () => {
+for (const [format, locale] of [
+  ["txt", "zh-CN"],
+  ["doc", "zh-CN"],
+  ["docx", "zh-CN"],
+  ["docx", "en-US"],
+] as const) {
+  test(`splits a single ${format} into the previewed volumes and chapters (${locale})`, async () => {
     const temporaryRoot = await mkdtemp(
       join(tmpdir(), "author-chapter-import-"),
     );
@@ -2687,7 +2706,7 @@ for (const format of ["txt", "doc", "docx"] as const) {
       AUTHOR_COPILOT_E2E_IMPORT_SOURCE: source,
     });
     try {
-      const { center } = await enterWorkspace(application);
+      const { center } = await enterWorkspace(application, locale);
       await center
         .getByRole("button", { name: /导入作品|Import work/u })
         .click();
@@ -2755,7 +2774,7 @@ for (const format of ["txt", "doc", "docx"] as const) {
       if (format === "docx") {
         await page.screenshot({ path: "test-results/chapter-title-fixed.png" });
         await page
-          .getByRole("button", { name: "重命名: 第二章 来信", exact: true })
+          .getByRole("button", { name: /^(重命名|Rename): 第二章 来信$/u })
           .click();
         await page
           .getByRole("textbox", { name: /重命名|Rename/u, exact: true })
