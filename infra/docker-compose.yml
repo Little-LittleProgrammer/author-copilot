@@ -1,0 +1,48 @@
+services:
+  mongo:
+    image: mongo:8.0
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports: ["127.0.0.1:27017:27017"]
+    volumes: ["mongo-data:/data/db"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'mongosh --quiet --eval ''try { rs.status().ok } catch (e) { rs.initiate({_id:"rs0",members:[{_id:0,host:"mongo:27017"}]}); }'' | tail -1 | grep 1',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  redis:
+    image: redis:8.0-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["127.0.0.1:6379:6379"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    ports: ["127.0.0.1:9191:9191"]
+    environment:
+      HOST: 0.0.0.0
+      PORT: 9191
+      NODE_ENV: production
+      MONGODB_URI: mongodb://mongo:27017/author_copilot?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      AUTH_SIGNING_SECRET: ${AUTH_SIGNING_SECRET:?Set a random secret of at least 32 characters}
+      RELAY_CONFIG: /config/relay.json
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SMTP_URL: ${SMTP_URL:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    volumes: ["./relay.example.json:/config/relay.json:ro"]
+    depends_on:
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+volumes:
+  mongo-data:
+  redis-data:

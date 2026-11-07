@@ -1,0 +1,13 @@
+[project]
+name = "author-copilot-rag-benchmark"
+version = "0.1.0"
+description = "Repeatable local RAG candidate benchmark for Author Copilot"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+lancedb = ["lancedb>=0.29,<0.30"]
+
+[tool.ruff]
+line-length = 100
+
