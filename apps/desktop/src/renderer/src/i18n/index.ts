@@ -4,6 +4,50 @@ export type Locale = "en-US" | "zh-CN";
 
 const messages = {
   "en-US": {
+    creativeGenerateTitle: "AI creative notes",
+    creativeGenerateHint:
+      "Generate a draft, edit it, then confirm to save. Existing notes and manuscripts stay unchanged until you save.",
+    creativeGenerateOutline: "Generate an outline",
+    creativeGenerateInspiration: "Expand an idea",
+    creativeGenerateNote: "Organize notes",
+    creativeGenerateDestination: "Save destination",
+    creativeGenerateReplace: "Update selected note",
+    creativeGenerateSaveNew: "Create a new note",
+    creativeGenerateInstruction: "Creative brief",
+    creativeGeneratePlaceholder:
+      "For example: turn this idea into a three-act outline, keeping the ending open.",
+    creativeGenerateReferences: "Choose references",
+    creativeGenerateReferenceHint:
+      "Only selected saved notes and chapters are sent, plus the note being updated. Up to 6 notes, 8 documents and 120,000 characters in total. Unsaved manuscript edits are excluded.",
+    creativeGenerateChapters: "Chapters / scenes",
+    creativeGenerateStart: "Generate draft",
+    creativeGenerateRetry: "Generate again",
+    creativeGenerating: "Generating…",
+    creativeGenerateStop: "Stop generation",
+    creativeGenerateStopped:
+      "Generation stopped. Any previous draft is still available.",
+    creativeGenerateTimeout:
+      "Generation timed out. Your previous draft is preserved; try again.",
+    creativeGenerateFailed:
+      "Generation failed. Check the AI connection, credentials, balance and network in AI settings, then try again. Your previous draft is preserved.",
+    creativeGenerateInvalid:
+      "The request or AI draft is invalid. Keep references below 120,000 characters, or try generating again.",
+    creativeGenerateMissing:
+      "A reference is no longer available. Refresh the references and update your selection.",
+    creativeGeneratePreview: "Edit draft before saving",
+    creativeGenerateDiff: "Changes from the saved note",
+    creativeGenerateDiffLimit:
+      "Showing the first 300 diff lines. The complete edited draft will be saved.",
+    creativeGenerateConfirmReplace: "Confirm update",
+    creativeGenerateConfirmSave: "Confirm and save note",
+    creativeGenerateDiscardButton: "Discard and close",
+    creativeGenerateDiscard:
+      "Discard this creative brief and unsaved AI draft? Any running generation will be stopped.",
+    creativeGenerateRetryConfirm:
+      "Replace this draft with a new generation? If generation fails, the current draft will be kept.",
+    creativeGenerateSaveFirst:
+      "Save your note edits before generating a draft.",
+
     exportManuscript: "Export manuscript",
     exportHint:
       "Export saved manuscript text in directory order. Creative notes and unclassified files are excluded.",
@@ -583,6 +627,45 @@ const messages = {
     taskRecoveryTitle: "Recover Agent task",
   },
   "zh-CN": {
+    creativeGenerateTitle: "AI 生成资料",
+    creativeGenerateHint:
+      "先生成草稿并编辑，确认后才保存。生成过程不会修改已有资料或正文。",
+    creativeGenerateOutline: "生成大纲",
+    creativeGenerateInspiration: "扩展灵感",
+    creativeGenerateNote: "整理随记",
+    creativeGenerateDestination: "保存方式",
+    creativeGenerateReplace: "更新当前资料",
+    creativeGenerateSaveNew: "新建一条资料",
+    creativeGenerateInstruction: "创作要求",
+    creativeGeneratePlaceholder:
+      "例如：基于这条灵感生成三幕大纲，结尾保留悬念。",
+    creativeGenerateReferences: "选择参考内容",
+    creativeGenerateReferenceHint:
+      "仅发送选中的已保存资料、章节及待更新资料。最多 6 条资料、8 篇文稿，正文合计不超过 120,000 字符；不包含未保存的正文修改。",
+    creativeGenerateChapters: "章节 / 场景",
+    creativeGenerateStart: "生成草稿",
+    creativeGenerateRetry: "重新生成",
+    creativeGenerating: "生成中…",
+    creativeGenerateStop: "停止生成",
+    creativeGenerateStopped: "已停止生成，上一版草稿仍然保留。",
+    creativeGenerateTimeout: "生成超时，上一版草稿已保留，可重试。",
+    creativeGenerateFailed:
+      "生成失败，请在 AI 设置检查连接、密钥、余额及网络后重试。上一版草稿已保留。",
+    creativeGenerateInvalid:
+      "请求或生成结果无效，请将参考内容控制在 120,000 字符内，或重新生成。",
+    creativeGenerateMissing: "引用内容已不存在，请刷新参考内容并重新选择。",
+    creativeGeneratePreview: "编辑生成草稿",
+    creativeGenerateDiff: "与原资料的差异",
+    creativeGenerateDiffLimit: "差异仅展示前 300 行，保存时使用完整编辑稿。",
+    creativeGenerateConfirmReplace: "确认更新资料",
+    creativeGenerateConfirmSave: "确认保存资料",
+    creativeGenerateDiscardButton: "放弃并关闭",
+    creativeGenerateDiscard:
+      "放弃创作要求及未保存的 AI 草稿？正在生成的请求也会停止。",
+    creativeGenerateRetryConfirm:
+      "重新生成并替换当前草稿？如果生成失败，当前草稿仍会保留。",
+    creativeGenerateSaveFirst: "请先保存资料修改，再生成 AI 草稿。",
+
     exportManuscript: "导出作品",
     exportHint: "按目录顺序导出已保存的正文。创作资料和未分类文件不包含在内。",
     exportScope: "导出范围",

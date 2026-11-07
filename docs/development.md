@@ -30,8 +30,8 @@ must be bundled; only Electron's supported preload modules may remain external.
 
 The desktop currently opens a local workspace without a business account. Use
 **Continue without an account**, then configure an Anthropic API Key in AI settings
-for BYOK. This entry does not authenticate a managed account; managed login and
-online payments remain pending. Platform accounts, custom Anthropic providers and
+for BYOK. The local entry does not authenticate a managed account. Platform login
+is available separately; online payments remain pending. Platform accounts, custom Anthropic providers and
 the metered relay are described in [the M7 setup guide](reports/2026-09-13-provider-platform-relay.md).
 
 The September review fixes and their verification boundaries are recorded in
@@ -98,3 +98,13 @@ The source URLs and SHA-256 values are fixed in
 Windows MinGit archives. macOS targets build the official kernel.org Git source
 on the matching architecture with a macOS 12.0 deployment target. Generated
 runtime files live under `apps/desktop/resources/git` and are not committed.
+
+## AI creative note drafts
+
+Open **Creative notes** in the writing workspace and select **AI creative notes**.
+Choose an outline, idea expansion or note organization task, describe the request,
+and optionally select saved notes and chapters. A current manuscript is not required.
+Generation uses the selected AI connection and returns an editable draft without
+saving it. Confirm to create a note or update the selected note after reviewing its
+diff. Version conflicts preserve the draft and allow saving it as a new note.
+See [the delivery record](reports/2026-11-05-ai-creative-notes.md) for limits and validation.

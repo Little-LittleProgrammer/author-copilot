@@ -137,7 +137,16 @@ import {
   CreativeNotesProjectRequestSchema,
 } from "./creative-notes.js";
 
+import {
+  CreativeNoteGenerationRequestSchema,
+  CreativeNoteGenerationResponseSchema,
+  CreativeNoteGenerationCancelRequestSchema,
+  CreativeNoteGenerationCancelResponseSchema,
+} from "./creative-note-generation.js";
+
 export const IPC_INVOKE_CHANNELS = {
+  creativeNoteGenerate: "creative-notes:generate",
+  creativeNoteGenerateCancel: "creative-notes:generate-cancel",
   conversation: "assistant:conversation",
   writingStatisticsHistory: "writing-statistics:history",
   writingStatisticsGet: "writing-statistics:get",
@@ -209,6 +218,8 @@ export const IPC_EVENT_CHANNELS = {
 } as const;
 
 export const IPC_INVOKE_CHANNEL_NAMES = [
+  IPC_INVOKE_CHANNELS.creativeNoteGenerate,
+  IPC_INVOKE_CHANNELS.creativeNoteGenerateCancel,
   IPC_INVOKE_CHANNELS.conversation,
   IPC_INVOKE_CHANNELS.writingStatisticsHistory,
   IPC_INVOKE_CHANNELS.writingStatisticsGet,
@@ -316,6 +327,14 @@ export const IPC_INVOKE_CONTRACTS = {
   [IPC_INVOKE_CHANNELS.writingGoalSet]: {
     request: WritingGoalSetRequestSchema,
     response: WritingGoalResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.creativeNoteGenerate]: {
+    request: CreativeNoteGenerationRequestSchema,
+    response: CreativeNoteGenerationResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.creativeNoteGenerateCancel]: {
+    request: CreativeNoteGenerationCancelRequestSchema,
+    response: CreativeNoteGenerationCancelResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.creativeNotesList]: {
     request: CreativeNotesProjectRequestSchema,

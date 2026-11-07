@@ -2944,6 +2944,79 @@ input[type="search"]::-webkit-search-cancel-button {
   flex-direction: column;
   color: var(--text);
 }
+
+.creative-generation-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-width: 760px;
+  max-height: calc(100dvh - 32px);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.creative-generation-scroll {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  gap: 16px;
+  padding: 2px;
+}
+.creative-generation-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.creative-generation-fields label,
+.creative-generation-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+}
+.creative-generation-fields select {
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--editor);
+  padding: 6px;
+}
+.creative-generation-references {
+  display: grid;
+  gap: 8px;
+  max-height: 150px;
+  overflow: auto;
+  margin-top: 12px;
+}
+.creative-generation-references label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.creative-generation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.creative-generation-preview {
+  display: grid;
+  gap: 12px;
+}
+.creative-generation-preview textarea {
+  min-height: 180px;
+  max-height: 340px;
+}
+.creative-generation-diff {
+  max-height: 240px;
+  overflow: auto;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  background: var(--editor);
+}
+.creative-generation-diff code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
 .creative-notes-header {
   display: flex;
   min-height: 58px;

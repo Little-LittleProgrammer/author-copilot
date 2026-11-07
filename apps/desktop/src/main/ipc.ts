@@ -1,3 +1,5 @@
+import type { CreativeNoteGenerationService } from "./ai/creative-note-generation-service.js";
+import { registerCreativeNoteGenerationHandlers } from "./ipc/creative-note-generation-handlers.js";
 import type { ConversationStore } from "./ai/conversation-store.js";
 import { registerConversationHandlers } from "./ipc/conversation-handlers.js";
 import type { ProviderService } from "./ai/provider-service.js";
@@ -36,6 +38,7 @@ import { registerCreativeNotesIpcHandlers } from "./ipc/creative-notes-handlers.
 import type { CreativeNotesService } from "./creative-notes/creative-notes-service.js";
 
 export interface IpcHandlerOptions {
+  readonly creativeNoteGenerationService: CreativeNoteGenerationService;
   readonly conversationStore: ConversationStore;
   readonly writingStatisticsService: WritingStatisticsService;
   readonly creativeNotesService: CreativeNotesService;
@@ -89,6 +92,11 @@ export function registerIpcHandlers(
   registerWritingStatisticsHandlers({
     trustedRendererUrl,
     service: options.writingStatisticsService,
+    getTabManager: options.getTabManager,
+  });
+  registerCreativeNoteGenerationHandlers({
+    trustedRendererUrl,
+    service: options.creativeNoteGenerationService,
     getTabManager: options.getTabManager,
   });
   registerCreativeNotesIpcHandlers({

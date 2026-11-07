@@ -1,4 +1,10 @@
 import {
+  CreativeNoteGenerationResponseSchema,
+  CreativeNoteGenerationCancelResponseSchema,
+  type CreativeNoteGenerationRequest,
+  type CreativeNoteGenerationCancelRequest,
+} from "@author-copilot/contracts";
+import {
   ConversationResponseSchema,
   type ConversationRequest,
 } from "@author-copilot/contracts";
@@ -167,6 +173,20 @@ const api: AuthorCopilotApi = Object.freeze({
       ),
   }),
   creativeNotes: Object.freeze({
+    generate: async (request: CreativeNoteGenerationRequest) =>
+      CreativeNoteGenerationResponseSchema.parse(
+        await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.creativeNoteGenerate,
+          request,
+        ),
+      ),
+    cancelGeneration: async (request: CreativeNoteGenerationCancelRequest) =>
+      CreativeNoteGenerationCancelResponseSchema.parse(
+        await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.creativeNoteGenerateCancel,
+          request,
+        ),
+      ),
     list: async (request: CreativeNotesProjectRequest) =>
       CreativeNotesListResponseSchema.parse(
         await ipcRenderer.invoke(

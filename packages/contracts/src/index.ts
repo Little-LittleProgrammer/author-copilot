@@ -22,3 +22,5 @@ export * from "./writing-statistics.js";
 export * from "./creative-notes.js";
 
 export * from "./conversation.js";
+
+export * from "./creative-note-generation.js";

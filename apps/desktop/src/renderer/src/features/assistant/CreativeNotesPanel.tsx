@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Save,
   Trash2,
+  Sparkles,
 } from "lucide-react";
 import type { CreativeNote, CreativeNoteKind } from "@author-copilot/contracts";
 import { Button } from "@/components/ui/button.js";
@@ -24,6 +25,8 @@ import {
   CreativeNotesApiError,
   getCreativeNotesApi,
 } from "./creative-notes-api.js";
+
+import { CreativeNoteGenerationDialog } from "./CreativeNoteGenerationDialog.js";
 
 type NoteFilter = CreativeNoteKind | "all";
 
@@ -45,6 +48,8 @@ export function CreativeNotesPanel({
   onDirtyChange,
   t,
 }: CreativeNotesPanelProps): JSX.Element {
+  const [generationOpen, setGenerationOpen] = useState(false);
+  const [generationDirty, setGenerationDirty] = useState(false);
   const api = useMemo(() => getCreativeNotesApi(), []);
   const [notes, setNotes] = useState<readonly CreativeNote[]>([]);
   const [filter, setFilter] = useState<NoteFilter>("all");
@@ -66,18 +71,18 @@ export function CreativeNotesPanel({
     content !== baseline.content;
 
   useEffect(() => {
-    onDirtyChange(dirty || saving);
-  }, [dirty, saving, onDirtyChange]);
+    onDirtyChange(dirty || saving || generationDirty);
+  }, [dirty, saving, generationDirty, onDirtyChange]);
 
   useEffect(() => {
-    if (!dirty) return;
+    if (!dirty && !generationDirty) return;
     const preventUnload = (event: BeforeUnloadEvent): void => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", preventUnload);
     return () => window.removeEventListener("beforeunload", preventUnload);
-  }, [dirty]);
+  }, [dirty, generationDirty]);
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -252,6 +257,51 @@ export function CreativeNotesPanel({
           <Plus size={16} />
         </Button>
       </header>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={saving || loading || generationOpen || dirty}
+        onClick={() => setGenerationOpen(true)}
+        title={dirty ? t("creativeGenerateSaveFirst") : undefined}
+      >
+        <Sparkles size={14} />
+        {t("creativeGenerateTitle")}
+      </Button>
+      {dirty ? (
+        <p className="text-sm text-muted-foreground">
+          {t("creativeGenerateSaveFirst")}
+        </p>
+      ) : null}
+      {generationOpen ? (
+        <CreativeNoteGenerationDialog
+          projectId={projectId}
+          selected={selected}
+          onDirtyChange={setGenerationDirty}
+          onClose={() => {
+            setGenerationOpen(false);
+            setGenerationDirty(false);
+          }}
+          onSaved={(note) => {
+            setNotes((current) => [
+              note,
+              ...current.filter((entry) => entry.id !== note.id),
+            ]);
+            setSelectedId(note.id);
+            setKind(note.kind);
+            setTitle(note.title);
+            setContent(note.content);
+            setBaseline({
+              kind: note.kind,
+              title: note.title,
+              content: note.content,
+            });
+            setFilter("all");
+            setError(undefined);
+          }}
+          t={t}
+        />
+      ) : null}
       <div
         className="creative-notes-filters"
         role="tablist"

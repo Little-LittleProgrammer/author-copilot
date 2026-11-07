@@ -1760,8 +1760,11 @@ test("persists manual writing statistics without counting reloads or IME preedit
       String(5 - baseline),
     );
 
+    // End scrolls rather than moving the caret on macOS; place the IME at the text end explicitly.
+    await editor.evaluate((input: HTMLTextAreaElement) =>
+      input.setSelectionRange(input.value.length, input.value.length),
+    );
     // Drive Chromium's IME path, including provisional input and commit.
-    await editor.press("End");
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("Input.imeSetComposition", {
       text: "zhong",
@@ -3152,6 +3155,340 @@ for (const template of ["novel", "screenplay"] as const) {
       );
     } finally {
       await application.close();
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const locale of ["zh-CN", "en-US"] as const) {
+  test(`generates and reviews creative notes without overwriting saved work (${locale})`, async () => {
+    test.setTimeout(120_000);
+    const temporaryRoot = await mkdtemp(
+      join(tmpdir(), "author-generate-notes-"),
+    );
+    const bodies: string[] = [];
+    let mode: "draft" | "fail" | "hold" = "draft";
+    const server = createServer(async (request, response) => {
+      let raw = "";
+      for await (const chunk of request) raw += String(chunk);
+      bodies.push(raw);
+      if (mode === "hold") return;
+      if (mode === "fail") {
+        response.writeHead(503);
+        response.end("unavailable");
+        return;
+      }
+      const body = JSON.parse(raw);
+      const events = [
+        {
+          type: "message_start",
+          message: {
+            id: "msg_draft",
+            type: "message",
+            role: "assistant",
+            model: body.model,
+            content: [],
+            stop_reason: null,
+            stop_sequence: null,
+            usage: { input_tokens: 10, output_tokens: 0 },
+          },
+        },
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "tool_use",
+            id: "tool_draft",
+            name: "draft_creative_note",
+            input: {},
+          },
+        },
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: {
+            type: "input_json_delta",
+            partial_json: JSON.stringify({
+              title: "AI 三幕大纲",
+              content: "发现匿名信。\n追查寄信人。\n揭开港口秘密。",
+            }),
+          },
+        },
+        { type: "content_block_stop", index: 0 },
+        {
+          type: "message_delta",
+          delta: { stop_reason: "tool_use", stop_sequence: null },
+          usage: { output_tokens: 20 },
+        },
+        { type: "message_stop" },
+      ];
+      response.writeHead(200, {
+        "content-type": "text/event-stream",
+        connection: "close",
+      });
+      response.end(
+        events
+          .map(
+            (event) =>
+              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+          )
+          .join(""),
+      );
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address();
+    assert(address && typeof address !== "string");
+    const application = await launchApplication(temporaryRoot, {
+      AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL: `http://127.0.0.1:${address.port}`,
+      AUTHOR_COPILOT_E2E_CREDENTIAL_ENCRYPTION: "1",
+    });
+    try {
+      const { center, shell } = await enterWorkspace(application, locale);
+      await center.getByRole("button", { name: /Claude API Key/u }).click();
+      await center
+        .getByTestId("anthropic-api-key")
+        .fill("sk-ant-e2e-draft-key");
+      await center.getByTestId("anthropic-credential-save").click();
+      await expect(
+        center.getByTestId("anthropic-credential-status"),
+      ).toHaveText(/已配置|Configured/u);
+      await center.getByRole("button", { name: /关闭|Close/u }).click();
+      await center.getByRole("button", { name: /新建小说|New novel/u }).click();
+      await center.getByTestId("project-name").fill(`AI 资料-${locale}`);
+      await center.getByTestId("project-dialog-submit").click();
+      const page = await rendererPage(application, "project");
+      // Generate without requiring an open manuscript.
+      const projectId = await page.evaluate(async () => {
+        const api = (window as unknown as { authorCopilot: AuthorCopilotApi })
+          .authorCopilot;
+        const context = await api.tabs.getContext();
+        if (context.kind !== "project") throw new Error("project");
+        const id = context.project.projectId;
+        await api.creativeNotes.create({
+          projectId: id,
+          kind: "inspiration",
+          title: "匿名信灵感",
+          content: "旧线索",
+        });
+        await api.creativeNotes.create({
+          projectId: id,
+          kind: "note",
+          title: "未选资料",
+          content: "不可发送的秘密",
+        });
+        return id;
+      });
+      const manuscriptPath = join(
+        temporaryRoot,
+        `AI 资料-${locale}`,
+        "第一卷/第一章/01-正文.md",
+      );
+      await writeFile(manuscriptPath, "已保存正文线索");
+      await page
+        .getByRole("button", {
+          name: /打开面板.*创作资料|Open panel.*Creative notes/u,
+        })
+        .click();
+      const panel = page.getByTestId("creative-notes-panel");
+      const open = async () => {
+        await panel
+          .getByRole("button", {
+            name: /AI 生成资料|AI creative notes/u,
+            exact: true,
+          })
+          .click();
+        await expect(
+          page.getByTestId("creative-generation-dialog").getByRole("button", {
+            name: /生成草稿|Generate draft/u,
+            exact: true,
+          }),
+        ).toBeDisabled();
+      };
+      await open();
+      const dialog = page.getByTestId("creative-generation-dialog");
+      await dialog
+        .getByTestId("generation-instruction")
+        .fill("将匿名信扩展成三幕故事");
+      await dialog
+        .locator("summary")
+        .filter({ hasText: /选择参考内容|Choose references/u })
+        .click();
+      await dialog.getByRole("checkbox", { name: "匿名信灵感" }).check();
+      await dialog.getByRole("checkbox", { name: /第一章/u }).check();
+      await page.evaluate(async (id) => {
+        const api = (window as unknown as { authorCopilot: AuthorCopilotApi })
+          .authorCopilot;
+        const result = await api.creativeNotes.list({ projectId: id });
+        if (!result.ok) throw new Error("notes");
+        const note = result.notes.find((item) => item.title === "匿名信灵感")!;
+        await api.creativeNotes.update({
+          projectId: id,
+          noteId: note.id,
+          expectedUpdatedAt: note.updatedAt,
+          kind: note.kind,
+          title: note.title,
+          content: "最新保存的匿名信线索",
+        });
+      }, projectId);
+      await dialog
+        .getByRole("button", { name: /生成草稿|Generate draft/u, exact: true })
+        .click();
+      await expect(dialog.getByTestId("generation-content")).toHaveValue(
+        /发现匿名信/u,
+      );
+      expect(bodies[0]).toContain("最新保存的匿名信线索");
+      expect(bodies[0]).toContain("已保存正文线索");
+      expect(bodies[0]).not.toContain("不可发送的秘密");
+      const list = () =>
+        page.evaluate(async (id) => {
+          const result = await (
+            window as unknown as { authorCopilot: AuthorCopilotApi }
+          ).authorCopilot.creativeNotes.list({ projectId: id });
+          if (!result.ok) throw new Error("notes");
+          return result.notes;
+        }, projectId);
+      expect(await list()).toHaveLength(2);
+      await expect(shell.locator(".app-tab-dirty")).toBeVisible();
+      await dialog.getByTestId("generation-title").fill("作者确认的大纲");
+      await dialog
+        .getByTestId("generation-content")
+        .fill("作者修订的开场。\n保留开放结局。");
+      await dialog
+        .getByRole("button", { name: /确认保存资料|Confirm and save note/u })
+        .click();
+      await expect(dialog).toHaveCount(0);
+      expect(
+        (await list()).find((note) => note.title === "作者确认的大纲")?.content,
+      ).toContain("作者修订");
+
+      // Updating shows the diff; failed retries and cancellation keep the current draft.
+      await open();
+      await dialog.getByTestId("generation-instruction").fill("完善结局");
+      await dialog
+        .getByRole("button", { name: /生成草稿|Generate draft/u, exact: true })
+        .click();
+      await expect(dialog.getByTestId("generation-diff")).toContainText(
+        "作者修订的开场",
+      );
+      await expect(dialog.getByTestId("generation-diff")).toContainText(
+        "发现匿名信",
+      );
+      await page.screenshot({
+        path: `test-results/creative-note-generation-${locale}-review.png`,
+      });
+      await dialog
+        .getByRole("button", { name: /确认更新资料|Confirm update/u })
+        .click();
+      await expect(dialog).toHaveCount(0);
+      expect(await list()).toHaveLength(3);
+      expect(
+        (await list()).find((note) => note.title === "AI 三幕大纲")?.content,
+      ).toContain("发现匿名信");
+      await open();
+      await dialog.getByTestId("generation-instruction").fill("再次完善结局");
+      await dialog
+        .getByRole("button", { name: /生成草稿|Generate draft/u, exact: true })
+        .click();
+      await expect(dialog.getByTestId("generation-content")).toHaveValue(
+        /发现匿名信/u,
+      );
+      mode = "fail";
+      page.once("dialog", (prompt) => void prompt.accept());
+      await dialog
+        .getByRole("button", { name: /重新生成|Generate again/u })
+        .click();
+      await expect(dialog.getByRole("alert")).toContainText(
+        /生成失败|Generation failed/u,
+      );
+      await expect(dialog.getByTestId("generation-content")).toHaveValue(
+        /发现匿名信/u,
+      );
+      mode = "hold";
+      page.once("dialog", (prompt) => void prompt.accept());
+      await dialog
+        .getByRole("button", { name: /重新生成|Generate again/u })
+        .click();
+      await expect.poll(() => bodies.length).toBe(5);
+      await dialog
+        .getByRole("button", { name: /停止生成|Stop generation/u })
+        .click();
+      await expect(dialog.getByRole("alert")).toContainText(
+        /已停止生成|Generation stopped/u,
+      );
+      await expect(dialog.getByTestId("generation-content")).toHaveValue(
+        /发现匿名信/u,
+      );
+      await page.evaluate(async (id) => {
+        const api = (window as unknown as { authorCopilot: AuthorCopilotApi })
+          .authorCopilot;
+        const result = await api.creativeNotes.list({ projectId: id });
+        if (!result.ok) throw new Error("notes");
+        const note = result.notes.find((item) => item.title === "AI 三幕大纲")!;
+        await api.creativeNotes.update({
+          projectId: id,
+          noteId: note.id,
+          expectedUpdatedAt: note.updatedAt,
+          kind: note.kind,
+          title: note.title,
+          content: "外部新版本，禁止覆盖",
+        });
+      }, projectId);
+      await dialog
+        .getByRole("button", { name: /确认更新资料|Confirm update/u })
+        .click();
+      await expect(dialog.getByRole("alert")).toContainText(
+        /已在其他位置|changed elsewhere/u,
+      );
+      await expect(dialog.getByTestId("generation-content")).toHaveValue(
+        /发现匿名信/u,
+      );
+      expect(
+        (await list()).find((note) => note.title === "AI 三幕大纲")?.content,
+      ).toBe("外部新版本，禁止覆盖");
+      await page.screenshot({
+        path: `test-results/creative-note-generation-${locale}.png`,
+      });
+      await page.setViewportSize({ width: 880, height: 640 });
+      await page.screenshot({
+        path: `test-results/creative-note-generation-${locale}-narrow.png`,
+      });
+      await dialog.getByRole("combobox").nth(1).selectOption("new");
+      await dialog.getByTestId("generation-title").fill("独立新大纲");
+      await dialog
+        .getByRole("button", { name: /确认保存资料|Confirm and save note/u })
+        .click();
+      await expect(dialog).toHaveCount(0);
+      expect(await list()).toHaveLength(4);
+      expect(await readFile(manuscriptPath, "utf8")).toBe("已保存正文线索");
+      await page.reload();
+      await page
+        .getByRole("button", {
+          name: /打开面板.*创作资料|Open panel.*Creative notes/u,
+        })
+        .click();
+      await expect(
+        panel.getByRole("button", { name: /^独立新大纲/u }),
+      ).toBeVisible();
+      await open();
+      await dialog.getByTestId("generation-instruction").fill("放弃这条要求");
+      page.once("dialog", (prompt) => void prompt.dismiss());
+      await dialog
+        .getByRole("button", { name: /放弃并关闭|Discard and close/u })
+        .click();
+      await expect(dialog).toBeVisible();
+      page.once("dialog", (prompt) => void prompt.accept());
+      await dialog
+        .getByRole("button", { name: /放弃并关闭|Discard and close/u })
+        .click();
+      await expect(dialog).toHaveCount(0);
+    } finally {
+      await application.close();
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
       await rm(temporaryRoot, { recursive: true, force: true });
     }
   });

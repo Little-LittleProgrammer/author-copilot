@@ -1,4 +1,10 @@
 import type {
+  CreativeNoteGenerationRequest,
+  CreativeNoteGenerationResponse,
+  CreativeNoteGenerationCancelRequest,
+  CreativeNoteGenerationCancelResponse,
+} from "@author-copilot/contracts";
+import type {
   ConversationRequest,
   ConversationResponse,
 } from "@author-copilot/contracts";
@@ -124,6 +130,12 @@ export interface AuthorCopilotApi {
     ) => Promise<WritingGoalResponse>;
   };
   readonly creativeNotes: {
+    readonly generate: (
+      request: CreativeNoteGenerationRequest,
+    ) => Promise<CreativeNoteGenerationResponse>;
+    readonly cancelGeneration: (
+      request: CreativeNoteGenerationCancelRequest,
+    ) => Promise<CreativeNoteGenerationCancelResponse>;
     readonly list: (
       request: CreativeNotesProjectRequest,
     ) => Promise<CreativeNotesListResponse>;

@@ -1,8 +1,13 @@
 # Author Copilot Desktop
 
-M1 provides the secure Electron application shell. It intentionally exposes only
-the typed `system.getRuntimeInfo` preload capability and does not contain writing
-or AI workflows.
+The desktop provides local novel/screenplay writing, document import and export,
+version history, creative notes, whole-work retrieval, Ask chat and controlled
+Agent editing. Creative notes support AI generation, editable previews,
+diff review and explicit create/update confirmation. All capabilities cross a
+typed preload IPC boundary; the renderer has no general filesystem or shell access.
+
+See [development setup](../../docs/development.md) and the
+[current roadmap](../../docs/roadmap.md).
 
 ## Build stack
 
@@ -14,7 +19,7 @@ rerunning build, security tests, Electron smoke, and all four packaging jobs.
 ## Commands
 
 - `pnpm build` builds main, preload, and renderer.
-- `pnpm test` runs the Electron security policy tests.
+- `pnpm test` runs desktop unit and service integration tests.
 - `pnpm smoke` builds and starts Electron until the renderer readiness marker.
 - `node scripts/electron-smoke.ts --executable <path>` starts a packaged app
   executable and waits for the same readiness marker.

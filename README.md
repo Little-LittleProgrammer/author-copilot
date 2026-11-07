@@ -20,18 +20,22 @@ author-copilot aims to become a creative operating system for authors:
 - Draft faster while keeping creative control
 - Revise, refine, and polish manuscripts with context-aware support
 
-## Core Features
+## Current Features
 
-- Idea capture and expansion
-- Character profiles and relationship tracking
-- Worldbuilding and setting management
-- Plot planning and story structure design
-- Chapter outlining and scene breakdown
-- AI-assisted drafting
-- Revision, rewriting, and polishing tools
-- Writing style guidance and consistency support
-- Project knowledge base for stories and manuscripts
-- Workspace for long-form writing workflows
+- Novel and screenplay projects, multiple work tabs, chapters and scenes
+- Markdown folder and TXT/DOC/DOCX import with preview and automatic chapter splitting
+- Local manuscript editing, atomic saves, conflict protection, undo/redo and find/replace
+- Daily manual writing counts, estimated typing rate, seven-day history and daily goals
+- Outlines, ideas and notes, including AI drafts with editing, diff review and explicit save
+- Ask and Agent conversations with selected notes, documents and retrieved manuscript context
+- Agent file review, task-level keep/undo and crash recovery
+- Bundled Git, version history, diffs and local branch switching
+- Anthropic BYOK, custom Anthropic-compatible providers and a managed relay
+- Platform accounts, balance and usage history; online payments are not available
+- Whole-work or chapter export to TXT, Markdown and Word (DOCX)
+- Chinese/English, light/dark themes, custom colors and backgrounds
+
+Character relationships, worldbuilding, timelines and style management remain future product directions.
 
 ## Target Users
 
@@ -63,29 +67,34 @@ author-copilot is built for:
 
 ## Roadmap
 
-Planned directions may include:
-- [ ] Project and manuscript management
-- [ ] Character, worldbuilding, and plot knowledge base
-- [ ] Chapter planner and story timeline tools
-- [ ] AI chat with full project context
-- [ ] Drafting and revision workflows
-- [ ] Style tuning and tone control
-- [ ] Collaboration features for co-writing or editorial review
-- [ ] Export to common writing formats
+- [x] Local projects, import, writing and version management
+- [x] Manuscript indexing, contextual chat and controlled Agent editing
+- [x] Creative note management, references, AI generation and explicit save
+- [x] Writing statistics, daily goals, chapter management and common exports
+- [x] Custom Anthropic-compatible providers and platform account/relay foundations
+- [ ] Real-model validation and full release qualification, signing and notarization for the latest four-architecture build
+- [ ] Chapter summaries, editable facts, long-term memory and character/worldbuilding management
+- [ ] Timelines, foreshadowing and consistency checks
+- [ ] Per-change AI acceptance, advanced structure editing and style presets
+- [ ] Payments, billing reconciliation and operations tools
+- [ ] Cloud sync, collaboration and professional publishing formats
+
+See the [roadmap](docs/roadmap.md) for current scope, limitations and priorities.
 
 ## Tech Stack
 
-This section will be updated as the project evolves.
-
-Possible components:
-- Frontend: TBD
-- Backend: TBD
-- AI orchestration: TBD
-- Database: TBD
+- TypeScript and pnpm / Turborepo
+- Electron, React, Vite and Tailwind CSS
+- Anthropic TypeScript SDK and Claude Agent SDK
+- Local Markdown, bundled Git and SQLite FTS5
+- NestJS, MongoDB, Redis and Docker Compose
+- Vitest and Playwright
 
 ## Project Status
 
-Early-stage project. The repository is currently focused on shaping the product direction, architecture, and core writing workflows.
+Active development. The main local writing and AI editing workflows are implemented. Development packages and automated validation exist; full production release qualification of the latest version is still pending. Platform accounts and usage billing are implemented, while online payments remain unavailable.
+
+See [development setup](docs/development.md) and the [AI creative note delivery record](docs/reports/2026-11-05-ai-creative-notes.md).
 
 ## Contributing
 

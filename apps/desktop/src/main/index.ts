@@ -38,6 +38,7 @@ import {
 import { resolveGitRuntime } from "./git-runtime.js";
 import { registerIpcHandlers } from "./ipc.js";
 import { WritingStatisticsService } from "./writing-statistics/writing-statistics-service.js";
+import { CreativeNoteGenerationService } from "./ai/creative-note-generation-service.js";
 import { CreativeNotesService } from "./creative-notes/creative-notes-service.js";
 
 import { KnowledgeService } from "./knowledge/index.js";
@@ -58,6 +59,7 @@ import {
 } from "./window-options.js";
 
 let writingStatisticsService: WritingStatisticsService | undefined;
+let creativeNoteGenerationService: CreativeNoteGenerationService | undefined;
 let creativeNotesService: CreativeNotesService | undefined;
 let mainWindow: BrowserWindow | undefined;
 let tabManager: TabManager | undefined;
@@ -283,11 +285,25 @@ app.whenReady().then(async () => {
     }),
   });
 
+  creativeNoteGenerationService = new CreativeNoteGenerationService({
+    notes: creativeNotesService,
+    projects: projectService,
+    credentials: credentialStore,
+    ...(e2eMode && process.env.AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL
+      ? {}
+      : { providers: providerService }),
+    transport: new AnthropicClaudeTransport({
+      ...(e2eMode && process.env.AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL
+        ? { baseURL: process.env.AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL }
+        : {}),
+    }),
+  });
   denyAllPermissions(session.defaultSession);
   if (!target.isDevelopment) {
     installProductionCsp(session.defaultSession);
   }
   registerIpcHandlers(target.url, {
+    creativeNoteGenerationService,
     conversationStore: new ConversationStore(
       join(app.getPath("userData"), "conversations"),
     ),
@@ -378,4 +394,5 @@ app.on("will-quit", (event) => {
 app.on("before-quit", () => {
   quitRequested = true;
   aiOrchestrator?.cancelAll("shutdown");
+  creativeNoteGenerationService?.cancelAll();
 });
