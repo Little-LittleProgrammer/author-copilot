@@ -43,7 +43,7 @@ async function fixture(
       ? {}
       : { publishEvent: options.publishEvent }),
   });
-  const project = await projectService.createProject(projects, "雨夜", "novel");
+  const project = await projectService.createProject("雨夜", "novel");
   const relativePath = "第一卷/第一章/01-正文.md";
   await writeFile(
     join(project.rootPath, relativePath),

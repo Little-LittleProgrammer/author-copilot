@@ -1,3 +1,4 @@
+import type { TabManager } from "../tabs/index.js";
 import {
   AgentStartRequestSchema,
   AgentStartResponseSchema,
@@ -21,6 +22,7 @@ import {
 export function registerAgentIpcHandlers(options: {
   trustedRendererUrl: string;
   service: AgentTaskService;
+  getTabManager?: () => TabManager | undefined;
 }): void {
   const tracked = new WeakSet<WebContents>();
   const authorize = (
@@ -54,6 +56,13 @@ export function registerAgentIpcHandlers(options: {
             retryable: false,
           },
         });
+      const context = options.getTabManager?.()?.getContext(event.sender.id);
+      if (
+        options.getTabManager &&
+        (context?.kind !== "project" ||
+          context.project.projectId !== parsed.data.projectId)
+      )
+        throw new Error("Agent tasks must belong to the current work tab.");
       const owner = event.sender;
       if (!tracked.has(owner)) {
         tracked.add(owner);

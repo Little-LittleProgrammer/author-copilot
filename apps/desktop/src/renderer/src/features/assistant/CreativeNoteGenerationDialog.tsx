@@ -32,12 +32,15 @@ import {
 import { lineDiff } from "./line-diff.js";
 
 const noteKindLabels = {
+  summary: "creativeNotesKindSummary",
   outline: "creativeNotesKindOutline",
   inspiration: "creativeNotesKindInspiration",
   note: "creativeNotesKindNote",
+  fact: "creativeNotesKindFact",
 } as const;
 
 const kindLabels = {
+  summary: "chapterSummaryGenerate",
   outline: "creativeGenerateOutline",
   inspiration: "creativeGenerateInspiration",
   note: "creativeGenerateNote",
@@ -46,6 +49,7 @@ const kindLabels = {
 export function CreativeNoteGenerationDialog({
   projectId,
   selected,
+  initialKind,
   onSaved,
   onClose,
   onDirtyChange,
@@ -53,6 +57,7 @@ export function CreativeNoteGenerationDialog({
 }: {
   readonly projectId: string;
   readonly selected: CreativeNote | undefined;
+  readonly initialKind?: CreativeNoteKind;
   readonly onSaved: (note: CreativeNote) => void;
   readonly onClose: () => void;
   readonly onDirtyChange: (dirty: boolean) => void;
@@ -60,7 +65,7 @@ export function CreativeNoteGenerationDialog({
 }): JSX.Element {
   const api = useMemo(() => getCreativeNotesApi(), []);
   const [kind, setKind] = useState<CreativeNoteKind>(
-    selected?.kind ?? "outline",
+    initialKind ?? selected?.kind ?? "outline",
   );
   const [instruction, setInstruction] = useState("");
   const [replace, setReplace] = useState(Boolean(selected));
@@ -69,7 +74,9 @@ export function CreativeNoteGenerationDialog({
     [],
   );
   const [noteIds, setNoteIds] = useState<string[]>([]);
-  const [documentPaths, setDocumentPaths] = useState<string[]>([]);
+  const [documentPaths, setDocumentPaths] = useState<string[]>(
+    selected?.source ? [selected.source.relativePath] : [],
+  );
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [error, setError] = useState<string>();
@@ -79,6 +86,10 @@ export function CreativeNoteGenerationDialog({
   const requestId = useRef<string | undefined>(undefined);
   const mounted = useRef(true);
   const hasWork = Boolean(draft || instruction.trim() || busy || saving);
+  const canGenerate =
+    kind === "summary"
+      ? documentPaths.length === 1
+      : Boolean(instruction.trim());
 
   useEffect(() => {
     onDirtyChange(hasWork);
@@ -149,7 +160,7 @@ export function CreativeNoteGenerationDialog({
     onClose();
   };
   const generate = async (): Promise<void> => {
-    if (busy || saving || loading || loadError || !instruction.trim()) return;
+    if (busy || saving || loading || loadError || !canGenerate) return;
     if (draft && !window.confirm(t("creativeGenerateRetryConfirm"))) return;
     const id = crypto.randomUUID();
     requestId.current = id;
@@ -160,12 +171,15 @@ export function CreativeNoteGenerationDialog({
         projectId,
         requestId: id,
         kind,
-        instruction,
+        instruction:
+          instruction.trim() || t("chapterSummaryDefaultInstruction"),
         locale: document.documentElement.lang === "en-US" ? "en-US" : "zh-CN",
         noteIds:
-          replace && selected
-            ? noteIds.filter((noteId) => noteId !== selected.id)
-            : noteIds,
+          kind === "summary"
+            ? []
+            : replace && selected
+              ? noteIds.filter((noteId) => noteId !== selected.id)
+              : noteIds,
         documentPaths,
         ...(replace && selected
           ? {
@@ -177,7 +191,8 @@ export function CreativeNoteGenerationDialog({
           : {}),
       });
       if (!mounted.current) return;
-      if (response.ok) setDraft(response.draft);
+      if (response.ok && "draft" in response) setDraft(response.draft);
+      else if (response.ok) setError(t("creativeGenerateInvalid"));
       else
         setError(
           t(
@@ -186,7 +201,9 @@ export function CreativeNoteGenerationDialog({
               : response.error.code === "CANCELLED"
                 ? "creativeGenerateStopped"
                 : response.error.code === "VALIDATION_FAILED"
-                  ? "creativeGenerateInvalid"
+                  ? kind === "summary"
+                    ? "chapterSummaryInvalid"
+                    : "creativeGenerateInvalid"
                   : response.error.code === "NOT_FOUND"
                     ? "creativeGenerateMissing"
                     : response.error.code === "TIMEOUT"
@@ -273,12 +290,20 @@ export function CreativeNoteGenerationDialog({
                 disabled={busy || saving}
                 value={kind}
                 onChange={(event) => {
-                  setKind(event.target.value as CreativeNoteKind);
-                  if (draft)
-                    setDraft({
-                      ...draft,
-                      kind: event.target.value as CreativeNoteKind,
-                    });
+                  const nextKind = event.target.value as CreativeNoteKind;
+                  if (
+                    draft &&
+                    (nextKind === "summary" || draft.kind === "summary")
+                  ) {
+                    if (!window.confirm(t("creativeGenerateRetryConfirm")))
+                      return;
+                    setDraft(undefined);
+                  } else if (draft) setDraft({ ...draft, kind: nextKind });
+                  setKind(nextKind);
+                  if (nextKind === "summary") {
+                    setNoteIds([]);
+                    setDocumentPaths((paths) => paths.slice(0, 1));
+                  }
                 }}
               >
                 {Object.entries(kindLabels).map(([value, label]) => (
@@ -315,94 +340,139 @@ export function CreativeNoteGenerationDialog({
               maxLength={4000}
               disabled={busy || saving}
               onChange={(event) => setInstruction(event.target.value)}
-              placeholder={t("creativeGeneratePlaceholder")}
+              placeholder={t(
+                kind === "summary"
+                  ? "chapterSummaryDefaultInstruction"
+                  : "creativeGeneratePlaceholder",
+              )}
             />
           </label>
-          <details>
-            <summary>
-              {t("creativeGenerateReferences")} ·{" "}
-              {noteIds.length + documentPaths.length}
-            </summary>
-            <p className="text-sm text-muted-foreground">
-              {t("creativeGenerateReferenceHint")}
-            </p>
-            {loading ? <p role="status">{t("loading")}</p> : null}
-            {loadError ? (
-              <p role="alert">{t("creativeNotesUnavailable")}</p>
-            ) : null}
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy || saving || loading}
-              onClick={() => void load()}
-            >
-              {t("creativeNotesReferenceRefresh")}
-            </Button>
-            <fieldset
-              disabled={busy || saving || loading || loadError}
-              className="creative-generation-references"
-            >
-              <legend>
-                {t("creativeNotesTitle")} ({noteIds.length}/6)
-              </legend>
-              {references
-                .filter((note) => !replace || note.id !== selected?.id)
-                .map((note) => (
-                  <label key={note.id}>
+          {kind === "summary" ? (
+            <div className="creative-generation-field">
+              <label htmlFor="summary-source">
+                {t("chapterSummarySource")}
+              </label>
+              <select
+                id="summary-source"
+                data-testid="summary-source"
+                disabled={busy || saving || loading || loadError}
+                value={documentPaths[0] ?? ""}
+                onChange={(event) =>
+                  setDocumentPaths(
+                    event.target.value ? [event.target.value] : [],
+                  )
+                }
+              >
+                <option value="">{t("chapterSummarySelect")}</option>
+                {documents.map((entry) => (
+                  <option key={entry.path} value={entry.path}>
+                    {entry.title}
+                  </option>
+                ))}
+              </select>
+              <p className="text-sm text-muted-foreground">
+                {t("chapterSummaryHint")}
+              </p>
+              {loadError ? (
+                <p role="alert">{t("creativeNotesUnavailable")}</p>
+              ) : null}
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy || saving || loading}
+                onClick={() => void load()}
+              >
+                {t("creativeNotesReferenceRefresh")}
+              </Button>
+            </div>
+          ) : (
+            <details>
+              <summary>
+                {t("creativeGenerateReferences")} ·{" "}
+                {noteIds.length + documentPaths.length}
+              </summary>
+              <p className="text-sm text-muted-foreground">
+                {t("creativeGenerateReferenceHint")}
+              </p>
+              {loading ? <p role="status">{t("loading")}</p> : null}
+              {loadError ? (
+                <p role="alert">{t("creativeNotesUnavailable")}</p>
+              ) : null}
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy || saving || loading}
+                onClick={() => void load()}
+              >
+                {t("creativeNotesReferenceRefresh")}
+              </Button>
+              <fieldset
+                disabled={busy || saving || loading || loadError}
+                className="creative-generation-references"
+              >
+                <legend>
+                  {t("creativeNotesTitle")} ({noteIds.length}/6)
+                </legend>
+                {references
+                  .filter((note) => !replace || note.id !== selected?.id)
+                  .map((note) => (
+                    <label key={note.id}>
+                      <input
+                        type="checkbox"
+                        checked={noteIds.includes(note.id)}
+                        disabled={
+                          !noteIds.includes(note.id) && noteIds.length >= 6
+                        }
+                        onChange={(event) =>
+                          setNoteIds(
+                            event.target.checked
+                              ? [...noteIds, note.id]
+                              : noteIds.filter((id) => id !== note.id),
+                          )
+                        }
+                      />
+                      {note.title}
+                    </label>
+                  ))}
+              </fieldset>
+              <fieldset
+                disabled={busy || saving || loading || loadError}
+                className="creative-generation-references"
+              >
+                <legend>
+                  {t("creativeGenerateChapters")} ({documentPaths.length}/
+                  {CREATIVE_GENERATION_MAX_DOCUMENTS})
+                </legend>
+                {documents.map((entry) => (
+                  <label key={entry.path}>
                     <input
                       type="checkbox"
-                      checked={noteIds.includes(note.id)}
+                      checked={documentPaths.includes(entry.path)}
                       disabled={
-                        !noteIds.includes(note.id) && noteIds.length >= 6
+                        !documentPaths.includes(entry.path) &&
+                        documentPaths.length >=
+                          CREATIVE_GENERATION_MAX_DOCUMENTS
                       }
                       onChange={(event) =>
-                        setNoteIds(
+                        setDocumentPaths(
                           event.target.checked
-                            ? [...noteIds, note.id]
-                            : noteIds.filter((id) => id !== note.id),
+                            ? [...documentPaths, entry.path]
+                            : documentPaths.filter(
+                                (path) => path !== entry.path,
+                              ),
                         )
                       }
                     />
-                    {note.title}
+                    {entry.title}
                   </label>
                 ))}
-            </fieldset>
-            <fieldset
-              disabled={busy || saving || loading || loadError}
-              className="creative-generation-references"
-            >
-              <legend>
-                {t("creativeGenerateChapters")} ({documentPaths.length}/
-                {CREATIVE_GENERATION_MAX_DOCUMENTS})
-              </legend>
-              {documents.map((entry) => (
-                <label key={entry.path}>
-                  <input
-                    type="checkbox"
-                    checked={documentPaths.includes(entry.path)}
-                    disabled={
-                      !documentPaths.includes(entry.path) &&
-                      documentPaths.length >= CREATIVE_GENERATION_MAX_DOCUMENTS
-                    }
-                    onChange={(event) =>
-                      setDocumentPaths(
-                        event.target.checked
-                          ? [...documentPaths, entry.path]
-                          : documentPaths.filter((path) => path !== entry.path),
-                      )
-                    }
-                  />
-                  {entry.title}
-                </label>
-              ))}
-            </fieldset>
-          </details>
+              </fieldset>
+            </details>
+          )}
           <div className="creative-generation-actions">
             <Button
               type="button"
-              disabled={
-                busy || saving || loading || loadError || !instruction.trim()
-              }
+              disabled={busy || saving || loading || loadError || !canGenerate}
               onClick={() => void generate()}
             >
               {draft ? t("creativeGenerateRetry") : t("creativeGenerateStart")}
@@ -438,6 +508,16 @@ export function CreativeNoteGenerationDialog({
               aria-label={t("creativeGeneratePreview")}
             >
               <h3>{t("creativeGeneratePreview")}</h3>
+              {draft.source ? (
+                <p
+                  className="chapter-summary-source"
+                  data-testid="summary-draft-source"
+                >
+                  {t("chapterSummarySource")}: {draft.source.relativePath}
+                  <br />
+                  {t("chapterSummarySnapshotHint")}
+                </p>
+              ) : null}
               <label className="creative-generation-field">
                 {t("creativeNotesTitleField")}
                 <Input

@@ -1,3 +1,8 @@
+import type { GlobalAssistantService } from "./ai/global-assistant-service.js";
+import {
+  GlobalAssistantRequestSchema,
+  GlobalAssistantResponseSchema,
+} from "@author-copilot/contracts";
 import type { CreativeNoteGenerationService } from "./ai/creative-note-generation-service.js";
 import { registerCreativeNoteGenerationHandlers } from "./ipc/creative-note-generation-handlers.js";
 import type { ConversationStore } from "./ai/conversation-store.js";
@@ -38,6 +43,10 @@ import { registerCreativeNotesIpcHandlers } from "./ipc/creative-notes-handlers.
 import type { CreativeNotesService } from "./creative-notes/creative-notes-service.js";
 
 export interface IpcHandlerOptions {
+  readonly globalAssistant: GlobalAssistantService;
+  readonly getWorkspaceId: () => string;
+  readonly beforeIdentityChange: () => Promise<void>;
+  readonly afterIdentityChange: () => Promise<void>;
   readonly creativeNoteGenerationService: CreativeNoteGenerationService;
   readonly conversationStore: ConversationStore;
   readonly writingStatisticsService: WritingStatisticsService;
@@ -89,6 +98,53 @@ export function registerIpcHandlers(
     },
   );
 
+  const globalOwners = new WeakSet<object>();
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.globalAssistant,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      assertTrustedIpcRequest({
+        channel: IPC_INVOKE_CHANNELS.globalAssistant,
+        senderFrameUrl: event.senderFrame?.url ?? "",
+        mainFrameUrl: event.sender.mainFrame.url,
+        trustedRendererUrl,
+        isMainFrame:
+          event.senderFrame !== null &&
+          event.senderFrame === event.sender.mainFrame,
+        args,
+        expectedArgumentCount: 1,
+      });
+      if (
+        options.getTabManager()?.getContext(event.sender.id).kind !== "center"
+      )
+        throw new Error("Global assistant is limited to the account home.");
+      if (!globalOwners.has(event.sender)) {
+        globalOwners.add(event.sender);
+        event.sender.once("destroyed", () =>
+          options.globalAssistant.cancelOwner(event.sender.id),
+        );
+      }
+      try {
+        return GlobalAssistantResponseSchema.parse(
+          await options.globalAssistant.request(
+            GlobalAssistantRequestSchema.parse(args[0]),
+            event.sender.id,
+          ),
+        );
+      } catch (error) {
+        return GlobalAssistantResponseSchema.parse({
+          ok: false,
+          error: {
+            code: "AI_UNAVAILABLE",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Global assistant failed.",
+            retryable: true,
+          },
+        });
+      }
+    },
+  );
   registerWritingStatisticsHandlers({
     trustedRendererUrl,
     service: options.writingStatisticsService,
@@ -102,6 +158,7 @@ export function registerIpcHandlers(
   registerCreativeNotesIpcHandlers({
     trustedRendererUrl,
     service: options.creativeNotesService,
+    projects: options.projectService,
     getTabManager: options.getTabManager,
   });
   registerConversationHandlers({
@@ -109,7 +166,10 @@ export function registerIpcHandlers(
     store: options.conversationStore,
     projects: options.projectService,
   });
-  registerAiSettingsHandlers(options.providerService, trustedRendererUrl);
+  registerAiSettingsHandlers(options.providerService, trustedRendererUrl, {
+    before: options.beforeIdentityChange,
+    after: options.afterIdentityChange,
+  });
   registerAiCredentialIpcHandlers({
     trustedRendererUrl,
     credentialStore: options.credentialStore,
@@ -117,6 +177,7 @@ export function registerIpcHandlers(
   registerAgentIpcHandlers({
     trustedRendererUrl,
     service: options.agentService,
+    getTabManager: options.getTabManager,
   });
   registerAiChatIpcHandlers({
     trustedRendererUrl,
@@ -130,6 +191,7 @@ export function registerIpcHandlers(
     trustedRendererUrl,
     getTabManager: options.getTabManager,
     projectService: options.projectService,
+    getWorkspaceId: options.getWorkspaceId,
     directoryPicker: options.directoryPicker,
     onProjectChanged: (project) =>
       options.getTabManager()?.projectChanged(project),

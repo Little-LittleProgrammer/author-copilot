@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   CreativeNoteCreateRequestSchema,
@@ -7,19 +7,21 @@ import {
   CreativeNoteSchema,
   CreativeNoteUpdateRequestSchema,
   CreativeNotesProjectRequestSchema,
+  CreativeFactsConfirmRequestSchema,
+  type CreativeFactsConfirmRequest,
   type CreativeNote,
   type CreativeNoteCreateRequest,
   type CreativeNoteDeleteRequest,
   type CreativeNoteUpdateRequest,
   type CreativeNotesProjectRequest,
 } from "@author-copilot/contracts";
-import { z } from "zod";
 import { atomicWriteFile } from "../project/file-utils.js";
 
-const NotesFileSchema = z.strictObject({
-  schemaVersion: z.literal(1),
-  notes: z.array(CreativeNoteSchema).max(500),
-});
+import {
+  CREATIVE_ASSET_PATH,
+  parseAssets,
+  serializeAssets,
+} from "./asset-document.js";
 
 export class CreativeNotesServiceError extends Error {
   constructor(public readonly code: "not_found" | "conflict") {
@@ -32,11 +34,14 @@ export class CreativeNotesServiceError extends Error {
   }
 }
 
-/** Main-owned per-project planning notes. They never enter the project repository. */
+/** Canonical Markdown assets shared by the editor and Claude Skills. */
 export class CreativeNotesService {
   private queue: Promise<unknown> = Promise.resolve();
 
-  constructor(private readonly root: string) {}
+  constructor(
+    private readonly resolveProjectRoot: (projectId: string) => Promise<string>,
+    private readonly assertCanMutate?: (projectId: string) => void,
+  ) {}
 
   list(request: CreativeNotesProjectRequest): Promise<readonly CreativeNote[]> {
     return this.enqueue(async () => {
@@ -54,12 +59,49 @@ export class CreativeNotesService {
         kind: parsed.kind,
         title: parsed.title,
         content: parsed.content,
+        ...(parsed.source ? { source: parsed.source } : {}),
         createdAt: now,
         updatedAt: now,
       });
       const notes = await this.read(parsed.projectId);
       await this.write(parsed.projectId, [...notes, note]);
       return note;
+    });
+  }
+
+  /** Confirm one reviewed batch atomically. Stable candidate IDs make retries safe. */
+  confirmFacts(
+    request: CreativeFactsConfirmRequest,
+  ): Promise<readonly CreativeNote[]> {
+    return this.enqueue(async () => {
+      const parsed = CreativeFactsConfirmRequestSchema.parse(request);
+      const notes = await this.read(parsed.projectId);
+      const now = new Date().toISOString();
+      const confirmed = parsed.facts.map((fact) => {
+        const existing = notes.find((note) => note.id === fact.id);
+        if (existing) {
+          if (
+            existing.kind !== "fact" ||
+            existing.title !== fact.title ||
+            existing.content !== fact.content ||
+            existing.source?.relativePath !== fact.source.relativePath ||
+            existing.source.contentHash !== fact.source.contentHash ||
+            existing.source.capturedAt !== fact.source.capturedAt
+          )
+            throw new CreativeNotesServiceError("conflict");
+          return existing;
+        }
+        return CreativeNoteSchema.parse({
+          ...fact,
+          createdAt: now,
+          updatedAt: now,
+        });
+      });
+      const existingIds = new Set(notes.map((note) => note.id));
+      const added = confirmed.filter((note) => !existingIds.has(note.id));
+      if (added.length)
+        await this.write(parsed.projectId, [...notes, ...added]);
+      return confirmed;
     });
   }
 
@@ -72,6 +114,15 @@ export class CreativeNotesService {
       const previous = notes[index]!;
       if (previous.updatedAt !== parsed.expectedUpdatedAt)
         throw new CreativeNotesServiceError("conflict");
+      // Manual fact edits retain the original evidence snapshot.
+      if (
+        previous.kind === "fact" &&
+        (parsed.kind !== "fact" ||
+          parsed.source?.relativePath !== previous.source?.relativePath ||
+          parsed.source?.contentHash !== previous.source?.contentHash ||
+          parsed.source?.capturedAt !== previous.source?.capturedAt)
+      )
+        throw new CreativeNotesServiceError("conflict");
       const updatedAt = new Date(
         Math.max(Date.now(), Date.parse(previous.updatedAt) + 1),
       ).toISOString();
@@ -80,6 +131,7 @@ export class CreativeNotesService {
         kind: parsed.kind,
         title: parsed.title,
         content: parsed.content,
+        ...(parsed.source ? { source: parsed.source } : {}),
         createdAt: previous.createdAt,
         updatedAt,
       });
@@ -111,16 +163,33 @@ export class CreativeNotesService {
     return result;
   }
 
-  private path(projectId: string): string {
-    return join(this.root, `${projectId}.json`);
+  private async path(projectId: string): Promise<string> {
+    const root = await this.resolveProjectRoot(projectId);
+    const path = join(root, CREATIVE_ASSET_PATH);
+    for (const entry of [dirname(path), path]) {
+      try {
+        const info = await lstat(entry);
+        if (info.isSymbolicLink() || (info.isFile() && info.nlink > 1))
+          throw new Error("Creative asset paths cannot be redirected.");
+      } catch (error) {
+        if (!(
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ))
+          throw error;
+      }
+    }
+    return path;
   }
 
   private async read(projectId: string): Promise<CreativeNote[]> {
     try {
-      const stored = NotesFileSchema.parse(
-        JSON.parse(await readFile(this.path(projectId), "utf8")),
+      const path = await this.path(projectId);
+      return parseAssets(
+        await readFile(path, "utf8"),
+        (await stat(path)).mtimeMs,
       );
-      return stored.notes;
     } catch (error) {
       if (error instanceof Error && "code" in error && error.code === "ENOENT")
         return [];
@@ -132,13 +201,11 @@ export class CreativeNotesService {
     projectId: string,
     notes: readonly CreativeNote[],
   ): Promise<void> {
-    const stored = NotesFileSchema.parse({
-      schemaVersion: 1,
-      notes: this.sort(notes),
-    });
-    const path = this.path(projectId);
+    this.assertCanMutate?.(projectId);
+    const content = serializeAssets(this.sort(notes));
+    const path = await this.path(projectId);
     await mkdir(dirname(path), { recursive: true });
-    await atomicWriteFile(path, `${JSON.stringify(stored)}\n`, 0o600);
+    await atomicWriteFile(path, content, 0o600);
   }
 
   private sort(notes: readonly CreativeNote[]): CreativeNote[] {

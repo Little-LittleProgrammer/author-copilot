@@ -1,3 +1,7 @@
+import {
+  storageRoot,
+  type StorageRoot,
+} from "../workspace/workspace-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -64,7 +68,7 @@ interface ActiveTask {
 type KnowledgeTaskEvent = TaskProgressEvent | TaskCancelledEvent;
 
 export interface KnowledgeServiceOptions {
-  readonly storageRoot: string;
+  readonly storageRoot: StorageRoot;
   readonly projectService: Pick<
     ProjectService,
     "getProjectRoot" | "getStructure" | "readDocument"
@@ -273,6 +277,14 @@ export class KnowledgeService {
 
   async rebuild(projectId: string): Promise<KnowledgeIndexStatusResult> {
     return this.startFullIndex(projectId, true);
+  }
+
+  async cancelAndDrain(): Promise<void> {
+    for (const task of this.activeByTask.values()) task.controller.abort();
+    await Promise.allSettled(
+      [...this.activeByTask.values()].map((task) => task.completion),
+    );
+    await Promise.allSettled(this.updateQueues.values());
   }
 
   cancel(taskId: string): boolean {
@@ -696,7 +708,7 @@ export class KnowledgeService {
   }
 
   private projectDirectory(projectId: string): string {
-    return join(this.options.storageRoot, projectId);
+    return join(storageRoot(this.options.storageRoot), projectId);
   }
 
   private databasePath(projectId: string): string {

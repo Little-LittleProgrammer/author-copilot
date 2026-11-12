@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import {
-  mkdir,
   mkdtemp,
   readFile,
   readdir,
@@ -140,13 +139,10 @@ describe("TXT and Word import", () => {
     async (template) => {
       const { root, path } = await fixture("原稿.txt", "原稿正文\n\n下一段。");
       const preview = await previewDocumentImport(path);
-      const destination = join(root, "作品");
-      await mkdir(destination);
       const service = new ProjectService({
         registry: new RegistryStore(join(root, "user")),
       });
       const project = await service.createProject(
-        destination,
         preview.title,
         template,
         buildDocumentImportPlan(preview.content, template).documents,
@@ -163,14 +159,15 @@ describe("TXT and Word import", () => {
           .update(await readFile(path))
           .digest("hex"),
       ).toBe(preview.sourceHash);
-      await expect(
-        service.createProject(
-          destination,
-          preview.title,
-          template,
-          buildDocumentImportPlan("不能覆盖", template).documents,
-        ),
-      ).rejects.toThrow();
+      const second = await service.createProject(
+        preview.title,
+        template,
+        buildDocumentImportPlan("独立副本", template).documents,
+      );
+      expect(second.projectId).not.toBe(project.projectId);
+      expect(
+        (await service.readDocument(second.projectId, relative)).content,
+      ).toBe("独立副本");
       expect(
         (await service.readDocument(project.projectId, relative)).content,
       ).toBe(preview.content);
@@ -187,13 +184,12 @@ describe("TXT and Word import", () => {
     const preview = await previewDocumentImport(path);
     await expect(
       service.createProject(
-        root,
         preview.title,
         "novel",
         buildDocumentImportPlan(preview.content, "novel").documents,
       ),
     ).rejects.toThrow("registry unavailable");
-    expect(await readdir(root)).toEqual(["原稿.txt"]);
+    expect(await readdir(join(root, "registry", "projects"))).toEqual([]);
   });
 });
 
@@ -209,7 +205,6 @@ describe("split document publication", () => {
         registry: new RegistryStore(join(root, "user")),
       });
       const project = await service.createProject(
-        root,
         "分章作品",
         template,
         plan.documents,
@@ -239,12 +234,12 @@ describe("split document publication", () => {
     });
     for (const path of ["../escape/body.md", "第一卷/第一章/body.md"]) {
       await expect(
-        service.createProject(root, "失败作品", "novel", [
+        service.createProject("失败作品", "novel", [
           { relativePath: "第一卷/第一章/body.md", content: "已经暂存" },
           { relativePath: path, content: "无效内容" },
         ]),
       ).rejects.toThrow();
-      expect(await readdir(root)).toEqual(["原稿.txt"]);
+      expect(await readdir(join(root, "user", "projects"))).toEqual([]);
     }
   });
 });

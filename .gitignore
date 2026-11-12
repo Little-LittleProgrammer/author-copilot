@@ -24,3 +24,8 @@ apps/desktop/resources/git/
 # OS and editor files
 .DS_Store
 *.swp
+
+# Python benchmark environment
+.venv/
+__pycache__/
+*.py[cod]

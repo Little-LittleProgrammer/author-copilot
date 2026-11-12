@@ -34,7 +34,6 @@ async function fixture(template: "novel" | "screenplay" = "novel") {
     registry: new RegistryStore(join(base, ".data")),
   });
   const project = await service.createProject(
-    base,
     "测试作品",
     template,
     template === "novel"
@@ -306,11 +305,7 @@ describe("manuscript export", () => {
     await expect(service.prepareExport(request)).rejects.toMatchObject({
       reason: "too_large",
     });
-    const empty = await service.createProject(
-      join(project.rootPath, ".."),
-      "空作品",
-      "novel",
-    );
+    const empty = await service.createProject("空作品", "novel");
     await service.deleteEntry(empty.projectId, "第一卷");
     await expect(
       service.prepareExport({ ...request, projectId: empty.projectId }),

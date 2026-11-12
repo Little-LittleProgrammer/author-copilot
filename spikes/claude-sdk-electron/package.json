@@ -13,12 +13,15 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "catalog:",
-    "@anthropic-ai/sdk": "catalog:"
+    "@anthropic-ai/sdk": "catalog:",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@electron/get": "catalog:",
     "electron": "catalog:",
-    "electron-builder": "catalog:"
+    "electron-builder": "catalog:",
+    "electron-builder-squirrel-windows": "catalog:"
   },
   "build": {
     "appId": "com.authorcopilot.spike.claude-sdk",
@@ -37,5 +40,13 @@
       ],
       "identity": null
     }
+  },
+  "volta": {
+    "extends": "../../package.json"
+  },
+  "packageManager": "pnpm@11.28.11",
+  "engines": {
+    "node": ">=24.22.2 <25",
+    "pnpm": "11.28.11"
   }
 }

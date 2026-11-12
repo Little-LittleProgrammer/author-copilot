@@ -11,3 +11,5 @@ lancedb = ["lancedb>=0.29,<0.30"]
 [tool.ruff]
 line-length = 100
 
+[tool.uv]
+required-version = "==0.13.7"

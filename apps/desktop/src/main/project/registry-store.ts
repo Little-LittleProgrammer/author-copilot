@@ -10,6 +10,10 @@ import {
 } from "./errors.js";
 import { atomicWriteFile } from "./file-utils.js";
 import type { RegisteredProject } from "./types.js";
+import {
+  storageRoot,
+  type StorageRoot,
+} from "../workspace/workspace-service.js";
 
 interface RegistryFile {
   readonly schemaVersion: 1;
@@ -63,11 +67,15 @@ function parseRegistry(input: unknown): RegistryFile {
 }
 
 export class RegistryStore {
-  readonly registryPath: string;
+  get registryPath(): string {
+    return join(storageRoot(this.userDataPath), "projects.json");
+  }
   private mutationQueue: Promise<void> = Promise.resolve();
 
-  constructor(userDataPath: string) {
-    this.registryPath = join(userDataPath, "projects.json");
+  constructor(private readonly userDataPath: StorageRoot) {}
+
+  async drain(): Promise<void> {
+    await this.mutationQueue;
   }
 
   async list(): Promise<readonly RegisteredProject[]> {

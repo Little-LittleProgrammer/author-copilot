@@ -214,6 +214,14 @@ export class AiOrchestrator {
     return true;
   }
 
+  async cancelAndDrain(): Promise<void> {
+    this.cancelAll("user");
+    while (this.activeByRun.size || this.startingProjects.size) {
+      this.cancelAll("user");
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    }
+  }
+
   cancelAll(reason: "shutdown" | "user" = "shutdown"): void {
     for (const run of this.activeByRun.values()) this.cancel(run.runId, reason);
   }

@@ -1,4 +1,12 @@
+import { WorkspaceChangedEventSchema } from "@author-copilot/contracts";
 import {
+  GlobalAssistantResponseSchema,
+  type GlobalAssistantRequest,
+} from "@author-copilot/contracts";
+import {
+  type CreativeFactsConfirmRequest,
+  CreativeNoteSourceStatusResponseSchema,
+  type CreativeNoteSourceStatusRequest,
   CreativeNoteGenerationResponseSchema,
   CreativeNoteGenerationCancelResponseSchema,
   type CreativeNoteGenerationRequest,
@@ -139,6 +147,18 @@ function subscribe<T>(
 }
 
 const api: AuthorCopilotApi = Object.freeze({
+  onWorkspaceChanged: (listener: () => void) =>
+    subscribe(
+      IPC_EVENT_CHANNELS.workspaceChanged,
+      (value) => {
+        WorkspaceChangedEventSchema.parse(value);
+      },
+      listener,
+    ),
+  globalAssistant: async (request: GlobalAssistantRequest) =>
+    GlobalAssistantResponseSchema.parse(
+      await ipcRenderer.invoke(IPC_INVOKE_CHANNELS.globalAssistant, request),
+    ),
   writingStatistics: Object.freeze({
     history: async (request: WritingStatisticsHistoryRequest) =>
       WritingStatisticsHistoryResponseSchema.parse(
@@ -173,6 +193,20 @@ const api: AuthorCopilotApi = Object.freeze({
       ),
   }),
   creativeNotes: Object.freeze({
+    confirmFacts: async (request: CreativeFactsConfirmRequest) =>
+      CreativeNotesListResponseSchema.parse(
+        await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.creativeFactsConfirm,
+          request,
+        ),
+      ),
+    sourceStatus: async (request: CreativeNoteSourceStatusRequest) =>
+      CreativeNoteSourceStatusResponseSchema.parse(
+        await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.creativeNoteSourceStatus,
+          request,
+        ),
+      ),
     generate: async (request: CreativeNoteGenerationRequest) =>
       CreativeNoteGenerationResponseSchema.parse(
         await ipcRenderer.invoke(

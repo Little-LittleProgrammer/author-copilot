@@ -21,7 +21,7 @@ const request = {
   prompt: "Edit the work",
   readableFileTypes: ["markdown"],
   writableFileTypes: ["markdown"],
-  allowedTools: ["mcp__author_copilot__write_text"],
+  allowedTools: ["Write"],
   timeoutMs: 60_000,
 };
 function fixture() {

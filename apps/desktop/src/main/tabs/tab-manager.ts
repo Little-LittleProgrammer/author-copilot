@@ -169,6 +169,18 @@ export class TabManager {
     });
   }
 
+  async closeProjectsForIdentityChange(): Promise<void> {
+    await this.enqueue(async () => {
+      if (this.dirtyCount() > 0)
+        throw new Error("Save or discard your work before switching accounts.");
+      for (const entry of [...this.entries])
+        if (entry.context.kind === "project") this.removeEntry(entry);
+      if (this.findEntry(WRITER_CENTER_TAB_ID))
+        await this.activateEntry(WRITER_CENTER_TAB_ID);
+      this.publishState();
+    });
+  }
+
   endSession(senderId: number): Promise<TabOperationResult> {
     this.assertRole(senderId, ["shell"]);
     return this.enqueue(async () => {
@@ -206,6 +218,13 @@ export class TabManager {
     this.assertRole(senderId, ["center"]);
     this.sendToShell(IPC_EVENT_CHANNELS.tabLogoutRequested, {});
     return { status: "completed" };
+  }
+
+  workspaceChanged(): void {
+    for (const entry of this.entries) {
+      if (!entry.view.webContents.isDestroyed())
+        entry.view.webContents.send(IPC_EVENT_CHANNELS.workspaceChanged, {});
+    }
   }
 
   projectChanged(project: ProjectSummary): void {

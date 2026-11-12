@@ -45,12 +45,10 @@ export function ProjectDialog({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState("");
   const [projectType, setProjectType] = useState<ProjectType>("novel");
-  const [importMode, setImportMode] = useState<"copy" | "in_place">("in_place");
   const [preview, setPreview] = useState<ImportPreview | null>();
   const [splitChapters, setSplitChapters] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [reassignDuplicate, setReassignDuplicate] = useState(false);
 
   useEffect(() => {
     if (kind === null) return;
@@ -72,28 +70,14 @@ export function ProjectDialog({
       const project =
         kind === "import"
           ? await api.confirmImport({
-              mode: preview?.sourceKind === "file" ? "copy" : importMode,
               previewToken: preview?.previewToken ?? "",
-              ...(importMode === "in_place" && reassignDuplicate
-                ? { reassignProjectId: true }
-                : {}),
             })
           : await api.create({ name: name.trim(), type: kind });
       onComplete(project);
       dialogRef.current?.close();
       onClose();
     } catch (reason) {
-      if (
-        kind === "import" &&
-        importMode === "in_place" &&
-        reason instanceof ProjectApiError &&
-        reason.code === "duplicate_project_id"
-      ) {
-        setReassignDuplicate(true);
-        setError(t("duplicateProject"));
-      } else {
-        setError(importError(reason));
-      }
+      setError(importError(reason));
     } finally {
       setBusy(false);
     }
@@ -123,7 +107,6 @@ export function ProjectDialog({
     }
     setBusy(true);
     setError(undefined);
-    setReassignDuplicate(false);
     setPreview(undefined);
     try {
       const next = await api.previewImport(
@@ -132,7 +115,6 @@ export function ProjectDialog({
         splitChapters,
       );
       setPreview(next);
-      if (next?.sourceKind === "file") setImportMode("copy");
     } catch (reason) {
       setError(importError(reason));
     } finally {
@@ -281,22 +263,6 @@ export function ProjectDialog({
                 <p className="field-note">{t("importDocumentHint")}</p>
               </section>
             ) : null}
-            {preview !== undefined &&
-            preview !== null &&
-            preview.sourceKind === "folder" ? (
-              <label>
-                <span>{t("importMode")}</span>
-                <select
-                  value={importMode}
-                  onChange={(event) =>
-                    setImportMode(event.target.value as "copy" | "in_place")
-                  }
-                >
-                  <option value="in_place">{t("importInPlace")}</option>
-                  <option value="copy">{t("importCopy")}</option>
-                </select>
-              </label>
-            ) : null}
           </div>
         ) : (
           <div className="dialog-body">
@@ -334,11 +300,7 @@ export function ProjectDialog({
             data-testid="project-dialog-submit"
             disabled={busy || (kind === "import" && !preview)}
           >
-            {kind === "import"
-              ? reassignDuplicate
-                ? t("registerCopy")
-                : t("importConfirm")
-              : t("create")}
+            {kind === "import" ? t("importConfirm") : t("create")}
           </button>
         </footer>
       </form>

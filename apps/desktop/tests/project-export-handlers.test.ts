@@ -52,9 +52,7 @@ function fixture() {
     getTabManager: () => manager as unknown as TabManager,
     directoryPicker: {
       chooseExportDestination,
-      chooseCreateParent: vi.fn(),
       chooseImportSource: vi.fn(),
-      chooseCopyDestination: vi.fn(),
       chooseImportFile: vi.fn(),
     },
   });

@@ -8,6 +8,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  rename,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -103,6 +104,39 @@ async function launchApplication(
   });
 }
 
+async function accountRuntimeRoot(temporaryRoot: string): Promise<string> {
+  const { accountId } = JSON.parse(
+    await readFile(
+      join(temporaryRoot, ".user-data", "current-workspace.json"),
+      "utf8",
+    ),
+  ) as { accountId: string };
+  return join(temporaryRoot, ".user-data", "accounts", accountId, "runtime");
+}
+
+async function managedProjectRoot(
+  temporaryRoot: string,
+  title: string,
+): Promise<string> {
+  const registry = JSON.parse(
+    await readFile(
+      join(
+        await accountRuntimeRoot(temporaryRoot),
+        "registry",
+        "projects.json",
+      ),
+      "utf8",
+    ),
+  ) as {
+    projects: Record<string, { rootPath: string; metadata: { title: string } }>;
+  };
+  const project = Object.values(registry.projects).find(
+    (item) => item.metadata.title === title,
+  );
+  if (!project) throw new Error(`Missing managed project: ${title}`);
+  return project.rootPath;
+}
+
 async function openAssistant(
   page: Page,
   mode: "chat" | "agent" | "knowledge" = "chat",
@@ -126,6 +160,11 @@ async function openAssistant(
       exact: true,
     });
     if (await back.isVisible()) await back.click();
+    if (!(await page.getByTestId("assistant-mode").isVisible())) {
+      await page
+        .getByRole("button", { name: /打开面板.*对话|Open panel.*Chat/u })
+        .click();
+    }
     if (await page.getByTestId("assistant-mode").isEnabled())
       await page
         .getByTestId("assistant-mode")
@@ -168,8 +207,6 @@ async function nativeViewState(application: ElectronApplication): Promise<{
 test("creates, edits, saves, and protects an externally changed novel", async () => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
   const projectTitle = "E2E 写作项目";
-  const projectRoot = join(temporaryRoot, projectTitle);
-  const documentPath = join(projectRoot, "第一卷", "第一章", "01-正文.md");
   const application = await launchApplication(temporaryRoot);
 
   try {
@@ -192,6 +229,8 @@ test("creates, edits, saves, and protects an externally changed novel", async ()
     await expect(appTabs.getByRole("tab")).toHaveCount(2);
 
     const page = await rendererPage(application, "project");
+    const projectRoot = await managedProjectRoot(temporaryRoot, projectTitle);
+    const documentPath = join(projectRoot, "第一卷", "第一章", "01-正文.md");
     await page.getByRole("button", { name: "第一章", exact: true }).click();
     const editor = page.getByTestId("document-editor");
     await editor.fill("保存时的正文");
@@ -336,7 +375,13 @@ test("creates the screenplay structure through the desktop workflow", async () =
     await page.getByRole("button", { name: "01-第一场", exact: true }).click();
     await expect(page.getByTestId("document-editor")).toHaveValue("");
     await assert.doesNotReject(
-      lstat(join(temporaryRoot, projectTitle, "第一幕", "01-第一场.md")),
+      lstat(
+        join(
+          await managedProjectRoot(temporaryRoot, projectTitle),
+          "第一幕",
+          "01-第一场.md",
+        ),
+      ),
     );
   } finally {
     await application.close();
@@ -367,7 +412,11 @@ test("restores an Agent task from history without losing the task-start file", a
 
     const registry = JSON.parse(
       await readFile(
-        join(temporaryRoot, ".user-data", "projects.json"),
+        join(
+          await accountRuntimeRoot(temporaryRoot),
+          "registry",
+          "projects.json",
+        ),
         "utf8",
       ),
     ) as {
@@ -382,7 +431,10 @@ test("restores an Agent task from history without losing the task-start file", a
         ".user-data",
         "git-hooks-disabled",
       ),
-      snapshotsRoot: join(temporaryRoot, ".user-data", "task-snapshots"),
+      snapshotsRoot: join(
+        await accountRuntimeRoot(temporaryRoot),
+        "task-snapshots",
+      ),
       resolveProjectRoot: async () => project.rootPath,
     });
     const taskId = randomUUID();
@@ -554,7 +606,6 @@ test("keeps native project views alive across switches and destroys them on clos
 test("fills the writing page and edits work, volume, chapter, and document names", async () => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
   const projectTitle = "待修改作品";
-  const projectRoot = join(temporaryRoot, projectTitle);
   const application = await launchApplication(temporaryRoot);
 
   try {
@@ -563,6 +614,7 @@ test("fills the writing page and edits work, volume, chapter, and document names
     await center.getByTestId("project-name").fill(projectTitle);
     await center.getByTestId("project-dialog-submit").click();
     const page = await rendererPage(application, "project");
+    const projectRoot = await managedProjectRoot(temporaryRoot, projectTitle);
     await writeFile(
       join(projectRoot, "第一卷", "第一章", "02-后续.md"),
       "后续文稿",
@@ -1036,7 +1088,7 @@ test("streams a BYOK Claude answer and opens its local source", async () => {
   }
 });
 
-test("previews a complex Markdown folder before in-place import", async () => {
+test("previews a Markdown folder and imports a managed copy without changing the source", async () => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-e2e-"));
   const sourceRoot = join(temporaryRoot, "旧作品");
   const metadataPath = join(sourceRoot, "author-copilot.json");
@@ -1060,6 +1112,10 @@ test("previews a complex Markdown folder before in-place import", async () => {
     await expect(center.getByText("第一卷")).toBeVisible();
     await expect(center.getByText("散落 笔记")).toBeVisible();
     await assert.rejects(lstat(metadataPath), { code: "ENOENT" });
+    await expect(center.getByRole("combobox")).toHaveCount(1);
+    await center.screenshot({
+      path: "test-results/managed-project-import.png",
+    });
 
     await center.getByTestId("project-dialog-submit").click();
     const page = await rendererPage(application, "project");
@@ -1067,7 +1123,11 @@ test("previews a complex Markdown folder before in-place import", async () => {
     await expect(page.getByTestId("document-editor")).toHaveValue(
       "# 已有开场\n",
     );
-    const metadata = JSON.parse(await readFile(metadataPath, "utf8")) as {
+    await assert.rejects(lstat(metadataPath), { code: "ENOENT" });
+    const importedRoot = await managedProjectRoot(temporaryRoot, "旧作品");
+    const metadata = JSON.parse(
+      await readFile(join(importedRoot, "author-copilot.json"), "utf8"),
+    ) as {
       template: string;
     };
     expect(metadata.template).toBe("novel");
@@ -1247,15 +1307,13 @@ test("persists custom themes and local background images", async () => {
   }
 });
 
-test("runs the native Agent SDK through controlled tools, keeps a version, and cancels/restores partial edits", async () => {
+test("runs the native Agent SDK through workspace hooks, keeps a version, and cancels/restores partial edits", async () => {
   test.setTimeout(120_000);
   const temporaryRoot = await mkdtemp(
     join(tmpdir(), "author-copilot-agent-e2e-"),
   );
   const projectTitle = "Agent E2E 中文";
   const relativePath = "第一卷/第一章/01-正文.md";
-  const projectRoot = join(temporaryRoot, projectTitle);
-  const documentPath = join(projectRoot, relativePath);
   let baseline = "任务前的草稿。";
   let replacement = "任务前的草稿。Agent 补充了雨夜。";
   let holdAfterWrite = false;
@@ -1282,20 +1340,21 @@ test("runs the native Agent SDK through controlled tools, keeps a version, and c
         stream?: boolean;
         messages?: unknown[];
       };
+      const hasRead = JSON.stringify(body.messages).includes('"name":"Read"');
       const hasResult =
-        textOnly || JSON.stringify(body.messages).includes('"tool_result"');
+        textOnly || JSON.stringify(body.messages).includes('"name":"Write"');
       if (hasResult && holdAfterWrite) return;
       const block = hasResult
         ? { type: "text", text: "已完成本次受控改稿。" }
         : {
             type: "tool_use",
-            id: `toolu_agent_${++toolCalls}`,
-            name: "mcp__author_copilot__write_text",
-            input: {
-              relativePath,
-              expectedHash: createHash("sha256").update(baseline).digest("hex"),
-              content: replacement,
-            },
+            id: hasRead
+              ? `toolu_agent_${++toolCalls}`
+              : `toolu_agent_read_${toolCalls + 1}`,
+            name: hasRead ? "Write" : "Read",
+            input: hasRead
+              ? { file_path: relativePath, content: replacement }
+              : { file_path: relativePath },
           };
       const message = {
         id: `msg_agent_${toolCalls}`,
@@ -1377,6 +1436,8 @@ test("runs the native Agent SDK through controlled tools, keeps a version, and c
     await center.getByTestId("project-name").fill(projectTitle);
     await center.getByTestId("project-dialog-submit").click();
     const page = await rendererPage(application, "project");
+    const projectRoot = await managedProjectRoot(temporaryRoot, projectTitle);
+    const documentPath = join(projectRoot, relativePath);
     await page.getByRole("button", { name: "第一章", exact: true }).click();
     await page.getByTestId("document-editor").fill(baseline);
     await page.getByTestId("save-document").click();
@@ -1617,8 +1678,7 @@ test("shows seven-day writing history with signed totals and recoverable read fa
     ).toBeFocused();
 
     const directory = join(
-      temporaryRoot,
-      ".user-data",
+      await accountRuntimeRoot(temporaryRoot),
       "writing-statistics",
       context.project.projectId,
     );
@@ -1728,8 +1788,7 @@ test("persists manual writing statistics without counting reloads or IME preedit
     await center.getByTestId("project-dialog-submit").click();
     let page = await rendererPage(application, "project");
     const secondPath = join(
-      temporaryRoot,
-      title,
+      await managedProjectRoot(temporaryRoot, title),
       "第一卷",
       "第一章",
       "02-已有.md",
@@ -1915,7 +1974,12 @@ test("keeps AI beside the manuscript and supports writing toolbar operations", a
     await center.getByTestId("project-dialog-submit").click();
     const page = await rendererPage(application, "project");
     await writeFile(
-      join(temporaryRoot, "雨夜来信", "第一卷", "第一章", "02-来信.md"),
+      join(
+        await managedProjectRoot(temporaryRoot, "雨夜来信"),
+        "第一卷",
+        "第一章",
+        "02-来信.md",
+      ),
       "第二封信。",
       "utf8",
     );
@@ -2088,7 +2152,7 @@ for (const connection of ["custom", "platform"] as const) {
     );
     const projectTitle = "供应商联调";
     const relativePath = "第一卷/第一章/01-正文.md";
-    const documentPath = join(temporaryRoot, projectTitle, relativePath);
+    let documentPath: string;
     const requests: { model: string; key: string }[] = [];
     let mode: "chat" | "proposal" | "agent" = "chat";
     const mock = createServer(async (request, response) => {
@@ -2133,9 +2197,10 @@ for (const connection of ["custom", "platform"] as const) {
         key: String(request.headers["x-api-key"]),
       });
       const baseline = await readFile(documentPath, "utf8");
+      const hasRead = JSON.stringify(body.messages).includes('"name":"Read"');
       const hasResult =
         mode === "agent" &&
-        JSON.stringify(body.messages).includes('"tool_result"');
+        JSON.stringify(body.messages).includes('"name":"Write"');
       const block =
         mode === "chat" || hasResult
           ? {
@@ -2151,7 +2216,9 @@ for (const connection of ["custom", "platform"] as const) {
               name:
                 mode === "proposal"
                   ? "propose_project_changes"
-                  : "mcp__author_copilot__write_text",
+                  : hasRead
+                    ? "Write"
+                    : "Read",
               input:
                 mode === "proposal"
                   ? {
@@ -2174,13 +2241,12 @@ for (const connection of ["custom", "platform"] as const) {
                         },
                       ],
                     }
-                  : {
-                      relativePath,
-                      expectedHash: createHash("sha256")
-                        .update(baseline)
-                        .digest("hex"),
-                      content: baseline + "远处传来钟声。",
-                    },
+                  : hasRead
+                    ? {
+                        file_path: relativePath,
+                        content: baseline + "远处传来钟声。",
+                      }
+                    : { file_path: relativePath },
             };
       const message = {
         id: `msg_${requests.length}`,
@@ -2377,6 +2443,10 @@ for (const connection of ["custom", "platform"] as const) {
       await center.getByTestId("project-name").fill(projectTitle);
       await center.getByTestId("project-dialog-submit").click();
       const page = await rendererPage(application, "project");
+      documentPath = join(
+        await managedProjectRoot(temporaryRoot, projectTitle),
+        relativePath,
+      );
       await page.getByRole("button", { name: "第一章", exact: true }).click();
       await page.getByTestId("document-editor").fill("雨夜，她开门。");
       await page.getByTestId("save-document").click();
@@ -2756,7 +2826,10 @@ for (const [format, locale] of [
       ] as const;
       for (const [path, content] of documents) {
         expect(
-          await readFile(join(temporaryRoot, "全本", path), "utf8"),
+          await readFile(
+            join(await managedProjectRoot(temporaryRoot, "全本"), path),
+            "utf8",
+          ),
         ).toContain(content);
       }
       const chapter = page.getByRole("button", {
@@ -2793,8 +2866,7 @@ for (const [format, locale] of [
           .fill("第二章 归来\n修改后的正文。");
         await page.getByTestId("save-document").click();
         const renamedPath = join(
-          temporaryRoot,
-          "全本",
+          await managedProjectRoot(temporaryRoot, "全本"),
           "0002-第一卷 初见/0002-第二章 归来/01-正文.md",
         );
         await expect
@@ -2815,7 +2887,12 @@ for (const [format, locale] of [
         await expect(page.getByTestId("document-editor")).toHaveCount(0);
         await assert.rejects(lstat(renamedPath), { code: "ENOENT" });
         await assert.doesNotReject(
-          lstat(join(temporaryRoot, "全本", documents[1][0])),
+          lstat(
+            join(
+              await managedProjectRoot(temporaryRoot, "全本"),
+              documents[1][0],
+            ),
+          ),
         );
       }
       expect(await readFile(source)).toEqual(bytes);
@@ -2870,7 +2947,6 @@ for (const template of ["novel", "screenplay"] as const) {
       join(tmpdir(), "author-copilot-structure-"),
     );
     const projectTitle = `目录管理-${template}`;
-    const projectRoot = join(temporaryRoot, projectTitle);
     const application = await launchApplication(temporaryRoot);
     try {
       const { center } = await enterWorkspace(application);
@@ -2885,6 +2961,7 @@ for (const template of ["novel", "screenplay"] as const) {
       await center.getByTestId("project-name").fill(projectTitle);
       await center.getByTestId("project-dialog-submit").click();
       const page = await rendererPage(application, "project");
+      const projectRoot = await managedProjectRoot(temporaryRoot, projectTitle);
       const rootName = template === "novel" ? "第一卷" : "第一幕";
       const rootRole =
         template === "novel" ? /新建卷|New volume/u : /新建幕|New act/u;
@@ -3150,8 +3227,14 @@ for (const template of ["novel", "screenplay"] as const) {
           }
         }
       }
+      expect(
+        await readFile(
+          join(await managedProjectRoot(temporaryRoot, title), firstPath),
+          "utf8",
+        ),
+      ).toBe("最终交付正文，保留中文与 < & >。\n\n第二段。");
       expect(await readFile(join(source, firstPath), "utf8")).toBe(
-        "最终交付正文，保留中文与 < & >。\n\n第二段。",
+        "待修改正文",
       );
     } finally {
       await application.close();
@@ -3161,7 +3244,7 @@ for (const template of ["novel", "screenplay"] as const) {
 }
 
 for (const locale of ["zh-CN", "en-US"] as const) {
-  test(`generates and reviews creative notes without overwriting saved work (${locale})`, async () => {
+  test(`generates creative notes and source-linked chapter summaries (${locale})`, async () => {
     test.setTimeout(120_000);
     const temporaryRoot = await mkdtemp(
       join(tmpdir(), "author-generate-notes-"),
@@ -3179,6 +3262,8 @@ for (const locale of ["zh-CN", "en-US"] as const) {
         return;
       }
       const body = JSON.parse(raw);
+      const factMode = body.system.includes("Generate a fact");
+      const askMode = body.system.includes("You are Author Copilot");
       const events = [
         {
           type: "message_start",
@@ -3197,27 +3282,63 @@ for (const locale of ["zh-CN", "en-US"] as const) {
           type: "content_block_start",
           index: 0,
           content_block: {
-            type: "tool_use",
-            id: "tool_draft",
-            name: "draft_creative_note",
-            input: {},
+            ...(askMode
+              ? { type: "text", text: "" }
+              : {
+                  type: "tool_use",
+                  id: "tool_draft",
+                  name: factMode
+                    ? "draft_creative_facts"
+                    : "draft_creative_note",
+                  input: {},
+                }),
           },
         },
         {
           type: "content_block_delta",
           index: 0,
           delta: {
-            type: "input_json_delta",
-            partial_json: JSON.stringify({
-              title: "AI 三幕大纲",
-              content: "发现匿名信。\n追查寄信人。\n揭开港口秘密。",
-            }),
+            ...(askMode
+              ? {
+                  type: "text_delta",
+                  text: "引用事实：正文中存在一条未解释的线索。",
+                }
+              : {
+                  type: "input_json_delta",
+                  partial_json: JSON.stringify(
+                    factMode
+                      ? {
+                          facts: [
+                            {
+                              title: "线索存在",
+                              content: "正文中出现了一条线索。",
+                            },
+                            { title: "线索状态", content: "线索尚未解释。" },
+                            {
+                              title: "需舍弃的候选",
+                              content: "待作者审阅的内容。",
+                            },
+                          ],
+                        }
+                      : {
+                          title: body.system.includes("Generate a summary")
+                            ? "第一章摘要"
+                            : "AI 三幕大纲",
+                          content: body.system.includes("Generate a summary")
+                            ? "## 主要事件\n正文中出现线索。\n## 人物变化\n未明确。\n## 时间地点\n未明确。\n## 未解决线索\n线索尚待解释。"
+                            : "发现匿名信。\n追查寄信人。\n揭开港口秘密。",
+                        },
+                  ),
+                }),
           },
         },
         { type: "content_block_stop", index: 0 },
         {
           type: "message_delta",
-          delta: { stop_reason: "tool_use", stop_sequence: null },
+          delta: {
+            stop_reason: askMode ? "end_turn" : "tool_use",
+            stop_sequence: null,
+          },
           usage: { output_tokens: 20 },
         },
         { type: "message_stop" },
@@ -3281,8 +3402,7 @@ for (const locale of ["zh-CN", "en-US"] as const) {
         return id;
       });
       const manuscriptPath = join(
-        temporaryRoot,
-        `AI 资料-${locale}`,
+        await managedProjectRoot(temporaryRoot, `AI 资料-${locale}`),
         "第一卷/第一章/01-正文.md",
       );
       await writeFile(manuscriptPath, "已保存正文线索");
@@ -3483,6 +3603,337 @@ for (const locale of ["zh-CN", "en-US"] as const) {
         .getByRole("button", { name: /放弃并关闭|Discard and close/u })
         .click();
       await expect(dialog).toHaveCount(0);
+
+      // Chapter summaries carry a saved source snapshot, never a model-supplied path.
+      mode = "draft";
+      await panel
+        .getByRole("button", {
+          name: /生成章节摘要|Summarize a chapter/u,
+          exact: true,
+        })
+        .click();
+      await expect(
+        dialog.getByRole("button", {
+          name: /生成草稿|Generate draft/u,
+          exact: true,
+        }),
+      ).toBeDisabled();
+      await dialog
+        .getByTestId("summary-source")
+        .selectOption("第一卷/第一章/01-正文.md");
+      await dialog
+        .getByRole("button", { name: /生成草稿|Generate draft/u, exact: true })
+        .click();
+      await expect(dialog.getByTestId("generation-content")).toHaveValue(
+        /主要事件/u,
+      );
+      await expect(dialog.getByTestId("summary-draft-source")).toContainText(
+        "第一卷/第一章/01-正文.md",
+      );
+      const sentSummary = JSON.parse(bodies.at(-1)!);
+      expect(sentSummary.system).toContain("Do not invent");
+      const summaryInput = JSON.parse(sentSummary.messages[0].content);
+      expect(summaryInput.referenceNotes).toEqual([]);
+      expect(summaryInput.documents).toEqual([
+        { relativePath: "第一卷/第一章/01-正文.md", content: "已保存正文线索" },
+      ]);
+      expect(
+        (await list()).filter((note) => note.kind === "summary"),
+      ).toHaveLength(0);
+      await dialog
+        .getByTestId("generation-content")
+        .fill("作者核对：正文中存在一条线索。");
+      await writeFile(manuscriptPath, "生成后另存的新正文线索");
+      await dialog
+        .getByRole("button", { name: /确认保存资料|Confirm and save note/u })
+        .click();
+      await expect(dialog).toHaveCount(0);
+      const provenance = panel.getByTestId("chapter-summary-source");
+      await expect(provenance).toContainText(
+        /来源正文已变化|Source text has changed/u,
+      );
+      let savedSummary = (await list()).find(
+        (note) => note.kind === "summary",
+      )!;
+      expect(savedSummary.content).toBe("作者核对：正文中存在一条线索。");
+      expect(savedSummary.source?.contentHash).toBe(
+        createHash("sha256").update("已保存正文线索").digest("hex"),
+      );
+      const sourceBeforeEdit = savedSummary.source;
+      await panel.locator("textarea").fill("作者进一步修订的摘要。");
+      await panel
+        .getByRole("button", { name: /保存资料|Save note/u, exact: true })
+        .click();
+      await expect
+        .poll(
+          async () =>
+            (await list()).find((note) => note.id === savedSummary.id)?.content,
+        )
+        .toBe("作者进一步修订的摘要。");
+      expect(
+        (await list()).find((note) => note.id === savedSummary.id)?.source,
+      ).toEqual(sourceBeforeEdit);
+
+      // Missing sources preserve the note; regeneration updates provenance after review.
+      await rename(manuscriptPath, `${manuscriptPath}.moved`);
+      await provenance
+        .getByRole("button", { name: /检查来源状态|Check source/u })
+        .click();
+      await expect(provenance).toContainText(
+        /来源已删除或移动|Source was deleted or moved/u,
+      );
+      await rename(`${manuscriptPath}.moved`, manuscriptPath);
+      await panel
+        .getByRole("button", {
+          name: /生成章节摘要|Summarize a chapter/u,
+          exact: true,
+        })
+        .click();
+      await expect(dialog.getByTestId("summary-source")).toHaveValue(
+        "第一卷/第一章/01-正文.md",
+      );
+      await dialog
+        .getByRole("button", { name: /生成草稿|Generate draft/u, exact: true })
+        .click();
+      await expect(dialog.getByTestId("generation-diff")).toContainText(
+        "作者进一步修订的摘要",
+      );
+      await expect(
+        dialog.getByRole("button", { name: /重新生成|Generate again/u }),
+      ).toBeEnabled();
+      await page.locator(".creative-generation-scroll").evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+      await page.screenshot({
+        path: `test-results/chapter-summary-${locale}-review.png`,
+      });
+      await dialog
+        .getByRole("button", { name: /确认更新资料|Confirm update/u })
+        .click();
+      await expect(dialog).toHaveCount(0);
+      await expect(provenance).toContainText(
+        /来源与生成时一致|source matches the snapshot/u,
+      );
+      savedSummary = (await list()).find(
+        (note) => note.id === savedSummary.id,
+      )!;
+      expect(savedSummary.source?.contentHash).toBe(
+        createHash("sha256").update("生成后另存的新正文线索").digest("hex"),
+      );
+      expect(
+        (await list()).filter((note) => note.kind === "summary"),
+      ).toHaveLength(1);
+      await page.screenshot({
+        path: `test-results/chapter-summary-${locale}.png`,
+      });
+      await provenance
+        .getByRole("button", { name: /打开来源正文|Open source/u })
+        .click();
+      await expect(page.getByTestId("document-editor")).toHaveValue(
+        "生成后另存的新正文线索",
+      );
+      await page.reload();
+      await page
+        .getByRole("button", {
+          name: /打开面板.*创作资料|Open panel.*Creative notes/u,
+        })
+        .click();
+      await panel
+        .getByRole("tab", { name: /章节摘要|Chapter summary/u, exact: true })
+        .click();
+      await panel.getByRole("button", { name: /^第一章摘要/u }).click();
+      await expect(provenance).toContainText(
+        /来源与生成时一致|source matches the snapshot/u,
+      );
+      expect(await readFile(manuscriptPath, "utf8")).toBe(
+        "生成后另存的新正文线索",
+      );
+
+      // Facts are individually reviewed, confirmed atomically and retain their source version.
+      await panel
+        .getByRole("button", {
+          name: /提取候选事实|Extract facts/u,
+          exact: true,
+        })
+        .click();
+      const factsDialog = page.getByTestId("fact-extraction-dialog");
+      await expect(factsDialog.getByTestId("fact-source-select")).toHaveValue(
+        "第一卷/第一章/01-正文.md",
+      );
+      await factsDialog
+        .getByRole("button", {
+          name: /提取候选事实|Extract facts/u,
+          exact: true,
+        })
+        .click();
+      const candidates = factsDialog.getByTestId("fact-candidate");
+      await expect(candidates).toHaveCount(3);
+      expect(
+        (await list()).filter((note) => note.kind === "fact"),
+      ).toHaveLength(0);
+      const factsModal = page.getByRole("dialog", {
+        name: /提取候选事实|Extract facts/u,
+      });
+      const saveFacts = factsModal.getByRole("button", {
+        name: /保存已确认事实|Save confirmed facts/u,
+      });
+      await expect(saveFacts).toBeDisabled();
+      await candidates
+        .first()
+        .getByRole("textbox", { name: /标题|Title/u })
+        .fill("作者核对的事实");
+      await candidates.first().getByRole("checkbox").check();
+      await candidates
+        .first()
+        .locator("textarea")
+        .fill("作者确认：正文中有一条未解释的线索。");
+      await expect(candidates.first().getByRole("checkbox")).not.toBeChecked();
+      await candidates
+        .nth(2)
+        .getByRole("button", { name: /舍弃候选|Reject candidate/u })
+        .click();
+      await expect(candidates).toHaveCount(2);
+      await factsDialog.evaluate((element) => {
+        element.scrollTop = 0;
+      });
+      await page.screenshot({ path: `test-results/fact-review-${locale}.png` });
+      mode = "fail";
+      page.once("dialog", (prompt) => void prompt.accept());
+      await factsDialog
+        .getByRole("button", { name: /重新生成|Generate again/u })
+        .click();
+      await expect(factsDialog.getByRole("alert")).toContainText(
+        /生成失败|Generation failed/u,
+      );
+      await expect(candidates.first().locator("textarea")).toHaveValue(
+        "作者确认：正文中有一条未解释的线索。",
+      );
+      mode = "hold";
+      page.once("dialog", (prompt) => void prompt.accept());
+      await factsDialog
+        .getByRole("button", { name: /重新生成|Generate again/u })
+        .click();
+      await factsDialog
+        .getByRole("button", { name: /停止生成|Stop generation/u })
+        .click();
+      await expect(factsDialog.getByRole("alert")).toContainText(
+        /已停止生成|Generation stopped/u,
+      );
+      await expect(candidates).toHaveCount(2);
+      mode = "draft";
+      await candidates.first().getByRole("checkbox").check();
+      await writeFile(manuscriptPath, "事实提取后正文又更新了。");
+      await saveFacts.click();
+      await expect(candidates).toHaveCount(1);
+      expect(
+        (await list()).filter((note) => note.kind === "fact"),
+      ).toHaveLength(1);
+      await candidates
+        .first()
+        .getByRole("button", { name: /舍弃候选|Reject candidate/u })
+        .click();
+      await factsModal
+        .getByRole("button", { name: /放弃并关闭|Discard and close/u })
+        .click();
+      await expect(factsDialog).toHaveCount(0);
+      const savedFact = (await list()).find((note) => note.kind === "fact")!;
+      expect(savedFact.source?.contentHash).toBe(
+        createHash("sha256").update("生成后另存的新正文线索").digest("hex"),
+      );
+      const factSource = panel.getByTestId("fact-source");
+      await expect(factSource).toContainText(
+        /来源正文已变化|Source text has changed/u,
+      );
+      await panel.locator("textarea").fill("作者进一步修订的事实。");
+      await panel
+        .getByRole("button", { name: /保存资料|Save note/u, exact: true })
+        .click();
+      await expect
+        .poll(
+          async () =>
+            (await list()).find((note) => note.id === savedFact.id)?.content,
+        )
+        .toBe("作者进一步修订的事实。");
+      expect(
+        (await list()).find((note) => note.id === savedFact.id)?.source,
+      ).toEqual(savedFact.source);
+      await rename(manuscriptPath, `${manuscriptPath}.moved`);
+      await factSource
+        .getByRole("button", { name: /检查来源状态|Check source/u })
+        .click();
+      await expect(factSource).toContainText(
+        /来源已删除或移动|Source was deleted or moved/u,
+      );
+      await rename(`${manuscriptPath}.moved`, manuscriptPath);
+      await factSource
+        .getByRole("button", { name: /检查来源状态|Check source/u })
+        .click();
+      await expect(factSource).toContainText(
+        /来源正文已变化|Source text has changed/u,
+      );
+      await page.screenshot({
+        path: `test-results/fact-library-${locale}.png`,
+      });
+      await factSource
+        .getByRole("button", { name: /打开来源正文|Open source/u })
+        .click();
+      await expect(page.getByTestId("document-editor")).toHaveValue(
+        "事实提取后正文又更新了。",
+      );
+      await page.reload();
+      await page
+        .getByRole("button", {
+          name: /打开面板.*创作资料|Open panel.*Creative notes/u,
+        })
+        .click();
+      await panel
+        .getByRole("tab", { name: /事实库|Fact library/u, exact: true })
+        .click();
+      await panel.getByRole("button", { name: /^作者核对的事实/u }).click();
+      await expect(panel.locator("textarea")).toHaveValue(
+        "作者进一步修订的事实。",
+      );
+      await expect(factSource).toContainText(
+        /来源正文已变化|Source text has changed/u,
+      );
+      await factSource
+        .getByRole("button", { name: /打开来源正文|Open source/u })
+        .click();
+      await expect(page.getByTestId("document-editor")).toHaveValue(
+        "事实提取后正文又更新了。",
+      );
+      await page
+        .getByRole("button", { name: /打开面板.*对话|Open panel.*Chat/u })
+        .click();
+      await openAssistant(page);
+      const factPicker = page.getByTestId("creative-note-picker");
+      await factPicker
+        .getByRole("button", { name: /引用资料|Reference notes/u, exact: true })
+        .click();
+      await factPicker
+        .getByRole("checkbox", { name: /作者核对的事实/u })
+        .check();
+      await factPicker
+        .getByRole("button", { name: /引用资料|Reference notes/u, exact: true })
+        .click();
+      await page.getByTestId("ai-chat-input").fill("请依据已确认事实回答");
+      await page.getByTestId("ai-chat-send").click();
+      await expect(page.getByTestId("ai-chat-panel")).toContainText(
+        "引用事实：正文中存在一条未解释的线索。",
+      );
+      const factRequest = JSON.parse(bodies.at(-1)!);
+      const factContext = JSON.parse(
+        factRequest.messages.at(-1).content.split("\n").slice(1).join("\n"),
+      );
+      expect(factContext.creativeNotes).toMatchObject([
+        {
+          id: savedFact.id,
+          kind: "fact",
+          content: "作者进一步修订的事实。",
+          source: savedFact.source,
+        },
+      ]);
+      expect(bodies.at(-1)).not.toContain("需舍弃的候选");
     } finally {
       await application.close();
       server.closeAllConnections();
@@ -3493,3 +3944,392 @@ for (const locale of ["zh-CN", "en-US"] as const) {
     }
   });
 }
+
+test("uses global Skills to compare account works with read-only native tools", async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "account-assistant-"));
+  const secretPath = join(temporaryRoot, "outside-secret.md");
+  await writeFile(secretPath, "DO_NOT_READ_OUTSIDE_WORKSPACE");
+  const requests: string[] = [];
+  let workIds: string[] = [];
+  let bookSkill = false;
+  let assetEdit = false;
+  const mock = createServer(async (request, response) => {
+    let raw = "";
+    for await (const chunk of request) raw += String(chunk);
+    if (
+      !request.url?.includes("/messages") ||
+      request.url.includes("count_tokens")
+    ) {
+      response.setHeader("content-type", "application/json");
+      response.end('{"input_tokens":10}');
+      return;
+    }
+    requests.push(raw);
+    const body = JSON.parse(raw) as {
+      stream?: boolean;
+      messages: { content: unknown }[];
+      model: string;
+    };
+    const history = JSON.stringify(body.messages);
+    const toolCount = (history.match(/"type":"tool_use"/gu) ?? []).length;
+    const escaping = history.includes("越界测试");
+    const steps = assetEdit
+      ? [
+          { name: "Read", input: { file_path: "创作资产/资料.md" } },
+          {
+            name: "Edit",
+            input: {
+              file_path: "创作资产/资料.md",
+              old_string: "旧的大纲约束",
+              new_string: "新的大纲约束",
+            },
+          },
+        ]
+      : bookSkill
+        ? [{ name: "Skill", input: { skill: "read-outline" } }]
+        : escaping
+          ? [{ name: "Read", input: { file_path: secretPath } }]
+          : [
+              { name: "Skill", input: { skill: "locate-work" } },
+              { name: "Read", input: { file_path: "projects.json" } },
+              {
+                name: "Read",
+                input: {
+                  file_path: `projects/${workIds[0]}/第一卷/第一章/01-正文.md`,
+                },
+              },
+              {
+                name: "Read",
+                input: {
+                  file_path: `projects/${workIds[1]}/第一卷/第一章/01-正文.md`,
+                },
+              },
+            ];
+    const step = steps[toolCount];
+    const block = step
+      ? { type: "tool_use", id: `global_${toolCount}`, ...step }
+      : {
+          type: "text",
+          text: assetEdit
+            ? "已更新本书大纲。"
+            : bookSkill
+              ? "已使用本书专属大纲技能。"
+              : escaping
+                ? "无法访问账号工作区之外的文件。"
+                : `《海港》围绕归航，《雪山》围绕寻路。来源：海港 projects/${workIds[0]}/第一卷/第一章/01-正文.md；雪山 projects/${workIds[1]}/第一卷/第一章/01-正文.md。`,
+        };
+    const message = {
+      id: `msg_global_${toolCount}`,
+      type: "message",
+      role: "assistant",
+      model: body.model,
+      content: [block],
+      stop_reason: step ? "tool_use" : "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 10, output_tokens: 10 },
+    };
+    response.setHeader(
+      "content-type",
+      body.stream ? "text/event-stream" : "application/json",
+    );
+    if (!body.stream) {
+      response.end(JSON.stringify(message));
+      return;
+    }
+    response.write(
+      `event: message_start\ndata: ${JSON.stringify({ type: "message_start", message: { ...message, content: [], stop_reason: null } })}\n\n`,
+    );
+    response.write(
+      `event: content_block_start\ndata: ${JSON.stringify({ type: "content_block_start", index: 0, content_block: step ? { type: "tool_use", id: `global_${toolCount}`, name: step.name, input: {} } : { type: "text", text: "" } })}\n\n`,
+    );
+    response.write(
+      `event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", index: 0, delta: step ? { type: "input_json_delta", partial_json: JSON.stringify(step.input) } : { type: "text_delta", text: block.text } })}\n\n`,
+    );
+    response.write(
+      'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
+    );
+    response.write(
+      `event: message_delta\ndata: ${JSON.stringify({ type: "message_delta", delta: { stop_reason: message.stop_reason, stop_sequence: null }, usage: { output_tokens: 10 } })}\n\n`,
+    );
+    response.end('event: message_stop\ndata: {"type":"message_stop"}\n\n');
+  });
+  await new Promise<void>((resolve) => mock.listen(0, "127.0.0.1", resolve));
+  const address = mock.address();
+  assert.ok(address && typeof address === "object");
+  const application = await launchApplication(temporaryRoot, {
+    AUTHOR_COPILOT_E2E_AGENT_BASE_URL: `http://127.0.0.1:${address.port}`,
+    AUTHOR_COPILOT_E2E_CREDENTIAL_ENCRYPTION: "1",
+  });
+  try {
+    const { center } = await enterWorkspace(application);
+    await center.getByRole("button", { name: /Claude API Key/u }).click();
+    await center.getByTestId("anthropic-api-key").fill("sk-ant-global-e2e");
+    await center.getByTestId("anthropic-credential-save").click();
+    await center.getByRole("button", { name: /关闭|Close/u }).click();
+    workIds = await center.evaluate(async () => {
+      const api = (window as unknown as { authorCopilot: AuthorCopilotApi })
+        .authorCopilot;
+      const ids: string[] = [];
+      for (const [title, content] of [
+        ["海港", "船长回到海港寻找故人。"],
+        ["雪山", "向导在雪山寻找归路。"],
+      ]) {
+        const created = await api.project.create({
+          title: title!,
+          template: "novel",
+        });
+        if (!created.ok) throw new Error(created.error.message);
+        const projectId = created.project.projectId;
+        const before = await api.project.readDocument({
+          projectId,
+          relativePath: "第一卷/第一章/01-正文.md",
+        });
+        if (!before.ok) throw new Error(before.error.message);
+        const saved = await api.project.saveDocument({
+          projectId,
+          relativePath: "第一卷/第一章/01-正文.md",
+          content: content!,
+          expectedHash: before.contentHash,
+        });
+        if (!saved.ok) throw new Error(saved.error.message);
+        ids.push(projectId);
+      }
+      return ids;
+    });
+    await center
+      .getByRole("button", { name: /全局 AI 助手|Account AI assistant/u })
+      .click();
+    const dialog = center.getByTestId("global-assistant");
+    await dialog
+      .getByTestId("global-assistant-input")
+      .fill("比较海港和雪山两部作品的关联");
+    await dialog.getByRole("button", { name: /发送|Send/u }).click();
+    await expect(dialog.locator(".global-message-assistant")).toContainText(
+      "围绕归航",
+      { timeout: 45000 },
+    );
+    const transmitted = requests.join("\n");
+    expect(transmitted).toContain("船长回到海港");
+    expect(transmitted).toContain("向导在雪山");
+    expect(transmitted).toContain("locate-work");
+    expect(transmitted).toContain("Base directory for this skill:");
+    expect(transmitted).not.toContain("mcp__author_copilot__");
+    await dialog.screenshot({ path: "test-results/global-assistant.png" });
+    await dialog.getByTestId("global-assistant-input").fill("越界测试");
+    await dialog.getByRole("button", { name: /发送|Send/u }).click();
+    await expect(
+      dialog.locator(".global-message-assistant").last(),
+    ).toContainText("无法访问账号工作区", { timeout: 45000 });
+    expect(requests.join("\n")).not.toContain("DO_NOT_READ_OUTSIDE_WORKSPACE");
+    await dialog.getByRole("button", { name: /关闭|Close/u }).click();
+    await center.reload();
+    await center
+      .getByRole("button", { name: /全局 AI 助手|Account AI assistant/u })
+      .click();
+    await expect(center.getByTestId("global-assistant")).toContainText(
+      "围绕归航",
+    );
+    await center
+      .getByTestId("global-assistant")
+      .getByRole("button", { name: /关闭|Close/u })
+      .click();
+    const bookRoot = await managedProjectRoot(temporaryRoot, "海港");
+    const skillDirectory = join(bookRoot, ".claude", "skills", "read-outline");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      join(skillDirectory, "SKILL.md"),
+      "---\nname: read-outline\ndescription: Read this work's outline\n---\nWORK_SKILL_OVERRIDE_E2E: 本书的大纲只使用作者确认的海港线索。\n",
+    );
+    bookSkill = true;
+    const previousRequests = requests.length;
+    await center
+      .getByRole("button", { name: /打开作品.*海港|Open work.*海港/u })
+      .click();
+    const page = await rendererPage(application, "project");
+    await openAssistant(page, "agent");
+    await page.getByTestId("ai-chat-input").fill("本书技能测试：读取大纲");
+    await page.getByTestId("ai-chat-send").click();
+    await expect(
+      page.locator(".copilot-message.assistant").last(),
+    ).toContainText("本书专属大纲技能", { timeout: 45000 });
+    expect(requests.slice(previousRequests).join("\n")).toContain(
+      "WORK_SKILL_OVERRIDE_E2E",
+    );
+    await page
+      .getByRole("button", {
+        name: /打开面板.*创作资料|Open panel.*Creative notes/u,
+      })
+      .click();
+    const panel = page.getByTestId("creative-notes-panel");
+    await panel.getByRole("button", { name: /新建资料|New note/u }).click();
+    await panel.locator("select").selectOption("outline");
+    await panel.locator("input").fill("海港大纲");
+    await panel.locator("textarea").fill("旧的大纲约束");
+    await panel.getByRole("button", { name: /保存资料|Save note/u }).click();
+    await expect(
+      panel.getByRole("button", { name: /^海港大纲/u }),
+    ).toBeVisible();
+    assetEdit = true;
+    await openAssistant(page, "agent");
+    await page
+      .getByTestId("ai-chat-input")
+      .fill("将现有大纲约束更新为新的大纲约束");
+    await page.getByTestId("ai-chat-send").click();
+    await expect(
+      page.locator(".copilot-message.assistant").last(),
+    ).toContainText("已更新本书大纲", { timeout: 45000 });
+    await page
+      .getByRole("button", {
+        name: /打开面板.*创作资料|Open panel.*Creative notes/u,
+      })
+      .click();
+    await expect(panel.locator("textarea")).toHaveValue("新的大纲约束");
+    await openAssistant(page, "agent");
+    await page.getByTestId("agent-restore").click();
+    await expect
+      .poll(() => readFile(join(bookRoot, "创作资产", "资料.md"), "utf8"))
+      .toContain("旧的大纲约束");
+    await page
+      .getByRole("button", {
+        name: /打开面板.*创作资料|Open panel.*Creative notes/u,
+      })
+      .click();
+    await expect(panel.locator("textarea")).toHaveValue("旧的大纲约束");
+  } finally {
+    await application.close();
+    await new Promise<void>((resolve, reject) =>
+      mock.close((error) => (error ? reject(error) : resolve())),
+    );
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("isolates local and signed-in account workspaces during account switches", async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "account-switch-"));
+  const ids = {
+    a: "10000000-0000-4000-8000-000000000001",
+    b: "10000000-0000-4000-8000-000000000002",
+  };
+  const platform = createServer(async (request, response) => {
+    let raw = "";
+    for await (const chunk of request) raw += String(chunk);
+    response.setHeader("content-type", "application/json");
+    if (request.url === "/auth/login") {
+      const { email } = JSON.parse(raw) as { email: string };
+      response.end(
+        JSON.stringify({
+          user: { id: email.startsWith("a@") ? ids.a : ids.b, email },
+          accessToken: "test-access",
+          refreshToken: "test-refresh",
+          expiresAt: Math.floor(Date.now() / 1000) + 3600,
+        }),
+      );
+    } else if (request.url === "/auth/logout") response.end('{"ok":true}');
+    else {
+      response.statusCode = 404;
+      response.end("{}");
+    }
+  });
+  await new Promise<void>((resolve) =>
+    platform.listen(0, "127.0.0.1", resolve),
+  );
+  const address = platform.address();
+  assert.ok(address && typeof address === "object");
+  const application = await launchApplication(temporaryRoot, {
+    AUTHOR_COPILOT_PLATFORM_URL: `http://127.0.0.1:${address.port}`,
+    AUTHOR_COPILOT_E2E_CREDENTIAL_ENCRYPTION: "1",
+  });
+  try {
+    const { center } = await enterWorkspace(application);
+    const create = async (title: string): Promise<string> =>
+      center.evaluate(async (title) => {
+        const api = (window as unknown as { authorCopilot: AuthorCopilotApi })
+          .authorCopilot;
+        const result = await api.project.create({ title, template: "novel" });
+        if (!result.ok) throw new Error(result.error.message);
+        return result.project.projectId;
+      }, title);
+    const titles = async () =>
+      center.evaluate(async () => {
+        const result = await (
+          window as unknown as { authorCopilot: AuthorCopilotApi }
+        ).authorCopilot.project.list();
+        if (!result.ok) throw new Error(result.error.message);
+        return result.projects.map((project) => project.title);
+      });
+    const login = async (email: string) =>
+      center.evaluate(async (email) => {
+        const result = await (
+          window as unknown as { authorCopilot: AuthorCopilotApi }
+        ).authorCopilot.aiSettings({
+          action: "login",
+          email,
+          password: "test-password",
+        });
+        if (!result.ok) throw new Error(result.error.message);
+        window.dispatchEvent(new Event("ai-settings-changed"));
+      }, email);
+    const local = await create("本地私有作品");
+    const localRuntime = await accountRuntimeRoot(temporaryRoot);
+    await writeFile(
+      join(localRuntime, "global-assistant.json"),
+      JSON.stringify([
+        {
+          role: "assistant",
+          content: "本地对话历史",
+          createdAt: new Date().toISOString(),
+        },
+      ]),
+    );
+    await login("a@example.com");
+    expect(await titles()).toEqual([]);
+    const first = await create("账号甲作品");
+    expect(await accountRuntimeRoot(temporaryRoot)).toContain(ids.a);
+    const global = await center.evaluate(() =>
+      (
+        window as unknown as { authorCopilot: AuthorCopilotApi }
+      ).authorCopilot.globalAssistant({ action: "get" }),
+    );
+    expect(global).toMatchObject({ ok: true, messages: [] });
+    await login("b@example.com");
+    expect(await titles()).toEqual([]);
+    const refused = await center.evaluate(
+      async (projectId) =>
+        (
+          window as unknown as { authorCopilot: AuthorCopilotApi }
+        ).authorCopilot.project.readDocument({
+          projectId,
+          relativePath: "第一卷/第一章/01-正文.md",
+        }),
+      first,
+    );
+    expect(refused.ok).toBe(false);
+    await create("账号乙作品");
+    await login("a@example.com");
+    expect(await titles()).toEqual(["账号甲作品"]);
+    await center.evaluate(async () => {
+      const result = await (
+        window as unknown as { authorCopilot: AuthorCopilotApi }
+      ).authorCopilot.aiSettings({ action: "logout" });
+      if (!result.ok) throw new Error(result.error.message);
+      window.dispatchEvent(new Event("ai-settings-changed"));
+    });
+    expect(await titles()).toEqual(["本地私有作品"]);
+    expect(
+      await center.evaluate(() =>
+        (
+          window as unknown as { authorCopilot: AuthorCopilotApi }
+        ).authorCopilot.globalAssistant({ action: "get" }),
+      ),
+    ).toMatchObject({ ok: true, messages: [{ content: "本地对话历史" }] });
+    expect(await managedProjectRoot(temporaryRoot, "本地私有作品")).toContain(
+      local,
+    );
+  } finally {
+    await application.close();
+    await new Promise<void>((resolve, reject) =>
+      platform.close((error) => (error ? reject(error) : resolve())),
+    );
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});

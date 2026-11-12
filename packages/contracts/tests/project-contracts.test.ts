@@ -214,41 +214,27 @@ describe("project contracts", () => {
     ).toBe(false);
   });
 
-  it("keeps native destination selection in the main process", () => {
+  it("keeps the managed destination in the main process and rejects obsolete import modes", () => {
     expect(
       ProjectConfirmImportRequestSchema.safeParse({
         previewToken: "preview-token",
-        mode: "in_place",
-        reassignProjectId: true,
       }).success,
     ).toBe(true);
-    expect(
-      ProjectConfirmImportRequestSchema.safeParse({
-        previewToken: "preview-token",
-        mode: "copy",
-      }).success,
-    ).toBe(true);
-    expect(
-      ProjectConfirmImportRequestSchema.safeParse({
-        previewToken: "preview-token",
-        mode: "copy",
-        reassignProjectId: true,
-      }).success,
-    ).toBe(false);
-    expect(
-      ProjectConfirmImportRequestSchema.safeParse({
-        previewToken: "preview-token",
-        mode: "copy",
-        destinationToken: "not-allowed",
-      }).success,
-    ).toBe(false);
-    expect(
-      ProjectConfirmImportRequestSchema.safeParse({
-        previewToken: "preview-token",
-        mode: "in_place",
-        destinationToken: "not-allowed",
-      }).success,
-    ).toBe(false);
+    for (const extra of [
+      { mode: "in_place" },
+      { mode: "copy" },
+      { reassignProjectId: true },
+      { destinationToken: "not-allowed" },
+      { destinationParent: "/outside" },
+      { rootPath: "/outside" },
+    ]) {
+      expect(
+        ProjectConfirmImportRequestSchema.safeParse({
+          previewToken: "preview-token",
+          ...extra,
+        }).success,
+      ).toBe(false);
+    }
   });
 
   it("rejects absolute and escaping document paths", () => {
@@ -351,7 +337,6 @@ describe("project contracts", () => {
       "cancelled",
       "not_found",
       "conflict",
-      "duplicate_project_id",
       "invalid_path",
       "io_error",
       "invalid_metadata",

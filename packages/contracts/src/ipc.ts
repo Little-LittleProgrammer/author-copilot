@@ -1,3 +1,8 @@
+import { WorkspaceChangedEventSchema } from "./global-assistant.js";
+import {
+  GlobalAssistantRequestSchema,
+  GlobalAssistantResponseSchema,
+} from "./global-assistant.js";
 import {
   ConversationRequestSchema,
   ConversationResponseSchema,
@@ -18,6 +23,7 @@ import {
 } from "./agent-workflow.js";
 import { AgentTaskEventSchema } from "./agent-task.js";
 import { z } from "zod";
+import { CreativeFactsConfirmRequestSchema } from "./creative-notes.js";
 import {
   AnthropicCredentialDeleteRequestSchema,
   AnthropicCredentialResponseSchema,
@@ -128,6 +134,8 @@ import {
   WritingGoalSetRequestSchema,
 } from "./writing-statistics.js";
 import {
+  CreativeNoteSourceStatusRequestSchema,
+  CreativeNoteSourceStatusResponseSchema,
   CreativeNoteCreateRequestSchema,
   CreativeNoteDeleteRequestSchema,
   CreativeNoteDeleteResponseSchema,
@@ -145,6 +153,9 @@ import {
 } from "./creative-note-generation.js";
 
 export const IPC_INVOKE_CHANNELS = {
+  globalAssistant: "workspace:assistant",
+  creativeNoteSourceStatus: "creative-notes:source-status",
+  creativeFactsConfirm: "creative-notes:confirm-facts",
   creativeNoteGenerate: "creative-notes:generate",
   creativeNoteGenerateCancel: "creative-notes:generate-cancel",
   conversation: "assistant:conversation",
@@ -208,6 +219,7 @@ export const IPC_INVOKE_CHANNELS = {
 } as const;
 
 export const IPC_EVENT_CHANNELS = {
+  workspaceChanged: "workspace:changed",
   agentTaskEvent: "agent:event",
   aiChatEvent: "ai-chat:event",
   taskProgress: "task:progress",
@@ -218,6 +230,9 @@ export const IPC_EVENT_CHANNELS = {
 } as const;
 
 export const IPC_INVOKE_CHANNEL_NAMES = [
+  IPC_INVOKE_CHANNELS.globalAssistant,
+  IPC_INVOKE_CHANNELS.creativeFactsConfirm,
+  IPC_INVOKE_CHANNELS.creativeNoteSourceStatus,
   IPC_INVOKE_CHANNELS.creativeNoteGenerate,
   IPC_INVOKE_CHANNELS.creativeNoteGenerateCancel,
   IPC_INVOKE_CHANNELS.conversation,
@@ -281,6 +296,7 @@ export const IPC_INVOKE_CHANNEL_NAMES = [
 ] as const;
 
 export const IPC_EVENT_CHANNEL_NAMES = [
+  IPC_EVENT_CHANNELS.workspaceChanged,
   IPC_EVENT_CHANNELS.agentTaskEvent,
   IPC_EVENT_CHANNELS.aiChatEvent,
   IPC_EVENT_CHANNELS.taskProgress,
@@ -304,6 +320,14 @@ export type IpcEventChannel = z.infer<typeof IpcEventChannelSchema>;
 export type IpcChannel = z.infer<typeof IpcChannelSchema>;
 
 export const IPC_INVOKE_CONTRACTS = {
+  [IPC_INVOKE_CHANNELS.globalAssistant]: {
+    request: GlobalAssistantRequestSchema,
+    response: GlobalAssistantResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.creativeNoteSourceStatus]: {
+    request: CreativeNoteSourceStatusRequestSchema,
+    response: CreativeNoteSourceStatusResponseSchema,
+  },
   [IPC_INVOKE_CHANNELS.conversation]: {
     request: ConversationRequestSchema,
     response: ConversationResponseSchema,
@@ -338,6 +362,10 @@ export const IPC_INVOKE_CONTRACTS = {
   },
   [IPC_INVOKE_CHANNELS.creativeNotesList]: {
     request: CreativeNotesProjectRequestSchema,
+    response: CreativeNotesListResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.creativeFactsConfirm]: {
+    request: CreativeFactsConfirmRequestSchema,
     response: CreativeNotesListResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.creativeNoteCreate]: {
@@ -547,6 +575,7 @@ export const IPC_INVOKE_CONTRACTS = {
 } as const;
 
 export const IPC_EVENT_CONTRACTS = {
+  [IPC_EVENT_CHANNELS.workspaceChanged]: WorkspaceChangedEventSchema,
   [IPC_EVENT_CHANNELS.agentTaskEvent]: AgentTaskEventSchema,
   [IPC_EVENT_CHANNELS.aiChatEvent]: AiChatEventSchema,
   [IPC_EVENT_CHANNELS.taskProgress]: TaskProgressEventSchema,

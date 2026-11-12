@@ -1,3 +1,7 @@
+import {
+  storageRoot,
+  type StorageRoot,
+} from "../workspace/workspace-service.js";
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
@@ -41,7 +45,7 @@ const GoalFileSchema = z.strictObject({
 export class WritingStatisticsService {
   private queue: Promise<unknown> = Promise.resolve();
 
-  constructor(private readonly root: string) {}
+  constructor(private readonly root: StorageRoot) {}
 
   history(
     request: WritingStatisticsHistoryRequest,
@@ -128,7 +132,10 @@ export class WritingStatisticsService {
     try {
       return DayFileSchema.parse(
         JSON.parse(
-          await readFile(join(this.root, projectId, `${day}.json`), "utf8"),
+          await readFile(
+            join(storageRoot(this.root), projectId, `${day}.json`),
+            "utf8",
+          ),
         ),
       );
     } catch (error) {
@@ -143,7 +150,7 @@ export class WritingStatisticsService {
   }
 
   private goalPath(projectId: string): string {
-    return join(this.root, "goals", `${projectId}.json`);
+    return join(storageRoot(this.root), "goals", `${projectId}.json`);
   }
 
   private async readGoal(projectId: string): Promise<WritingGoal> {
@@ -162,7 +169,11 @@ export class WritingStatisticsService {
   private async access(
     request: WritingStatisticsRequest | WritingStatisticsRecord,
   ): Promise<WritingStatisticsSnapshot> {
-    const path = join(this.root, request.projectId, `${request.day}.json`);
+    const path = join(
+      storageRoot(this.root),
+      request.projectId,
+      `${request.day}.json`,
+    );
     const data = await this.readDay(request.projectId, request.day);
     const previous = data.sessions[request.sessionId];
     const changed =

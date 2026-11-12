@@ -3050,7 +3050,8 @@ input[type="search"]::-webkit-search-cancel-button {
   white-space: nowrap;
 }
 .creative-notes-filters {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 7px 10px;
   border-bottom: 1px solid var(--line);
@@ -3131,6 +3132,10 @@ input[type="search"]::-webkit-search-cancel-button {
   flex-direction: column;
   gap: 8px;
   padding: 12px 14px;
+  overflow-y: auto;
+}
+.creative-notes-editor > * {
+  flex-shrink: 0;
 }
 .creative-notes-editor label {
   display: grid;
@@ -3148,8 +3153,8 @@ input[type="search"]::-webkit-search-cancel-button {
   font-size: 11px;
 }
 .creative-notes-content-field {
-  min-height: 0;
-  flex: 1;
+  min-height: 140px;
+  flex: 1 0 140px;
 }
 .creative-notes-content-field textarea {
   min-height: 100px;
@@ -4532,4 +4537,113 @@ input[type="search"]::-webkit-search-cancel-button {
 
 .manuscript-pane {
   position: relative;
+}
+
+.chapter-summary-source {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.creative-generation-field select {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.fact-candidate {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.85rem;
+  margin-block: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+}
+.fact-candidate > label {
+  display: grid;
+  gap: 0.35rem;
+}
+.fact-candidate small {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+.fact-candidate textarea {
+  min-height: 6rem;
+}
+
+.global-assistant {
+  position: fixed;
+  z-index: 80;
+  inset: 18px 18px 18px auto;
+  margin: 0;
+  height: calc(100vh - 36px);
+  width: min(560px, calc(100vw - 36px));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 12px 60px #0003;
+  overflow: hidden;
+}
+.global-assistant > header {
+  display: flex;
+  justify-content: space-between;
+  padding: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.global-assistant h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.global-assistant header p {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.global-assistant-messages {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px;
+}
+.global-message {
+  margin-bottom: 18px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+.global-message p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.7;
+  margin: 8px 0 0;
+}
+.global-message-user {
+  margin-left: 28px;
+}
+.global-assistant > form {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-top: 1px solid var(--line);
+}
+.global-assistant textarea {
+  min-height: 90px;
+  max-height: 220px;
+  padding: 12px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+}
+.global-assistant form > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
 }

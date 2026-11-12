@@ -1,3 +1,7 @@
+import {
+  storageRoot,
+  type StorageRoot,
+} from "../workspace/workspace-service.js";
 import { readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -10,7 +14,7 @@ import { atomicWriteFile } from "../project/file-utils.js";
 
 export class ConversationStore {
   private pending: Promise<unknown> = Promise.resolve();
-  constructor(private readonly root: string) {}
+  constructor(private readonly root: StorageRoot) {}
 
   request(input: ConversationRequest): Promise<ConversationResponse> {
     const request = ConversationRequestSchema.parse(input);
@@ -26,7 +30,7 @@ export class ConversationStore {
       request.action === "save"
         ? request.conversation.projectId
         : request.projectId;
-    const directory = join(this.root, projectId);
+    const directory = join(storageRoot(this.root), projectId);
     if (request.action === "save") {
       const content = JSON.stringify(request.conversation);
       if (Buffer.byteLength(content) > 16 * 1024 * 1024)

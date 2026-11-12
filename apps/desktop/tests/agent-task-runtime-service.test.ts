@@ -9,7 +9,7 @@ import {
   AgentCapabilityService,
   AgentProcessTerminationError,
   AgentTaskRuntimeService,
-  type AgentFileToolService,
+  type NativeToolPolicy,
 } from "../src/main/ai/agent/index.js";
 
 const projectId = "10000000-0000-4000-8000-000000000001";
@@ -28,20 +28,14 @@ function grant(
       projectId: requestedProjectId,
       readableFileTypes: ["markdown"],
       writableFileTypes: ["markdown"],
-      allowedTools: [
-        "mcp__author_copilot__read_text",
-        "mcp__author_copilot__write_text",
-        "mcp__author_copilot__edit_text",
-        "mcp__author_copilot__glob",
-        "mcp__author_copilot__grep",
-      ],
+      allowedTools: ["Read", "Write", "Edit", "Glob", "Grep"],
       timeoutMs,
     },
     requestedTaskId,
   );
 }
 
-function fileTools(): AgentFileToolService {
+function nativePolicy(): NativeToolPolicy {
   return {
     drain: vi.fn(async () => undefined),
     readText: vi.fn(),
@@ -49,7 +43,9 @@ function fileTools(): AgentFileToolService {
     editText: vi.fn(),
     glob: vi.fn(),
     grep: vi.fn(),
-  } as unknown as AgentFileToolService;
+    hooks: () => ({}),
+    canUseTool: vi.fn(),
+  } as unknown as NativeToolPolicy;
 }
 
 function request(
@@ -133,7 +129,7 @@ describe("AgentTaskRuntimeService", () => {
     grant(capabilityService);
     const service = new AgentTaskRuntimeService({
       capabilityService,
-      fileTools: fileTools(),
+      createPolicy: async () => ({ policy: nativePolicy(), skills: [] }),
       createProcessTree: () => processTree().tree,
       createQuery: () => ({
         close() {},
@@ -192,7 +188,7 @@ describe("AgentTaskRuntimeService", () => {
     }));
     const service = new AgentTaskRuntimeService({
       capabilityService,
-      fileTools: fileTools(),
+      createPolicy: async () => ({ policy: nativePolicy(), skills: [] }),
       createQuery,
       createProcessTree: () => tree.tree,
       now: () => new Date("2026-08-16T00:00:00.000Z"),
@@ -236,7 +232,7 @@ describe("AgentTaskRuntimeService", () => {
     const tree = processTree();
     const service = new AgentTaskRuntimeService({
       capabilityService,
-      fileTools: fileTools(),
+      createPolicy: async () => ({ policy: nativePolicy(), skills: [] }),
       createQuery: () => controlled.query,
       createProcessTree: () => tree.tree,
     });
@@ -260,7 +256,7 @@ describe("AgentTaskRuntimeService", () => {
         ].includes(event.type),
       ),
     ).toHaveLength(1);
-    expect(controlled.close).toHaveBeenCalledOnce();
+    expect(controlled.close).not.toHaveBeenCalled();
   });
 
   it("distinguishes timeout from shutdown and closes every active Query", async () => {
@@ -276,7 +272,7 @@ describe("AgentTaskRuntimeService", () => {
       .mockReturnValueOnce(second.query);
     const service = new AgentTaskRuntimeService({
       capabilityService,
-      fileTools: fileTools(),
+      createPolicy: async () => ({ policy: nativePolicy(), skills: [] }),
       createQuery,
       createProcessTree: () => processTree().tree,
     });
@@ -313,7 +309,7 @@ describe("AgentTaskRuntimeService", () => {
     }));
     const service = new AgentTaskRuntimeService({
       capabilityService,
-      fileTools: fileTools(),
+      createPolicy: async () => ({ policy: nativePolicy(), skills: [] }),
       createQuery,
       createProcessTree: () => processTree().tree,
     });
@@ -339,7 +335,7 @@ describe("AgentTaskRuntimeService", () => {
     });
     const service = new AgentTaskRuntimeService({
       capabilityService,
-      fileTools: fileTools(),
+      createPolicy: async () => ({ policy: nativePolicy(), skills: [] }),
       createQuery,
       createProcessTree: () => processTree().tree,
     });
@@ -357,7 +353,7 @@ describe("AgentTaskRuntimeService", () => {
     const terminationFailure = new AgentProcessTerminationError();
     const cleanupService = new AgentTaskRuntimeService({
       capabilityService,
-      fileTools: fileTools(),
+      createPolicy: async () => ({ policy: nativePolicy(), skills: [] }),
       createQuery: () => ({
         close: vi.fn(),
         async *[Symbol.asyncIterator]() {

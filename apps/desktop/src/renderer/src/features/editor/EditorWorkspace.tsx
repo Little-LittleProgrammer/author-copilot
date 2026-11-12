@@ -315,7 +315,9 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
                 <CreativeNotesPanel
                   key={activeProject.id}
                   projectId={activeProject.id}
+                  refreshKey={versionRefreshKey}
                   onDirtyChange={props.onCreativeNotesDirtyChange}
+                  onOpenSource={onOpenKnowledgeSource}
                   t={t}
                 />
               </div>

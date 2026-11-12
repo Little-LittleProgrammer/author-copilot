@@ -51,7 +51,6 @@ import {
 import {
   previewDocumentImport,
   assertImportSourceUnchanged,
-  DocumentImportError,
   type DocumentImportPreview,
 } from "../project/document-import.js";
 
@@ -62,6 +61,7 @@ import {
 
 interface PreviewEntry {
   readonly ownerId: number;
+  readonly workspaceId: string;
   readonly document?: DocumentImportPreview & {
     readonly plan: DocumentImportPlan;
   };
@@ -72,6 +72,7 @@ interface PreviewEntry {
 
 export interface ProjectIpcOptions {
   readonly trustedRendererUrl: string;
+  readonly getWorkspaceId?: () => string;
   readonly projectService: ProjectService;
   readonly getTabManager: () => TabManager | undefined;
   readonly directoryPicker: ProjectDirectoryPicker;
@@ -101,7 +102,7 @@ function summary(project: RegisteredProject): ProjectSummary {
     projectId: project.projectId,
     title: project.metadata.title,
     template: project.metadata.template,
-    rootDisplayName: basename(project.rootPath),
+    rootDisplayName: project.metadata.title,
   };
 }
 
@@ -222,12 +223,7 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
       );
       try {
         const request = ProjectCreateRequestSchema.parse(args[0]);
-        const parentPath = await options.directoryPicker.chooseCreateParent();
-        if (parentPath === undefined) {
-          return ProjectCreateResponseSchema.parse(cancelledOperation());
-        }
         const project = await options.projectService.createProject(
-          parentPath,
           request.title,
           request.template,
         );
@@ -257,6 +253,7 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
       );
       try {
         const request = ProjectImportPreviewRequestSchema.parse(args[0]);
+        const workspaceId = options.getWorkspaceId?.() ?? "local";
         for (const [token, entry] of previews) {
           if (
             entry.expiresAt <= Date.now() ||
@@ -278,12 +275,17 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
             request.template,
             request.splitChapters,
           );
+          if ((options.getWorkspaceId?.() ?? "local") !== workspaceId)
+            throw new InvalidProjectPathError(
+              "The account changed during import preview.",
+            );
           const previewToken = randomUUID();
           previews.set(previewToken, {
             rootPath: document.sourcePath,
             template: request.template,
             document: { ...document, plan },
             ownerId: event.sender.id,
+            workspaceId,
             expiresAt: Date.now() + 15 * 60_000,
           });
           return ProjectImportPreviewResponseSchema.parse({
@@ -307,9 +309,14 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
           rootPath,
           request.template,
         );
+        if ((options.getWorkspaceId?.() ?? "local") !== workspaceId)
+          throw new InvalidProjectPathError(
+            "The account changed during import preview.",
+          );
         const previewToken = randomUUID();
         previews.set(previewToken, {
           ownerId: event.sender.id,
+          workspaceId,
           rootPath: preview.rootPath,
           template: preview.template,
           expiresAt: Date.now() + 15 * 60_000,
@@ -404,7 +411,11 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
       try {
         const request = ProjectConfirmImportRequestSchema.parse(args[0]);
         const preview = getPreview(request.previewToken);
-        if (preview === undefined || preview.ownerId !== event.sender.id) {
+        if (
+          preview === undefined ||
+          preview.ownerId !== event.sender.id ||
+          preview.workspaceId !== (options.getWorkspaceId?.() ?? "local")
+        ) {
           return ProjectConfirmImportResponseSchema.parse({
             ok: false,
             error: {
@@ -415,41 +426,19 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
             },
           });
         }
-        if (preview.document && request.mode !== "copy")
-          throw new DocumentImportError("unsupported");
-        const project =
-          request.mode === "copy"
-            ? await (async () => {
-                const destinationParent =
-                  await options.directoryPicker.chooseCopyDestination();
-                if (destinationParent === undefined) return undefined;
-                if (preview.document) {
-                  await assertImportSourceUnchanged(preview.document);
-                  return options.projectService.createProject(
-                    destinationParent,
-                    preview.document.title,
-                    preview.template,
-                    preview.document.plan.documents,
-                  );
-                }
-                return options.projectService.confirmImport({
-                  mode: "copy",
-                  rootPath: preview.rootPath,
-                  template: preview.template,
-                  destinationParent,
-                });
-              })()
-            : await options.projectService.confirmImport({
-                mode: "in-place",
-                rootPath: preview.rootPath,
-                template: preview.template,
-                ...(request.reassignProjectId === undefined
-                  ? {}
-                  : { reassignProjectId: request.reassignProjectId }),
-              });
-        if (project === undefined) {
-          return ProjectConfirmImportResponseSchema.parse(cancelledOperation());
+        if (preview.document) {
+          await assertImportSourceUnchanged(preview.document);
         }
+        const project = preview.document
+          ? await options.projectService.createProject(
+              preview.document.title,
+              preview.template,
+              preview.document.plan.documents,
+            )
+          : await options.projectService.confirmImport({
+              rootPath: preview.rootPath,
+              template: preview.template,
+            });
         previews.delete(request.previewToken);
         const changedProject = summary(project);
         const response = ProjectConfirmImportResponseSchema.parse({

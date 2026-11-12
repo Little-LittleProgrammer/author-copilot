@@ -24,3 +24,5 @@ export * from "./creative-notes.js";
 export * from "./conversation.js";
 
 export * from "./creative-note-generation.js";
+
+export * from "./global-assistant.js";

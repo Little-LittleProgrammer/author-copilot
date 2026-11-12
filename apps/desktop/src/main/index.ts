@@ -1,3 +1,8 @@
+import { readFile } from "node:fs/promises";
+import { setWorkspaceTransition } from "./ipc-policy.js";
+import { WorkspaceService } from "./workspace/workspace-service.js";
+import { NativeToolPolicy } from "./ai/agent/native-tool-policy.js";
+import { GlobalAssistantService } from "./ai/global-assistant-service.js";
 import { ConversationStore } from "./ai/conversation-store.js";
 import { ApiBaseUrlSchema } from "@author-copilot/contracts";
 import { ProviderService } from "./ai/provider-service.js";
@@ -5,12 +10,11 @@ import { PlatformClient } from "./platform/platform-client.js";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import {
   AgentCapabilityService,
-  AgentFileToolService,
   AgentTaskStartService,
   AgentTaskRuntimeService,
   AgentTaskService,
 } from "./ai/agent/index.js";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { app, BrowserWindow, session } from "electron";
@@ -60,6 +64,7 @@ import {
 
 let writingStatisticsService: WritingStatisticsService | undefined;
 let creativeNoteGenerationService: CreativeNoteGenerationService | undefined;
+let globalAssistantService: GlobalAssistantService | undefined;
 let creativeNotesService: CreativeNotesService | undefined;
 let mainWindow: BrowserWindow | undefined;
 let tabManager: TabManager | undefined;
@@ -103,7 +108,7 @@ function projectSummary(
     projectId: project.projectId,
     title: project.metadata.title,
     template: project.metadata.template,
-    rootDisplayName: basename(project.rootPath),
+    rootDisplayName: project.metadata.title,
   };
 }
 
@@ -142,16 +147,24 @@ async function createMainWindow(options: MainWindowOptions): Promise<void> {
 
 app.whenReady().then(async () => {
   const target = rendererTarget();
-  writingStatisticsService = new WritingStatisticsService(
-    join(app.getPath("userData"), "writing-statistics"),
+  const workspace = new WorkspaceService(app.getPath("userData"));
+  await workspace.initialize();
+  writingStatisticsService = new WritingStatisticsService(() =>
+    workspace.runtime("writing-statistics"),
   );
   creativeNotesService = new CreativeNotesService(
-    join(app.getPath("userData"), "creative-notes"),
+    (projectId) => projectService.getProjectRoot(projectId),
+    (projectId) => agentService?.assertIdle(projectId),
   );
   const domainEvents = new DesktopDomainEvents();
   const gitOperationQueue = new ProjectOperationQueue();
-  const projectService = new ProjectService({
-    registry: new RegistryStore(app.getPath("userData")),
+  const projectService: ProjectService = new ProjectService({
+    registry: new RegistryStore(() => workspace.runtime("registry")),
+    projectsRoot: () => workspace.projectsRoot,
+    initializeProject: (root, title) =>
+      workspace.initializeProject(root, title),
+    onRegistryChanged: async () =>
+      workspace.publishCatalog(await projectService.list()),
     assertCanMutate: (projectId) => agentService?.assertIdle(projectId),
     publishEvent: domainEvents.publish,
     operationQueue: gitOperationQueue,
@@ -168,7 +181,7 @@ app.whenReady().then(async () => {
         : electronCredentialEncryption,
   });
   const knowledgeService = new KnowledgeService({
-    storageRoot: join(app.getPath("userData"), "knowledge-indexes"),
+    storageRoot: () => workspace.runtime("knowledge-indexes"),
     projectService,
   });
   domainEvents.subscribe(knowledgeService.handleDocumentSaved);
@@ -190,7 +203,9 @@ app.whenReady().then(async () => {
   const taskSnapshotService = new TaskSnapshotService({
     gitExecutable: gitRuntime.executable,
     isolationDirectory: gitIsolationDirectory,
-    snapshotsRoot: join(app.getPath("userData"), "task-snapshots"),
+    get snapshotsRoot() {
+      return workspace.runtime("task-snapshots");
+    },
     resolveProjectRoot: (projectId) => projectService.getProjectRoot(projectId),
     runtimeEnvironment: gitRuntime.environment,
     operationQueue: gitOperationQueue,
@@ -205,14 +220,35 @@ app.whenReady().then(async () => {
       taskSnapshotService.hasRecoverableTaskWhileProjectLocked(projectId),
   });
   const capabilities = new AgentCapabilityService({});
-  const fileTools = new AgentFileToolService({
-    capabilityService: capabilities,
-    projectService,
-    taskSnapshotService,
-  });
   const agentRuntime = new AgentTaskRuntimeService({
     capabilityService: capabilities,
-    fileTools,
+    createPolicy: async (input, capability) => {
+      if (input.readOnly) await workspace.initialize();
+      const skills = await workspace.skills(
+        input.readOnly ? undefined : input.projectRoot,
+        false,
+      );
+      return {
+        skills: skills.names,
+        instructions: (
+          await readFile(join(input.projectRoot, "CLAUDE.md"), "utf8")
+        ).slice(0, 64_000),
+        policy: new NativeToolPolicy({
+          capability,
+          capabilityService: capabilities,
+          projectRoot: input.projectRoot,
+          skills: skills.names,
+          skillReadRoots: skills.readRoots,
+          ...(input.readOnly
+            ? { readOnly: true }
+            : { snapshots: taskSnapshotService }),
+          onFilesChanged: async () => {
+            if (!input.readOnly)
+              await knowledgeService.invalidateProject(input.projectId);
+          },
+        }),
+      };
+    },
     ...(e2eMode && process.env.AUTHOR_COPILOT_E2E_AGENT_BASE_URL !== undefined
       ? {
           createQuery: ({ prompt, options }) =>
@@ -236,6 +272,7 @@ app.whenReady().then(async () => {
       : undefined,
     credentialStore,
   );
+  await workspace.selectIdentity((await platformClient.user())?.id ?? "local");
   const providerService = new ProviderService(
     join(app.getPath("userData"), "ai-providers.json"),
     credentialStore,
@@ -257,7 +294,13 @@ app.whenReady().then(async () => {
     snapshots: taskSnapshotService,
     projects: projectService,
     credentials: credentialStore,
-    configRoot: join(app.getPath("userData"), "agent-config"),
+    getConfigDirectory: async (projectId) => {
+      await workspace.initialize();
+      const root = await projectService.getProjectRoot(projectId);
+      await workspace.initializeProject(root, "Writing workspace");
+      await workspace.skills(root);
+      return workspace.runtimeConfigDirectory;
+    },
     onFilesChanged: async (projectId) => {
       await knowledgeService.invalidateProject(projectId);
     },
@@ -302,10 +345,48 @@ app.whenReady().then(async () => {
   if (!target.isDevelopment) {
     installProductionCsp(session.defaultSession);
   }
+  const globalAssistant = new GlobalAssistantService({
+    workspace,
+    projects: projectService,
+    providers: providerService,
+    runtime: agentRuntime,
+    capabilities,
+  });
+  globalAssistantService = globalAssistant;
+  const settleWorkspace = async () => {
+    await agentService?.cancelAll();
+    await globalAssistant.cancelAll();
+    await aiOrchestrator?.cancelAndDrain();
+    await creativeNoteGenerationService?.cancelAndDrain();
+    await knowledgeService.cancelAndDrain();
+    await writingStatisticsService?.drain();
+    await creativeNotesService?.drain();
+    await projectService.drain();
+    await gitOperationQueue.drain();
+  };
   registerIpcHandlers(target.url, {
+    globalAssistant,
+    getWorkspaceId: () => workspace.accountId,
+    beforeIdentityChange: async () => {
+      await tabManager?.closeProjectsForIdentityChange();
+      await settleWorkspace();
+    },
+    afterIdentityChange: async () => {
+      try {
+        await workspace.selectIdentity(
+          (await platformClient.user())?.id ?? "local",
+        );
+      } catch (error) {
+        await platformClient.logout();
+        await workspace.selectIdentity("local");
+        throw error;
+      } finally {
+        setImmediate(() => tabManager?.workspaceChanged());
+      }
+    },
     creativeNoteGenerationService,
-    conversationStore: new ConversationStore(
-      join(app.getPath("userData"), "conversations"),
+    conversationStore: new ConversationStore(() =>
+      workspace.runtime("conversations"),
     ),
     writingStatisticsService,
     creativeNotesService,
@@ -321,7 +402,6 @@ app.whenReady().then(async () => {
     directoryPicker:
       e2eMode && process.env.AUTHOR_COPILOT_E2E_DIRECTORY !== undefined
         ? createFixedProjectDirectoryPicker({
-            createParent: process.env.AUTHOR_COPILOT_E2E_DIRECTORY,
             ...(process.env.AUTHOR_COPILOT_E2E_EXPORT_DIRECTORY
               ? {
                   exportDirectory:
@@ -330,9 +410,6 @@ app.whenReady().then(async () => {
               : {}),
             importSource:
               process.env.AUTHOR_COPILOT_E2E_IMPORT_SOURCE ??
-              process.env.AUTHOR_COPILOT_E2E_DIRECTORY,
-            copyDestination:
-              process.env.AUTHOR_COPILOT_E2E_COPY_DESTINATION ??
               process.env.AUTHOR_COPILOT_E2E_DIRECTORY,
           })
         : createProjectDirectoryPicker(),
@@ -352,11 +429,18 @@ app.whenReady().then(async () => {
     preloadPath,
     projectService,
     beforeEndSession: async () => {
-      if (
-        platformClient.baseURL &&
-        (await credentialStore.getApiKeyStatus("platform-refresh")).configured
-      )
-        await platformClient.logout();
+      setWorkspaceTransition(true);
+      try {
+        await settleWorkspace();
+        if (
+          platformClient.baseURL &&
+          (await credentialStore.getApiKeyStatus("platform-refresh")).configured
+        )
+          await platformClient.logout();
+        await workspace.selectIdentity("local");
+      } finally {
+        setWorkspaceTransition(false);
+      }
     },
   };
   await createMainWindow(windowOptions);
@@ -381,6 +465,7 @@ app.on("will-quit", (event) => {
       agentShutdownPending = true;
       void Promise.all([
         agentService.shutdown(),
+        globalAssistantService?.cancelAll(),
         writingStatisticsService?.drain(),
         creativeNotesService?.drain(),
       ]).finally(() => {

@@ -24,9 +24,12 @@ author-copilot aims to become a creative operating system for authors:
 
 - Novel and screenplay projects, multiple work tabs, chapters and scenes
 - Markdown folder and TXT/DOC/DOCX import with preview and automatic chapter splitting
+- Account and local workspaces with native Claude file tools, scoped Skills and reviewable work edits
 - Local manuscript editing, atomic saves, conflict protection, undo/redo and find/replace
 - Daily manual writing counts, estimated typing rate, seven-day history and daily goals
 - Outlines, ideas and notes, including AI drafts with editing, diff review and explicit save
+- Author-reviewed chapter summaries with source snapshots, freshness checks and AI references
+- Editable fact library with single-chapter extraction, individual confirmation, source checks and AI references
 - Ask and Agent conversations with selected notes, documents and retrieved manuscript context
 - Agent file review, task-level keep/undo and crash recovery
 - Bundled Git, version history, diffs and local branch switching
@@ -72,14 +75,22 @@ author-copilot is built for:
 - [x] Creative note management, references, AI generation and explicit save
 - [x] Writing statistics, daily goals, chapter management and common exports
 - [x] Custom Anthropic-compatible providers and platform account/relay foundations
+- [x] Account and work AI workspaces, global/work Skills, in-work creative assets and native tool access policies
 - [ ] Real-model validation and full release qualification, signing and notarization for the latest four-architecture build
-- [ ] Chapter summaries, editable facts, long-term memory and character/worldbuilding management
+- [x] Single-document chapter summaries, editable review and source freshness checks
+- [x] Single-chapter fact candidates, author review, revision and source references
+- [ ] Long-term memory, character/world entities and fact relationships
 - [ ] Timelines, foreshadowing and consistency checks
 - [ ] Per-change AI acceptance, advanced structure editing and style presets
 - [ ] Payments, billing reconciliation and operations tools
 - [ ] Cloud sync, collaboration and professional publishing formats
 
 See the [roadmap](docs/roadmap.md) for current scope, limitations and priorities.
+
+The [workspace and Skill implementation](docs/reports/2026-11-09-ai-workspaces-and-skills.md)
+provides a read-only account assistant on the home page and scoped work assistants.
+Global and book Skills guide outline reading, asset maintenance and writing
+techniques; native writes retain review and recovery. Shell execution is disabled.
 
 ## Tech Stack
 

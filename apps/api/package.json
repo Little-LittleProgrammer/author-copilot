@@ -36,5 +36,8 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "@types/nodemailer": "catalog:"
+  },
+  "volta": {
+    "extends": "../../package.json"
   }
 }

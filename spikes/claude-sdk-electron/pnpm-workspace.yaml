@@ -7,9 +7,18 @@ catalog:
   "@electron/get": "3.1.0"
   electron: "43.1.0"
   electron-builder: "26.15.3"
+  electron-builder-squirrel-windows: "26.15.3"
+  "@modelcontextprotocol/sdk": "1.29.0"
+  zod: "4.4.3"
 
 allowBuilds:
   electron-winstaller: false
 
 overrides:
   "@electron/get@^3.0.0": 3.1.0
+
+engineStrict: true
+pmOnFail: error
+autoInstallPeers: false
+strictPeerDependencies: true
+saveExact: true

@@ -24,7 +24,6 @@ import {
 import { copyDirectoryWithoutSymlinks } from "./copy-project.js";
 import {
   DocumentConflictError,
-  DuplicateProjectIdError,
   InvalidProjectPathError,
   ProjectNotFoundError,
   ProjectServiceError,
@@ -75,6 +74,9 @@ function flattenEntries(nodes: readonly WritingEntry[]): WritingEntry[] {
 }
 
 export interface ProjectServiceOptions {
+  readonly projectsRoot?: () => string;
+  readonly initializeProject?: (root: string, title: string) => Promise<void>;
+  readonly onRegistryChanged?: () => Promise<void>;
   readonly registry: RegistryStore;
   readonly publishEvent?: ProjectEventPublisher;
   readonly writeDocument?: typeof atomicWriteFile;
@@ -275,6 +277,7 @@ export class ProjectService {
   private readonly publishEvent: ProjectEventPublisher | undefined;
   private readonly writeDocument: typeof atomicWriteFile;
   private readonly operationQueue: ProjectOperationQueue;
+  private readonly jobs = new Set<Promise<unknown>>();
   private readonly documentQueues = new Map<string, Promise<void>>();
 
   constructor(private readonly options: ProjectServiceOptions) {
@@ -284,20 +287,65 @@ export class ProjectService {
     this.operationQueue = options.operationQueue ?? new ProjectOperationQueue();
   }
 
-  async createProject(
-    parentPath: string,
+  private async managedProjectsRoot(): Promise<string> {
+    const userData = dirname(this.registry.registryPath);
+    await mkdir(userData, { recursive: true, mode: 0o700 });
+    const root =
+      this.options.projectsRoot?.() ??
+      join(await realpath(userData), "projects");
+    await mkdir(root, { recursive: true, mode: 0o700 });
+    if ((await lstat(root)).isSymbolicLink()) {
+      throw new InvalidProjectPathError(
+        "The managed projects directory cannot be a symbolic link.",
+      );
+    }
+    return root;
+  }
+
+  createProject(
     title: string,
     template: ProjectTemplate,
     initialDocuments?: readonly InitialProjectDocument[],
   ): Promise<RegisteredProject> {
-    const canonicalParent = await canonicalDirectory(parentPath);
+    return this.trackJob(() =>
+      this.createProjectInternal(title, template, initialDocuments),
+    );
+  }
+
+  private async notifyRegistryChanged(): Promise<void> {
+    // The catalog is derived and regenerated before global queries. Its failure
+    // must never delete a work whose authoritative registry already committed.
+    await this.options.onRegistryChanged?.().catch(() => undefined);
+  }
+
+  async drain(): Promise<void> {
+    await Promise.allSettled([...this.jobs]);
+    await this.registry.drain();
+  }
+
+  private trackJob<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = operation();
+    this.jobs.add(pending);
+    const cleanup = () => {
+      this.jobs.delete(pending);
+    };
+    void pending.then(cleanup, cleanup);
+    return pending;
+  }
+
+  private async createProjectInternal(
+    title: string,
+    template: ProjectTemplate,
+    initialDocuments?: readonly InitialProjectDocument[],
+  ): Promise<RegisteredProject> {
+    const canonicalParent = await this.managedProjectsRoot();
     const safeTitle = validateTitle(title);
-    const rootPath = join(canonicalParent, safeTitle);
+    const metadata = createMetadata(safeTitle, template);
+    const rootPath = join(canonicalParent, metadata.projectId);
     const stagingPath = join(
       canonicalParent,
       `.author-copilot-${randomUUID()}.staging`,
     );
-    const metadata = createMetadata(safeTitle, template);
     let published = false;
 
     await assertPathDoesNotExist(rootPath);
@@ -335,6 +383,7 @@ export class ProjectService {
         });
       }
       await writeMetadata(stagingPath, metadata);
+      await this.options.initializeProject?.(stagingPath, metadata.title);
       await assertPathDoesNotExist(rootPath);
       await rename(stagingPath, rootPath);
       published = true;
@@ -344,6 +393,7 @@ export class ProjectService {
         metadata,
       );
       await this.registry.register(project);
+      await this.notifyRegistryChanged();
       return project;
     } catch (error) {
       await rm(published ? rootPath : stagingPath, {
@@ -369,7 +419,6 @@ export class ProjectService {
       );
     }
 
-    const existingRegistration = await this.registry.get(metadata.projectId);
     const structure = await buildProjectStructure(
       metadata.projectId,
       canonicalRoot,
@@ -381,10 +430,6 @@ export class ProjectService {
       template,
       metadata,
       metadataAction: metadataResult.action,
-      ...(existingRegistration !== undefined &&
-      existingRegistration.rootPath !== canonicalRoot
-        ? { duplicateRegistration: existingRegistration }
-        : {}),
       structure: {
         template: structure.template,
         nodes: structure.nodes,
@@ -393,7 +438,11 @@ export class ProjectService {
     };
   }
 
-  async confirmImport(
+  confirmImport(options: ConfirmImportOptions): Promise<RegisteredProject> {
+    return this.trackJob(() => this.confirmImportInternal(options));
+  }
+
+  private async confirmImportInternal(
     options: ConfirmImportOptions,
   ): Promise<RegisteredProject> {
     const preview = await this.previewImport(
@@ -401,45 +450,22 @@ export class ProjectService {
       options.template,
     );
 
-    if (options.mode === "copy") {
-      return this.confirmCopyImport(options, preview);
-    }
-
-    const existingRootRegistration = await this.registry.findByRoot(
-      preview.rootPath,
+    const title = validateTitle(options.title ?? preview.metadata.title);
+    const metadata = {
+      ...createMetadata(title, options.template),
+      ...(preview.metadata.orderedPaths
+        ? { orderedPaths: preview.metadata.orderedPaths }
+        : {}),
+    };
+    const destination = join(
+      await this.managedProjectsRoot(),
+      metadata.projectId,
     );
-    if (
-      existingRootRegistration !== undefined &&
-      existingRootRegistration.projectId === preview.metadata.projectId
-    ) {
-      return existingRootRegistration;
-    }
-
-    if (
-      preview.duplicateRegistration !== undefined &&
-      options.reassignProjectId !== true
-    ) {
-      throw new DuplicateProjectIdError(
-        preview.metadata.projectId,
-        preview.duplicateRegistration.rootPath,
-        preview.rootPath,
-      );
-    }
-
-    const metadata =
-      preview.duplicateRegistration !== undefined
-        ? { ...preview.metadata, projectId: newProjectId() }
-        : preview.metadata;
-    if (
-      preview.metadataAction !== "none" ||
-      metadata.projectId !== preview.metadata.projectId
-    ) {
-      await writeMetadata(preview.rootPath, metadata);
-    }
-
-    const project = createRegisteredProject(preview.rootPath, metadata);
-    await this.registry.register(project);
-    return project;
+    return this.publishImportedProject(
+      preview.rootPath,
+      destination,
+      createRegisteredProject(destination, metadata),
+    );
   }
 
   async list(): Promise<readonly RegisteredProject[]> {
@@ -496,6 +522,7 @@ export class ProjectService {
       };
       await writeMetadata(project.rootPath, metadata);
       await this.registry.updateMetadata(projectId, metadata);
+      await this.notifyRegistryChanged();
       return { ...project, metadata };
     });
   }
@@ -962,18 +989,17 @@ export class ProjectService {
     });
   }
 
-  private async confirmCopyImport(
-    options: Extract<ConfirmImportOptions, { mode: "copy" }>,
-    preview: ImportPreview,
+  private async publishImportedProject(
+    sourcePath: string,
+    destinationPath: string,
+    project: RegisteredProject,
   ): Promise<RegisteredProject> {
-    const canonicalParent = await canonicalDirectory(options.destinationParent);
-    const title = validateTitle(options.title ?? preview.metadata.title);
-    const destinationPath = join(canonicalParent, title);
+    const canonicalParent = dirname(destinationPath);
     const stagingPath = join(
       canonicalParent,
       `.author-copilot-${randomUUID()}.importing`,
     );
-    const destinationFromSource = relative(preview.rootPath, destinationPath);
+    const destinationFromSource = relative(sourcePath, destinationPath);
     if (
       destinationFromSource === "" ||
       (!destinationFromSource.startsWith(`..${sep}`) &&
@@ -988,22 +1014,17 @@ export class ProjectService {
     let published = false;
     await assertPathDoesNotExist(destinationPath);
     try {
-      await copyDirectoryWithoutSymlinks(preview.rootPath, stagingPath);
-      const metadata = {
-        ...createMetadata(title, options.template),
-        ...(preview.metadata.orderedPaths
-          ? { orderedPaths: preview.metadata.orderedPaths }
-          : {}),
-      };
-      await writeMetadata(stagingPath, metadata);
+      await copyDirectoryWithoutSymlinks(sourcePath, stagingPath);
+      await writeMetadata(stagingPath, project.metadata);
+      await this.options.initializeProject?.(
+        stagingPath,
+        project.metadata.title,
+      );
       await assertPathDoesNotExist(destinationPath);
       await rename(stagingPath, destinationPath);
       published = true;
-      const project = createRegisteredProject(
-        await realpath(destinationPath),
-        metadata,
-      );
       await this.registry.register(project);
+      await this.notifyRegistryChanged();
       return project;
     } catch (error) {
       await rm(published ? destinationPath : stagingPath, {
@@ -1021,6 +1042,7 @@ export class ProjectService {
     }
     const canonicalRoot = await realpath(project.rootPath);
     if (
+      project.rootPath !== join(await this.managedProjectsRoot(), projectId) ||
       canonicalRoot !== project.rootPath ||
       !(await lstat(project.rootPath)).isDirectory()
     ) {

@@ -24,6 +24,9 @@ concurrency:
   group: desktop-package-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  VOLTA_FEATURE_PNPM: "1"
+
 jobs:
   package:
     name: Package ${{ matrix.os }} ${{ matrix.arch }}
@@ -57,16 +60,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+      - name: Set up Volta
+        uses: volta-cli/action@v4
         with:
-          version: 11.7.0
+          volta-version: "2.0.2"
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - name: Install pinned Node.js and pnpm
+        run: volta install node@24.22.2 pnpm@11.28.11
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

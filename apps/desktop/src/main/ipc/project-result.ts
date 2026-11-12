@@ -6,7 +6,6 @@ import { UnsupportedProjectSchemaVersionError } from "@author-copilot/project-sc
 
 import {
   DocumentConflictError,
-  DuplicateProjectIdError,
   InvalidProjectPathError,
   ProjectNotFoundError,
   ProjectRootAlreadyRegisteredError,
@@ -61,14 +60,6 @@ export function projectOperationFailure(
         expectedHash: error.expectedHash,
         actualHash: error.actualHash,
       },
-    });
-  }
-  if (error instanceof DuplicateProjectIdError) {
-    return failure({
-      code: "duplicate_project_id",
-      message: "This folder is a copy of an already registered project.",
-      retryable: true,
-      details: { projectId: error.projectId },
     });
   }
   if (error instanceof ProjectNotFoundError) {

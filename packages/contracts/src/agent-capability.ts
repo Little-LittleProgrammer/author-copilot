@@ -8,11 +8,12 @@ export const AgentFileTypeSchema = z.enum(["markdown"]);
 export type AgentFileType = z.infer<typeof AgentFileTypeSchema>;
 
 export const AgentToolNameSchema = z.enum([
-  "mcp__author_copilot__read_text",
-  "mcp__author_copilot__write_text",
-  "mcp__author_copilot__edit_text",
-  "mcp__author_copilot__glob",
-  "mcp__author_copilot__grep",
+  "Read",
+  "Write",
+  "Edit",
+  "Glob",
+  "Grep",
+  "Skill",
 ]);
 
 export type AgentToolName = z.infer<typeof AgentToolNameSchema>;
@@ -60,11 +61,9 @@ const AgentCapabilityPolicySchema = z
     }
 
     const tools = new Set(capability.allowedTools);
-    const hasReadTool = [
-      "mcp__author_copilot__read_text",
-      "mcp__author_copilot__glob",
-      "mcp__author_copilot__grep",
-    ].some((tool) => tools.has(tool as AgentToolName));
+    const hasReadTool = ["Read", "Glob", "Grep"].some((tool) =>
+      tools.has(tool as AgentToolName),
+    );
     if (hasReadTool && capability.readableFileTypes.length === 0) {
       context.addIssue({
         code: "custom",
@@ -73,10 +72,9 @@ const AgentCapabilityPolicySchema = z
       });
     }
 
-    const hasWriteTool = [
-      "mcp__author_copilot__write_text",
-      "mcp__author_copilot__edit_text",
-    ].some((tool) => tools.has(tool as AgentToolName));
+    const hasWriteTool = ["Write", "Edit"].some((tool) =>
+      tools.has(tool as AgentToolName),
+    );
     if (hasWriteTool && capability.writableFileTypes.length === 0) {
       context.addIssue({
         code: "custom",

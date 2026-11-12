@@ -4,6 +4,51 @@ export type Locale = "en-US" | "zh-CN";
 
 const messages = {
   "en-US": {
+    creativeNotesKindFact: "Fact library",
+    factsExtract: "Extract facts",
+    factsHint:
+      "Extract up to 12 candidates from one saved chapter. A selected summary locates its source chapter; extraction uses the saved manuscript. Review each fact before adding it to the library.",
+    factsDefaultInstruction:
+      "Extract independent facts explicitly supported by this chapter, preserving context and uncertainty. Return no facts if none are reliable.",
+    factsReviewHint:
+      "Edit and check each fact you accept. Editing clears its confirmation. Only checked facts are saved; rejected candidates are discarded.",
+    factsCandidate: "Candidate fact",
+    factsAccept: "I have reviewed and confirmed this fact",
+    factsReject: "Reject candidate",
+    factsSave: "Save confirmed facts",
+    factsEmpty:
+      "No reliable facts were extracted. Choose another saved chapter or try again.",
+    factsInvalid:
+      "Choose a nonempty saved chapter within 120,000 characters. Facts need a title and 1–4,000 characters of content. Check the source or try again.",
+    factsSourceChanged:
+      "Source text has changed. Review this fact against the manuscript; your edits are preserved.",
+    factsSourceMissing:
+      "Source was deleted or moved. This fact is preserved; locate the current manuscript before relying on it.",
+    creativeNotesKindSummary: "Chapter summary",
+    chapterSummaryInvalid:
+      "The chapter must contain saved text within 120,000 characters, and the AI must return a valid draft. Check the source or try again.",
+    chapterSummaryReferenceHint:
+      "Facts and chapter summaries are author-reviewed snapshots. Check their source status in Creative notes before relying on them; source text may have changed.",
+    chapterSummaryGenerate: "Summarize a chapter",
+    chapterSummaryDefaultInstruction:
+      "Summarize key events, character changes, time and place, and unresolved threads. Use only facts in this chapter.",
+    chapterSummarySource: "Source chapter / scene",
+    chapterSummarySelect: "Choose a saved chapter or scene",
+    chapterSummaryHint:
+      "Summarizes one saved document, up to 120,000 characters. Save manuscript edits first. No other notes are used as evidence; review the draft for accuracy.",
+    chapterSummarySnapshotHint:
+      "This draft records the chapter as it was when generation started. After saving, check the source status to see whether the manuscript has changed.",
+    chapterSummaryCurrent:
+      "Last check: source matches the snapshot. Review factual accuracy yourself.",
+    chapterSummaryChanged:
+      "Source text has changed. This summary may be outdated; regenerate and review it.",
+    chapterSummaryMissing:
+      "Source was deleted or moved. The saved summary is preserved; choose the current chapter to regenerate.",
+    chapterSummaryUnavailable:
+      "Unable to check the source. Retry when the project is accessible.",
+    chapterSummaryCaptured: "Source captured",
+    chapterSummaryCheck: "Check source",
+    chapterSummaryOpen: "Open source",
     creativeGenerateTitle: "AI creative notes",
     creativeGenerateHint:
       "Generate a draft, edit it, then confirm to save. Existing notes and manuscripts stay unchanged until you save.",
@@ -421,8 +466,19 @@ const messages = {
       "A selected note was deleted. Remove it from the references and try again.",
 
     comingSoon: "Soon",
+    globalAssistant: "Account AI assistant",
+    globalAssistantHint:
+      "Ask about a work or explore connections between works",
+    globalAssistantYou: "You",
+    globalAssistantWorking: "Reading your works…",
+    globalAssistantQuestion: "Question for the account assistant",
+    globalAssistantPlaceholder:
+      "Compare two works, recall a plot, or discuss a writing technique…",
+    globalAssistantClear: "Clear conversation",
+    globalAssistantCancel: "Stop",
+    globalAssistantSend: "Send",
     create: "Create",
-    createHint: "Choose a folder and create a clean, local writing project.",
+    createHint: "Create a work saved locally in the app’s data folder.",
     createNovel: "New novel",
     createProject: "Create project",
     createScreenplay: "New screenplay",
@@ -439,8 +495,6 @@ const messages = {
     discardPrompt: "Discard the unsaved changes and continue?",
     documentChanged:
       "This file changed on disk. Your edits are still here; reload before saving again.",
-    duplicateProject:
-      "This project ID is already registered elsewhere. Confirm again to register this folder as an independent copy.",
     documentEmpty: "Choose a document from the structure tree.",
     documentPlaceholder: "Start writing…",
     editor: "Editor",
@@ -449,9 +503,8 @@ const messages = {
     import: "Import",
     inAiContext: "Included in AI context",
     importConfirm: "Import project",
-    importCopy: "Copy into a new project",
     importHint:
-      "Choose a Markdown folder or a TXT / Word file, then review it before importing.",
+      "Choose a Markdown folder or a TXT / Word file, then preview it. Import creates an independent copy in the app’s local data folder; the source stays unchanged.",
     importAutoSplit: "Automatically split TXT / Word into chapters",
     importSplitHint:
       "Match standalone chapter and volume headings with built-in regular expressions, including Chapter 1, 第一章, 序章 and 番外. Turn off to import as one document. Applies to files only.",
@@ -465,7 +518,7 @@ const messages = {
     importSelectFile: "Choose TXT / Word file",
     importTextPreview: "Text preview (first 2,000 characters)",
     importDocumentHint:
-      "Creates a new work using the previewed chapter structure. Headings and all body text are preserved; the original file is unchanged. Word imports body text and paragraphs only; images, comments, headers and complex formatting are not imported. Choose a destination folder when you confirm.",
+      "Creates a new work using the previewed chapter structure. Headings and all body text are preserved; the original file is unchanged. Word imports body text and paragraphs only; images, comments, headers and complex formatting are not imported. The new work is saved in the app’s local data folder.",
     importUnsupported: "Choose a .txt, .docx or .doc file.",
     importTooLarge:
       "The file exceeds 20 MB or its extracted text exceeds 10 MB. Split it before importing.",
@@ -474,8 +527,6 @@ const messages = {
     importEmpty: "No body text was found in this file.",
     importChanged:
       "The source file changed. Select it again to refresh the preview.",
-    importInPlace: "Register folder in place",
-    importMode: "Import mode",
     importNoPreview: "No folder was selected.",
     importProject: "Import work",
     importTitle: "Import work",
@@ -520,7 +571,7 @@ const messages = {
       "Some open works have unsaved changes. Sign out and discard them?",
     location: "Parent folder",
     locationPlaceholder: "/Users/me/Documents",
-    locationPickerHint: "A folder picker will open after you choose Create.",
+    locationPickerHint: "Saved automatically in the app’s local data folder.",
     name: "Project name",
     namePlaceholder: "Untitled story",
     myWorks: "My works",
@@ -546,7 +597,6 @@ const messages = {
     projects: "Projects",
     recharge: "Recharge",
     recognizedStructure: "Recognized structure",
-    registerCopy: "Register independent copy",
     reload: "Reload from disk",
     removeBackground: "Remove image",
     removeFromAi: "Remove from AI context",
@@ -627,6 +677,48 @@ const messages = {
     taskRecoveryTitle: "Recover Agent task",
   },
   "zh-CN": {
+    creativeNotesKindFact: "事实库",
+    factsExtract: "提取候选事实",
+    factsHint:
+      "每次从一篇已保存章节提取最多 12 条候选事实。选中摘要可定位其来源章节，提取仍以已保存正文为准。请逐条审阅后入库。",
+    factsDefaultInstruction:
+      "提取本章明确支持的独立事实，保留时间、视角和不确定性。没有可靠事实时返回空列表。",
+    factsReviewHint:
+      "编辑并勾选每条认可的事实；编辑后需重新确认。只保存已勾选的事实，舍弃的候选不会入库。",
+    factsCandidate: "候选事实",
+    factsAccept: "已核对并确认此事实",
+    factsReject: "舍弃候选",
+    factsSave: "保存已确认事实",
+    factsEmpty: "没有提取到可靠事实。可选择其他已保存章节或重试。",
+    factsInvalid:
+      "请选择非空且不超过 120,000 字符的已保存章节。每条事实需有标题和 1–4,000 字符正文，请检查来源或重试。",
+    factsSourceChanged:
+      "来源正文已变化，请对照原文复核此事实；作者修订仍保留。",
+    factsSourceMissing:
+      "来源已删除或移动，此事实仍保留。请定位当前正文后再引用。",
+    creativeNotesKindSummary: "章节摘要",
+    chapterSummaryInvalid:
+      "来源章节须有已保存的正文，且不超过 120,000 字符。请检查来源或重新生成有效草稿。",
+    chapterSummaryReferenceHint:
+      "事实和章节摘要是作者确认的快照。引用前请在创作资料中检查来源状态，正文可能已变化。",
+    chapterSummaryGenerate: "生成章节摘要",
+    chapterSummaryDefaultInstruction:
+      "总结主要事件、人物变化、时间地点和未解决线索，只使用本章明确写出的事实。",
+    chapterSummarySource: "来源章节 / 场景",
+    chapterSummarySelect: "选择已保存的章节或场景",
+    chapterSummaryHint:
+      "每次总结一篇已保存的正文，最多 120,000 字符。请先保存正文修改。其他资料不作为事实来源，生成后请核对内容。",
+    chapterSummarySnapshotHint:
+      "草稿记录了生成开始时的正文版本。保存后可检查来源状态，确认正文是否已变化。",
+    chapterSummaryCurrent:
+      "上次检查：来源与生成时一致，内容准确性仍需作者核对。",
+    chapterSummaryChanged: "来源正文已变化，摘要可能过期。请重新生成并审阅。",
+    chapterSummaryMissing:
+      "来源已删除或移动，已保存摘要仍保留。可选择当前章节重新生成。",
+    chapterSummaryUnavailable: "暂时无法检查来源，请确认作品可访问后重试。",
+    chapterSummaryCaptured: "来源读取时间",
+    chapterSummaryCheck: "检查来源状态",
+    chapterSummaryOpen: "打开来源正文",
     creativeGenerateTitle: "AI 生成资料",
     creativeGenerateHint:
       "先生成草稿并编辑，确认后才保存。生成过程不会修改已有资料或正文。",
@@ -1006,8 +1098,18 @@ const messages = {
     creativeNotesReferenceMissing: "所选资料已被删除，请移除该引用后重试。",
 
     comingSoon: "即将开放",
+    globalAssistant: "全局 AI 助手",
+    globalAssistantHint: "查询作品剧情，探索作品之间的关联",
+    globalAssistantYou: "你",
+    globalAssistantWorking: "正在阅读你的作品…",
+    globalAssistantQuestion: "向全局助手提问",
+    globalAssistantPlaceholder:
+      "比较两部作品、回顾某本书的剧情，或讨论写作技巧…",
+    globalAssistantClear: "清空对话",
+    globalAssistantCancel: "停止",
+    globalAssistantSend: "发送",
     create: "创建",
-    createHint: "选择父目录，创建一个干净的本地写作项目。",
+    createHint: "创建作品，正文自动保存在应用的本地数据目录中。",
     createNovel: "新建小说",
     createProject: "新建项目",
     createScreenplay: "新建剧本",
@@ -1023,8 +1125,6 @@ const messages = {
     discard: "放弃修改",
     discardPrompt: "放弃当前未保存的修改并继续吗？",
     documentChanged: "文件已被外部修改。当前编辑仍保留，请重新加载后再保存。",
-    duplicateProject:
-      "该项目 ID 已在其他目录登记。再次确认可将当前文件夹登记为独立副本。",
     documentEmpty: "请从作品结构中选择一个文稿。",
     documentPlaceholder: "开始写作…",
     editor: "编辑器",
@@ -1033,9 +1133,8 @@ const messages = {
     import: "导入",
     inAiContext: "已加入 AI 上下文",
     importConfirm: "确认导入",
-    importCopy: "复制为新项目",
     importHint:
-      "选择 Markdown 作品文件夹，或 TXT / Word 文件，预览后确认导入。",
+      "选择 Markdown 作品文件夹或 TXT / Word 文件并预览。确认后复制到应用的本地数据目录，原始文件保持不变。",
     importAutoSplit: "TXT / Word 自动拆章",
     importSplitHint:
       "通过内置正则识别独立成行的章节、卷标题，如第一章、序章、番外、Chapter 1。关闭后整篇导入，仅对文件生效。",
@@ -1047,15 +1146,13 @@ const messages = {
     importSelectFile: "选择 TXT / Word 文件",
     importTextPreview: "正文预览（前 2000 字符）",
     importDocumentHint:
-      "按照预览目录创建新作品，保留标题和全部正文，原文件保持不变。Word 仅导入文字正文和段落，不包含图片、批注、页眉页脚和复杂版式。确认时选择新作品的存放位置。",
+      "按照预览目录创建新作品，保留标题和全部正文，原文件保持不变。Word 仅导入文字正文和段落，不包含图片、批注、页眉页脚和复杂版式。新作品自动保存在应用的本地数据目录中。",
     importUnsupported: "请选择 .txt、.docx 或 .doc 文件。",
     importTooLarge: "文件超过 20 MB 或提取的正文超过 10 MB，请拆分后导入。",
     importUnreadable:
       "无法读取文档，请检查文件是否损坏或受密码保护；TXT 可尝试另存为 UTF-8 后重试。",
     importEmpty: "文件中没有可导入的文字正文。",
     importChanged: "源文件已发生变化，请重新选择文件并预览。",
-    importInPlace: "就地登记文件夹",
-    importMode: "导入方式",
     importNoPreview: "未选择文件夹。",
     importProject: "导入作品",
     importTitle: "导入作品",
@@ -1095,9 +1192,9 @@ const messages = {
     loginTitle: "欢迎回来",
     logout: "退出登录",
     logoutDirtyTabsPrompt: "打开的作品中还有未保存的修改。退出并放弃修改吗？",
-    location: "父目录",
+    location: "存放位置",
     locationPlaceholder: "/Users/me/Documents",
-    locationPickerHint: "点击创建后，将由系统选择父目录。",
+    locationPickerHint: "自动保存在应用的本地数据目录中。",
     name: "项目名称",
     namePlaceholder: "未命名作品",
     myWorks: "我的作品",
@@ -1122,7 +1219,6 @@ const messages = {
     projects: "项目",
     recharge: "充值中心",
     recognizedStructure: "识别到的结构",
-    registerCopy: "登记为独立副本",
     reload: "从磁盘重新加载",
     removeBackground: "移除图片",
     removeFromAi: "从 AI 上下文移除",

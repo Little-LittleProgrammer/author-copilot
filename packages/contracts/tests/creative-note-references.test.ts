@@ -57,7 +57,7 @@ describe("creative note reference contracts", () => {
         prompt: "Continue",
         readableFileTypes: ["markdown"],
         writableFileTypes: ["markdown"],
-        allowedTools: ["mcp__author_copilot__write_text"],
+        allowedTools: ["Write"],
         timeoutMs: 60_000,
         creativeNotes,
       }).creativeNotes,

@@ -3,9 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "description": "Local-first writing workspace with controlled AI assistance",
-  "packageManager": "pnpm@11.7.0",
+  "packageManager": "pnpm@11.28.11",
   "engines": {
-    "node": ">=24.21.0"
+    "node": ">=24.22.2 <25",
+    "pnpm": "11.28.11"
   },
   "scripts": {
     "boundaries": "node tooling/scripts/check-boundaries.mjs",
@@ -19,7 +20,7 @@
     "git-runtime:verify": "node tooling/scripts/verify-git-runtime.ts",
     "lint": "turbo run lint",
     "package": "turbo run package",
-    "rag-benchmark:test": "python3 -m unittest discover -s spikes/rag-benchmark/tests -v",
+    "rag-benchmark:test": "uv run --project spikes/rag-benchmark --locked python -m unittest discover -s spikes/rag-benchmark/tests -v",
     "test": "pnpm git-runtime:test && pnpm rag-benchmark:test && turbo run test",
     "test:e2e": "pnpm --filter @author-copilot/desktop test:e2e",
     "typecheck": "turbo run typecheck",
@@ -31,7 +32,7 @@
     "typescript": "catalog:"
   },
   "volta": {
-    "node": "24.21.0",
-    "pnpm": "11.7.0"
+    "node": "24.22.2",
+    "pnpm": "11.28.11"
   }
 }

@@ -1,4 +1,11 @@
 import type {
+  GlobalAssistantRequest,
+  GlobalAssistantResponse,
+} from "@author-copilot/contracts";
+import type {
+  CreativeFactsConfirmRequest,
+  CreativeNoteSourceStatusRequest,
+  CreativeNoteSourceStatusResponse,
   CreativeNoteGenerationRequest,
   CreativeNoteGenerationResponse,
   CreativeNoteGenerationCancelRequest,
@@ -112,6 +119,10 @@ import type {
 } from "@author-copilot/contracts";
 
 export interface AuthorCopilotApi {
+  readonly onWorkspaceChanged: (listener: () => void) => () => void;
+  readonly globalAssistant: (
+    request: GlobalAssistantRequest,
+  ) => Promise<GlobalAssistantResponse>;
   readonly writingStatistics: {
     readonly history: (
       request: WritingStatisticsHistoryRequest,
@@ -130,6 +141,12 @@ export interface AuthorCopilotApi {
     ) => Promise<WritingGoalResponse>;
   };
   readonly creativeNotes: {
+    readonly confirmFacts: (
+      request: CreativeFactsConfirmRequest,
+    ) => Promise<CreativeNotesListResponse>;
+    readonly sourceStatus: (
+      request: CreativeNoteSourceStatusRequest,
+    ) => Promise<CreativeNoteSourceStatusResponse>;
     readonly generate: (
       request: CreativeNoteGenerationRequest,
     ) => Promise<CreativeNoteGenerationResponse>;

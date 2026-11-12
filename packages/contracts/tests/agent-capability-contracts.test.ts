@@ -9,13 +9,7 @@ import {
 
 const projectId = "10000000-0000-4000-8000-000000000001";
 const taskId = "20000000-0000-4000-8000-000000000002";
-const allowedTools = [
-  "mcp__author_copilot__read_text",
-  "mcp__author_copilot__write_text",
-  "mcp__author_copilot__edit_text",
-  "mcp__author_copilot__glob",
-  "mcp__author_copilot__grep",
-] as const;
+const allowedTools = ["Read", "Write", "Edit", "Glob", "Grep"] as const;
 
 describe("Agent task capability contracts", () => {
   it("binds one task to one project and an explicit bounded policy", () => {
@@ -71,7 +65,7 @@ describe("Agent task capability contracts", () => {
         projectId,
         readableFileTypes: [],
         writableFileTypes: [],
-        allowedTools: ["mcp__author_copilot__read_text"],
+        allowedTools: ["Read"],
         timeoutMs: 60_000,
       }).success,
     ).toBe(false);
@@ -80,7 +74,7 @@ describe("Agent task capability contracts", () => {
         projectId,
         readableFileTypes: ["markdown"],
         writableFileTypes: [],
-        allowedTools: ["mcp__author_copilot__write_text"],
+        allowedTools: ["Write"],
         timeoutMs: 60_000,
       }).success,
     ).toBe(false);

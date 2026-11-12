@@ -114,6 +114,9 @@ export function CreativeNotePicker({
                   }
                 />
                 <span>{note.title}</span>
+                {note.kind === "fact" ? (
+                  <small>{t("creativeNotesKindFact")}</small>
+                ) : null}
                 {note.content.length > AI_CREATIVE_NOTE_MAX_CHARACTERS ? (
                   <small>{t("creativeNotesReferenceTruncated")}</small>
                 ) : null}
@@ -127,6 +130,11 @@ export function CreativeNotePicker({
       ) ? (
         <p className="creative-note-reference-warning">
           {t("creativeNotesReferenceLimit")}
+        </p>
+      ) : null}
+      {selected.some((note) => note.source) ? (
+        <p className="creative-note-reference-warning">
+          {t("chapterSummaryReferenceHint")}
         </p>
       ) : null}
     </div>

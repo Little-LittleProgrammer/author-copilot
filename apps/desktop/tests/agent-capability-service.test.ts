@@ -7,13 +7,7 @@ const projectId = "10000000-0000-4000-8000-000000000001";
 const otherProjectId = "10000000-0000-4000-8000-000000000002";
 const taskId = "20000000-0000-4000-8000-000000000001";
 const nextTaskId = "20000000-0000-4000-8000-000000000002";
-const allowedTools = [
-  "mcp__author_copilot__read_text",
-  "mcp__author_copilot__write_text",
-  "mcp__author_copilot__edit_text",
-  "mcp__author_copilot__glob",
-  "mcp__author_copilot__grep",
-] as const;
+const allowedTools = ["Read", "Write", "Edit", "Glob", "Grep"] as const;
 
 function grant(
   service: AgentCapabilityService,
@@ -60,7 +54,7 @@ describe("AgentCapabilityService", () => {
       service.authorize({
         taskId,
         projectId,
-        tool: "mcp__author_copilot__read_text",
+        tool: "Read",
         relativePath: "第一卷/第一章/正文.MD",
       }).taskId,
     ).toBe(taskId);
@@ -68,7 +62,7 @@ describe("AgentCapabilityService", () => {
       service.authorize({
         taskId,
         projectId,
-        tool: "mcp__author_copilot__grep",
+        tool: "Grep",
       }).taskId,
     ).toBe(taskId);
   });
@@ -83,7 +77,7 @@ describe("AgentCapabilityService", () => {
         service.authorize({
           taskId,
           projectId: otherProjectId,
-          tool: "mcp__author_copilot__read_text",
+          tool: "Read",
           relativePath: "正文.md",
         }),
       "project_mismatch",
@@ -102,7 +96,7 @@ describe("AgentCapabilityService", () => {
         service.authorize({
           taskId,
           projectId,
-          tool: "mcp__author_copilot__read_text",
+          tool: "Read",
           relativePath: "../秘密.md",
         }),
       "invalid_path",
@@ -112,7 +106,7 @@ describe("AgentCapabilityService", () => {
         service.authorize({
           taskId,
           projectId,
-          tool: "mcp__author_copilot__write_text",
+          tool: "Write",
           relativePath: "脚本.ts",
         }),
       "file_type_not_authorized",
@@ -142,7 +136,7 @@ describe("AgentCapabilityService", () => {
         service.authorize({
           taskId,
           projectId,
-          tool: "mcp__author_copilot__grep",
+          tool: "Grep",
         }),
       "task_expired",
     );
@@ -154,7 +148,7 @@ describe("AgentCapabilityService", () => {
         service.authorize({
           taskId: nextTaskId,
           projectId,
-          tool: "mcp__author_copilot__grep",
+          tool: "Grep",
         }),
       "task_not_found",
     );
@@ -170,7 +164,7 @@ describe("AgentCapabilityService", () => {
         service.authorize({
           taskId,
           projectId,
-          tool: "mcp__author_copilot__grep",
+          tool: "Grep",
         }),
       "task_not_found",
     );

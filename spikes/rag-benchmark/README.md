@@ -12,21 +12,21 @@ the M0 quality gate.
 
 ## Run
 
-Python 3.11 or newer is required. The SQLite candidate uses only Python's standard library and a
+Development uses uv 0.13.7 and Python 3.14.10 (pinned in `.python-version`). The SQLite candidate uses only Python's standard library and a
 Python build whose SQLite includes FTS5 with the trigram tokenizer. Trigram is intentional: the
 standard `unicode61` tokenizer does not segment continuous Chinese text into useful search terms.
 
 ```bash
 cd spikes/rag-benchmark
-python3 benchmark.py generate --output .work/generated-fixture
-python3 -m unittest discover -s tests -v
-python3 benchmark.py run \
+uv run --locked python benchmark.py generate --output .work/generated-fixture
+uv run --locked python -m unittest discover -s tests -v
+uv run --locked python benchmark.py run \
   --adapter sqlite-fts5 \
   --work-dir .work/sqlite-smoke \
   --report reports/sqlite-fts5-smoke.json
 
-python3 benchmark.py generate --scale 100000 --output .work/formal-100k
-python3 benchmark.py run \
+uv run --locked python benchmark.py generate --scale 100000 --output .work/formal-100k
+uv run --locked python benchmark.py run \
   --adapter sqlite-fts5 \
   --formal \
   --work-dir .work/sqlite-formal \
@@ -44,7 +44,7 @@ gate remains false. The tracked qualification evidence is `reviews/formal-label-
 Use the interactive reviewer to inspect the canonical source text and record one decision at a time:
 
 ```bash
-python3 benchmark.py review \
+uv run --locked python benchmark.py review \
   --fixture .work/formal-100k \
   --reviewed-by "Reviewer Name"
 ```
@@ -62,7 +62,7 @@ different project ID.
 Trying the reserved LanceDB candidate fails explicitly and emits no metrics:
 
 ```bash
-python3 benchmark.py run --adapter lancedb
+uv run --locked python benchmark.py run --adapter lancedb
 ```
 
 `pyproject.toml` records the future, local-only LanceDB dependency range. The adapter must implement

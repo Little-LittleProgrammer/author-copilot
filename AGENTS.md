@@ -10,7 +10,7 @@ The project is under active development without compatibility guarantees. Full r
 
 ## Build, Test, and Development Commands
 
-Use Node.js 24.21.0+ and pnpm 11.7. Install dependencies with `pnpm install --frozen-lockfile`.
+Use Volta-managed Node.js 24.22.2 and pnpm 11.28.11 with VOLTA_FEATURE_PNPM=1. Use uv 0.13.7 to run Python 3.14.10. Install dependencies with `pnpm install --frozen-lockfile`.
 
 - `pnpm dev`: run workspace development tasks in parallel.
 - `pnpm build`: build all packages and applications through Turbo.

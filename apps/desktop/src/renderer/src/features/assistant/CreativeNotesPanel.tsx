@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type JSX,
@@ -27,28 +28,44 @@ import {
 } from "./creative-notes-api.js";
 
 import { CreativeNoteGenerationDialog } from "./CreativeNoteGenerationDialog.js";
+import { CreativeNoteSource } from "./CreativeNoteSource.js";
+import { FactExtractionDialog } from "./FactExtractionDialog.js";
 
 type NoteFilter = CreativeNoteKind | "all";
 
 interface CreativeNotesPanelProps {
   readonly projectId: string;
+  readonly refreshKey?: number;
   readonly onDirtyChange: (dirty: boolean) => void;
+  readonly onOpenSource: (relativePath: string) => void;
   readonly t: (key: MessageKey) => string;
 }
 
-const kinds: readonly CreativeNoteKind[] = ["outline", "inspiration", "note"];
+const kinds: readonly CreativeNoteKind[] = [
+  "outline",
+  "inspiration",
+  "note",
+  "summary",
+  "fact",
+];
 const kindLabels: Readonly<Record<CreativeNoteKind, MessageKey>> = {
+  summary: "creativeNotesKindSummary",
   outline: "creativeNotesKindOutline",
   inspiration: "creativeNotesKindInspiration",
   note: "creativeNotesKindNote",
+  fact: "creativeNotesKindFact",
 };
 
 export function CreativeNotesPanel({
   projectId,
+  refreshKey = 0,
   onDirtyChange,
+  onOpenSource,
   t,
 }: CreativeNotesPanelProps): JSX.Element {
   const [generationOpen, setGenerationOpen] = useState(false);
+  const [factsOpen, setFactsOpen] = useState(false);
+  const [generationKind, setGenerationKind] = useState<CreativeNoteKind>();
   const [generationDirty, setGenerationDirty] = useState(false);
   const api = useMemo(() => getCreativeNotesApi(), []);
   const [notes, setNotes] = useState<readonly CreativeNote[]>([]);
@@ -60,7 +77,12 @@ export function CreativeNotesPanel({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
-  const [baseline, setBaseline] = useState({
+  const [baseline, setBaseline] = useState<{
+    kind: CreativeNoteKind;
+    title: string;
+    content: string;
+    updatedAt?: string;
+  }>({
     kind: "note" as CreativeNoteKind,
     title: "",
     content: "",
@@ -69,6 +91,11 @@ export function CreativeNotesPanel({
     kind !== baseline.kind ||
     title !== baseline.title ||
     content !== baseline.content;
+
+  const editorState = useRef({ dirty, saving, generationDirty, selectedId });
+  useEffect(() => {
+    editorState.current = { dirty, saving, generationDirty, selectedId };
+  }, [dirty, saving, generationDirty, selectedId]);
 
   useEffect(() => {
     onDirtyChange(dirty || saving || generationDirty);
@@ -87,7 +114,21 @@ export function CreativeNotesPanel({
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
-      setNotes(await api.list(projectId));
+      const fresh = await api.list(projectId);
+      setNotes(fresh);
+      const state = editorState.current;
+      const current = fresh.find((note) => note.id === state.selectedId);
+      if (current && !state.dirty && !state.saving && !state.generationDirty) {
+        setKind(current.kind);
+        setTitle(current.title);
+        setContent(current.content);
+        setBaseline({
+          kind: current.kind,
+          title: current.title,
+          content: current.content,
+          updatedAt: current.updatedAt,
+        });
+      }
       setError(undefined);
     } catch {
       setError(t("creativeNotesUnavailable"));
@@ -99,7 +140,7 @@ export function CreativeNotesPanel({
   useEffect(() => {
     const initialRefresh = window.setTimeout(() => void refresh(), 0);
     return () => window.clearTimeout(initialRefresh);
-  }, [projectId, refresh]);
+  }, [projectId, refresh, refreshKey]);
 
   const visibleNotes = notes.filter(
     (note) => filter === "all" || note.kind === filter,
@@ -116,7 +157,12 @@ export function CreativeNotesPanel({
     setKind(note.kind);
     setTitle(note.title);
     setContent(note.content);
-    setBaseline({ kind: note.kind, title: note.title, content: note.content });
+    setBaseline({
+      kind: note.kind,
+      title: note.title,
+      content: note.content,
+      updatedAt: note.updatedAt,
+    });
     setError(undefined);
   };
 
@@ -128,11 +174,18 @@ export function CreativeNotesPanel({
 
   const reset = (): void => {
     setSelectedId(undefined);
-    setKind(filter === "all" ? "note" : filter);
+    setKind(
+      filter === "all" || filter === "summary" || filter === "fact"
+        ? "note"
+        : filter,
+    );
     setTitle("");
     setContent("");
     setBaseline({
-      kind: filter === "all" ? "note" : filter,
+      kind:
+        filter === "all" || filter === "summary" || filter === "fact"
+          ? "note"
+          : filter,
       title: "",
       content: "",
     });
@@ -148,10 +201,13 @@ export function CreativeNotesPanel({
         ? await api.update({
             projectId,
             noteId: selected.id,
-            expectedUpdatedAt: selected.updatedAt,
+            expectedUpdatedAt: baseline.updatedAt ?? selected.updatedAt,
             kind,
             title,
             content,
+            ...((kind === "summary" || kind === "fact") && selected.source
+              ? { source: selected.source }
+              : {}),
           })
         : await api.create({ projectId, kind, title, content });
       setNotes((current) => [
@@ -166,6 +222,7 @@ export function CreativeNotesPanel({
         kind: note.kind,
         title: note.title,
         content: note.content,
+        updatedAt: note.updatedAt,
       });
       setError(undefined);
     } catch (reason) {
@@ -261,13 +318,77 @@ export function CreativeNotesPanel({
         type="button"
         size="sm"
         variant="outline"
-        disabled={saving || loading || generationOpen || dirty}
-        onClick={() => setGenerationOpen(true)}
+        disabled={saving || loading || generationOpen || factsOpen || dirty}
+        onClick={() => {
+          if (selected?.kind === "fact") {
+            setFactsOpen(true);
+            return;
+          }
+          setGenerationKind(undefined);
+          setGenerationOpen(true);
+        }}
         title={dirty ? t("creativeGenerateSaveFirst") : undefined}
       >
         <Sparkles size={14} />
         {t("creativeGenerateTitle")}
       </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={saving || loading || generationOpen || factsOpen || dirty}
+        onClick={() => {
+          setGenerationKind("summary");
+          setGenerationOpen(true);
+        }}
+      >
+        <BookOpen size={14} />
+        {t("chapterSummaryGenerate")}
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={saving || loading || generationOpen || factsOpen || dirty}
+        onClick={() => setFactsOpen(true)}
+      >
+        <Sparkles size={14} />
+        {t("factsExtract")}
+      </Button>
+      {factsOpen ? (
+        <FactExtractionDialog
+          projectId={projectId}
+          initialPath={selected?.source?.relativePath}
+          onDirtyChange={setGenerationDirty}
+          onClose={() => {
+            setFactsOpen(false);
+            setGenerationDirty(false);
+          }}
+          onSaved={(saved) => {
+            setNotes((current) => [
+              ...saved,
+              ...current.filter(
+                (note) => !saved.some((entry) => entry.id === note.id),
+              ),
+            ]);
+            const note = saved[0];
+            if (note) {
+              setSelectedId(note.id);
+              setKind(note.kind);
+              setTitle(note.title);
+              setContent(note.content);
+              setBaseline({
+                kind: note.kind,
+                title: note.title,
+                content: note.content,
+              });
+            }
+            setFilter("fact");
+            setError(undefined);
+          }}
+          t={t}
+        />
+      ) : null}
       {dirty ? (
         <p className="text-sm text-muted-foreground">
           {t("creativeGenerateSaveFirst")}
@@ -276,7 +397,12 @@ export function CreativeNotesPanel({
       {generationOpen ? (
         <CreativeNoteGenerationDialog
           projectId={projectId}
-          selected={selected}
+          selected={
+            generationKind === "summary" && selected?.kind !== "summary"
+              ? undefined
+              : selected
+          }
+          {...(generationKind ? { initialKind: generationKind } : {})}
           onDirtyChange={setGenerationDirty}
           onClose={() => {
             setGenerationOpen(false);
@@ -354,20 +480,35 @@ export function CreativeNotesPanel({
           className="creative-notes-editor"
           onSubmit={(event) => void save(event)}
         >
+          {selected?.source ? (
+            <CreativeNoteSource
+              key={`${selected.id}:${selected.updatedAt}`}
+              projectId={projectId}
+              note={selected}
+              onOpenSource={onOpenSource}
+              t={t}
+            />
+          ) : null}
           <label>
             <span>{t("creativeNotesType")}</span>
             <select
               value={kind}
-              disabled={saving || loading}
+              disabled={saving || loading || Boolean(selected?.source)}
               onChange={(event) =>
                 setKind(event.target.value as CreativeNoteKind)
               }
             >
-              {kinds.map((entry) => (
-                <option key={entry} value={entry}>
-                  {t(kindLabels[entry])}
-                </option>
-              ))}
+              {kinds
+                .filter(
+                  (entry) =>
+                    (entry !== "summary" && entry !== "fact") ||
+                    selected?.kind === entry,
+                )
+                .map((entry) => (
+                  <option key={entry} value={entry}>
+                    {t(kindLabels[entry])}
+                  </option>
+                ))}
             </select>
           </label>
           <label>
@@ -385,7 +526,7 @@ export function CreativeNotesPanel({
             <Textarea
               value={content}
               disabled={saving || loading}
-              maxLength={100_000}
+              maxLength={kind === "fact" ? 4_000 : 100_000}
               onChange={(event) => setContent(event.target.value)}
               placeholder={t("creativeNotesContentPlaceholder")}
             />
@@ -406,7 +547,11 @@ export function CreativeNotesPanel({
             <Button
               type="submit"
               size="sm"
-              disabled={saving || title.trim().length === 0}
+              disabled={
+                saving ||
+                title.trim().length === 0 ||
+                (kind === "fact" && !content.trim())
+              }
             >
               <Save size={14} />
               {saving ? t("saving") : t("creativeNotesSave")}

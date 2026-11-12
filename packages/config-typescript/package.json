@@ -24,5 +24,8 @@
     "eslint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "volta": {
+    "extends": "../../package.json"
   }
 }

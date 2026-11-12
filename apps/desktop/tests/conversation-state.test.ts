@@ -22,6 +22,29 @@ const message = (
   mode: "ask",
 });
 describe("conversation continuity", () => {
+  it.each(["summary", "fact"] as const)(
+    "carries %s provenance into the immutable AI reference snapshot",
+    (kind) => {
+      const source = {
+        relativePath: "第一章.md",
+        contentHash: "a".repeat(64),
+        capturedAt: "2026-11-07T00:00:00.000Z",
+      };
+      const note = {
+        id: randomUUID(),
+        kind,
+        title: "摘要",
+        content: "已经核对的事实",
+        createdAt: source.capturedAt,
+        updatedAt: source.capturedAt,
+        source,
+      };
+      const references = creativeNoteReferences([note]);
+      note.source.contentHash = "b".repeat(64);
+      expect(references[0]?.source?.contentHash).toBe("a".repeat(64));
+      expect(references[0]?.source?.relativePath).toBe("第一章.md");
+    },
+  );
   it("captures bounded note snapshots and carries shortened references into later turns", () => {
     const note = {
       id: randomUUID(),

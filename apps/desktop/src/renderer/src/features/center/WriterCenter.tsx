@@ -1,3 +1,4 @@
+import { GlobalAssistant } from "../assistant/GlobalAssistant.js";
 import { useMemo, useState, type JSX } from "react";
 import {
   BookOpen,
@@ -66,6 +67,7 @@ export function WriterCenter({
   projects,
   t,
 }: WriterCenterProps): JSX.Element {
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [filter, setFilter] = useState<WorkFilter>("all");
   const [query, setQuery] = useState("");
   const visibleProjects = useMemo(() => {
@@ -255,15 +257,15 @@ export function WriterCenter({
           <button
             className="quick-action"
             type="button"
-            onClick={onOpenCredentials}
-            aria-label={t("quickAi")}
+            onClick={() => setAssistantOpen(true)}
+            aria-label={t("globalAssistant")}
           >
             <span className="quick-action-icon ai-icon">
               <Sparkles size={20} />
             </span>
             <span>
-              <strong>{t("quickAi")}</strong>
-              <small>{t("quickAiHint")}</small>
+              <strong>{t("globalAssistant")}</strong>
+              <small>{t("globalAssistantHint")}</small>
             </span>
           </button>
           <button
@@ -411,6 +413,13 @@ export function WriterCenter({
           </section>
         )}
       </main>
+      {assistantOpen ? (
+        <GlobalAssistant
+          key={account}
+          onClose={() => setAssistantOpen(false)}
+          t={t}
+        />
+      ) : null}
     </div>
   );
 }

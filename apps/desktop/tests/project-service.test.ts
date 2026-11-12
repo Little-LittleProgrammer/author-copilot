@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
   chmod,
-  cp,
   lstat,
   mkdir,
   mkdtemp,
@@ -21,7 +20,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   DocumentConflictError,
-  DuplicateProjectIdError,
   InvalidProjectPathError,
   ProjectService,
   RegistryStore,
@@ -94,8 +92,8 @@ afterEach(async () => {
 
 describe("ProjectService templates and registry", () => {
   it("rejects every registered operation after the root is redirected", async () => {
-    const { projects, base, service } = await fixture();
-    const project = await service.createProject(projects, "Original", "novel");
+    const { base, service } = await fixture();
+    const project = await service.createProject("Original", "novel");
     const outside = join(base, "unregistered");
     await mkdir(outside);
     await writeFile(join(outside, "outside.md"), "unregistered content");
@@ -139,8 +137,8 @@ describe("ProjectService templates and registry", () => {
   it.each([".git", ".GIT", "author-copilot.json"])(
     "rejects reserved folder rename %s before changing the structure",
     async (name) => {
-      const { projects, service } = await fixture();
-      const project = await service.createProject(projects, "Book", "novel");
+      const { service } = await fixture();
+      const project = await service.createProject("Book", "novel");
       await expect(
         service.renameEntry(project.projectId, "第一卷/第一章", name),
       ).rejects.toBeInstanceOf(InvalidProjectPathError);
@@ -159,12 +157,8 @@ describe("ProjectService templates and registry", () => {
   );
 
   it("creates a Chinese novel template and registers its canonical path", async () => {
-    const { projects, userData, service } = await fixture();
-    const project = await service.createProject(
-      projects,
-      "长夜之后 #1",
-      "novel",
-    );
+    const { userData, service } = await fixture();
+    const project = await service.createProject("长夜之后 #1", "novel");
 
     expect(
       await readFile(
@@ -193,9 +187,8 @@ describe("ProjectService templates and registry", () => {
   });
 
   it("creates the fixed screenplay template", async () => {
-    const { projects, service } = await fixture();
+    const { service } = await fixture();
     const project = await service.createProject(
-      projects,
       "雨夜 剧本 & 草稿",
       "screenplay",
     );
@@ -212,8 +205,8 @@ describe("ProjectService templates and registry", () => {
 
 describe("writing structure creation and ordering", () => {
   it("does not replace damaged ordering metadata or publish new files", async () => {
-    const { projects, service } = await fixture();
-    const project = await service.createProject(projects, "损坏顺序", "novel");
+    const { service } = await fixture();
+    const project = await service.createProject("损坏顺序", "novel");
     const metadataPath = join(project.rootPath, "author-copilot.json");
     await writeFile(metadataPath, "{damaged");
     await expect(
@@ -231,8 +224,8 @@ describe("writing structure creation and ordering", () => {
   });
 
   it("allows renaming into a deleted name without persisting stale duplicate identities", async () => {
-    const { projects, service } = await fixture();
-    const project = await service.createProject(projects, "复用名称", "novel");
+    const { service } = await fixture();
+    const project = await service.createProject("复用名称", "novel");
     await service.createEntry({
       projectId: project.projectId,
       role: "chapter",
@@ -249,8 +242,8 @@ describe("writing structure creation and ordering", () => {
   });
 
   it("keeps known empty volumes, chapters and acts usable after deleting the last manuscript", async () => {
-    const { projects, service } = await fixture();
-    const novel = await service.createProject(projects, "空目录小说", "novel");
+    const { service } = await fixture();
+    const novel = await service.createProject("空目录小说", "novel");
     await service.deleteEntry(novel.projectId, "第一卷/第一章/01-正文.md");
     expect(
       (await service.getStructure(novel.projectId)).nodes[0]?.children[0],
@@ -271,11 +264,7 @@ describe("writing structure creation and ordering", () => {
       parentPath: "第一卷",
       name: "新章",
     });
-    const screenplay = await service.createProject(
-      projects,
-      "空目录剧本",
-      "screenplay",
-    );
+    const screenplay = await service.createProject("空目录剧本", "screenplay");
     await service.deleteEntry(screenplay.projectId, "第一幕/01-第一场.md");
     expect(
       (await service.getStructure(screenplay.projectId)).nodes[0],
@@ -288,8 +277,8 @@ describe("writing structure creation and ordering", () => {
     });
   });
   it("serializes duplicate creation and preserves ordering in copied imports", async () => {
-    const { base, projects, service } = await fixture();
-    const project = await service.createProject(projects, "复制排序", "novel");
+    const { service } = await fixture();
+    const project = await service.createProject("复制排序", "novel");
     const input = {
       projectId: project.projectId,
       role: "volume" as const,
@@ -306,13 +295,9 @@ describe("writing structure creation and ordering", () => {
       results.filter((result) => result.status === "rejected"),
     ).toHaveLength(1);
     await service.moveEntry(project.projectId, "新卷", "up");
-    const destinationParent = join(base, "copied");
-    await mkdir(destinationParent);
     const copy = await service.confirmImport({
-      mode: "copy",
       rootPath: project.rootPath,
       template: "novel",
-      destinationParent,
     });
     expect(copy.projectId).not.toBe(project.projectId);
     expect(
@@ -323,8 +308,8 @@ describe("writing structure creation and ordering", () => {
   });
 
   it("rolls back newly created entries and renames if publishing metadata fails", async () => {
-    const { projects, service } = await fixture();
-    const project = await service.createProject(projects, "原子顺序", "novel");
+    const { service } = await fixture();
+    const project = await service.createProject("原子顺序", "novel");
     const originalWrite = fileUtils.atomicWriteFile;
     const failure = vi
       .spyOn(fileUtils, "atomicWriteFile")
@@ -367,8 +352,8 @@ describe("writing structure creation and ordering", () => {
     ).toBe(before);
   });
   it("creates novel entries with editable bodies and appends them in requested order", async () => {
-    const { projects, service } = await fixture();
-    const project = await service.createProject(projects, "章节管理", "novel");
+    const { service } = await fixture();
+    const project = await service.createProject("章节管理", "novel");
     const volume = await service.createEntry({
       projectId: project.projectId,
       role: "volume",
@@ -405,8 +390,8 @@ describe("writing structure creation and ordering", () => {
   });
 
   it("creates screenplay acts and scenes and rejects novel-only roles", async () => {
-    const { projects, service } = await fixture();
-    const project = await service.createProject(projects, "剧本", "screenplay");
+    const { service } = await fixture();
+    const project = await service.createProject("剧本", "screenplay");
     expect(
       await service.createEntry({
         projectId: project.projectId,
@@ -436,8 +421,8 @@ describe("writing structure creation and ordering", () => {
   });
 
   it("moves existing and imported entries without changing paths or file contents, across restarts and renames", async () => {
-    const { projects, userData, service } = await fixture();
-    const project = await service.createProject(projects, "排序", "novel", [
+    const { userData, service } = await fixture();
+    const project = await service.createProject("排序", "novel", [
       { relativePath: "0001-卷/0001-开篇/01-正文.md", content: "一" },
       { relativePath: "0001-卷/0002-续篇/01-正文.md", content: "二" },
       { relativePath: "0002-卷末/0001-终章/01-正文.md", content: "三" },
@@ -488,8 +473,8 @@ describe("writing structure creation and ordering", () => {
   });
 
   it("rejects invalid parents, escaping names, duplicate display names and symlinks without changing existing text", async () => {
-    const { base, projects, service } = await fixture();
-    const project = await service.createProject(projects, "边界", "novel");
+    const { base, service } = await fixture();
+    const project = await service.createProject("边界", "novel");
     for (const input of [
       { role: "chapter", name: "新章" },
       { role: "volume", parentPath: "第一卷", name: "嵌套卷" },
@@ -538,7 +523,7 @@ describe("writing structure creation and ordering", () => {
   });
 
   it("blocks structural writes while an Agent owns the project", async () => {
-    const { projects, registry } = await fixture();
+    const { registry } = await fixture();
     let busy = false;
     const service = new ProjectService({
       registry,
@@ -546,7 +531,7 @@ describe("writing structure creation and ordering", () => {
         if (busy) throw new Error("Agent is busy");
       },
     });
-    const project = await service.createProject(projects, "互斥", "novel");
+    const project = await service.createProject("互斥", "novel");
     busy = true;
     await expect(
       service.createEntry({
@@ -563,13 +548,13 @@ describe("writing structure creation and ordering", () => {
 
 describe("ProjectService atomic document batches", () => {
   it("writes multiple documents before invoking the completion callback", async () => {
-    const { projects, userData } = await fixture();
+    const { userData } = await fixture();
     const publish = vi.fn();
     const service = new ProjectService({
       registry: new RegistryStore(userData),
       publishEvent: publish,
     });
-    const project = await service.createProject(projects, "批量写作", "novel");
+    const project = await service.createProject("批量写作", "novel");
     const first = "第一卷/第一章/01-正文.md";
     const secondPath = join(project.rootPath, "第一卷", "第一章", "02-正文.md");
     await writeFile(secondPath, "第二章", "utf8");
@@ -606,7 +591,7 @@ describe("ProjectService atomic document batches", () => {
   });
 
   it("rolls back earlier files when a later atomic replacement fails", async () => {
-    const { projects, userData } = await fixture();
+    const { userData } = await fixture();
     let writes = 0;
     const service = new ProjectService({
       registry: new RegistryStore(userData),
@@ -616,7 +601,7 @@ describe("ProjectService atomic document batches", () => {
         await atomicWriteFile(...args);
       },
     });
-    const project = await service.createProject(projects, "回滚写作", "novel");
+    const project = await service.createProject("回滚写作", "novel");
     const first = "第一卷/第一章/01-正文.md";
     const second = "第一卷/第一章/02-正文.md";
     await writeFile(join(project.rootPath, second), "第二章", "utf8");
@@ -654,85 +639,73 @@ describe("ProjectService atomic document batches", () => {
 });
 
 describe("ProjectService import", () => {
-  it("keeps preview read-only and reports Markdown outside the template shape", async () => {
-    const { projects, service } = await fixture();
+  it("keeps previews and sources unchanged and imports all files into managed storage", async () => {
+    const { projects, userData, service } = await fixture();
     const source = join(projects, "旧作品");
     await mkdir(join(source, "第一卷", "第一章"), { recursive: true });
     await writeFile(join(source, "第一卷", "第一章", "01-开场.md"), "开场");
     await writeFile(join(source, "散落 笔记.md"), "不能丢");
     const before = await readdir(source, { recursive: true });
-
     const preview = await service.previewImport(source, "novel");
-
     expect(preview.metadataAction).toBe("create");
     expect(preview.structure.nodes).toHaveLength(1);
     expect(preview.structure.unclassified).toEqual([
       expect.objectContaining({ relativePath: "散落 笔记.md" }),
     ]);
     expect(await readdir(source, { recursive: true })).toEqual(before);
-    await expect(
-      lstat(join(source, "author-copilot.json")),
-    ).rejects.toMatchObject({ code: "ENOENT" });
-
     const imported = await service.confirmImport({
-      mode: "in-place",
       rootPath: source,
       template: "novel",
     });
+    expect(imported.rootPath).toBe(
+      join(await realpath(userData), "projects", imported.projectId),
+    );
     expect(
-      JSON.parse(await readFile(join(source, "author-copilot.json"), "utf8")),
+      await readFile(join(imported.rootPath, "散落 笔记.md"), "utf8"),
+    ).toBe("不能丢");
+    expect(
+      JSON.parse(
+        await readFile(join(imported.rootPath, "author-copilot.json"), "utf8"),
+      ),
     ).toMatchObject({ projectId: imported.projectId, template: "novel" });
+    expect(await readdir(source, { recursive: true })).toEqual(before);
+    await expect(
+      lstat(join(source, "author-copilot.json")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("validates existing metadata and requires explicit duplicate-ID reassignment", async () => {
+  it("imports repeated titles and IDs as independent works without changing the source", async () => {
     const { projects, service } = await fixture();
-    const original = join(projects, "原作");
-    const duplicate = join(projects, "原作副本");
-    await mkdir(original);
-    const sharedMetadata = metadata("原作", "novel");
-    await writeMetadata(original, sharedMetadata);
-    await service.confirmImport({
-      mode: "in-place",
-      rootPath: original,
+    const source = join(projects, "原作");
+    await mkdir(source);
+    const original = metadata("原作", "novel");
+    await writeMetadata(source, original);
+    const first = await service.confirmImport({
+      rootPath: source,
       template: "novel",
     });
-    await cp(original, duplicate, { recursive: true });
-
-    const preview = await service.previewImport(duplicate, "novel");
-    expect(preview.metadataAction).toBe("none");
-    expect(preview.duplicateRegistration?.rootPath).toBe(
-      await realpath(original),
-    );
-    await expect(
-      service.confirmImport({
-        mode: "in-place",
-        rootPath: duplicate,
-        template: "novel",
-      }),
-    ).rejects.toBeInstanceOf(DuplicateProjectIdError);
-
-    const reassigned = await service.confirmImport({
-      mode: "in-place",
-      rootPath: duplicate,
+    const second = await service.confirmImport({
+      rootPath: source,
       template: "novel",
-      reassignProjectId: true,
     });
-    expect(reassigned.projectId).not.toBe(sharedMetadata.projectId);
+    expect(first.projectId).not.toBe(original.projectId);
+    expect(second.projectId).not.toBe(first.projectId);
+    expect(first.rootPath).not.toBe(second.rootPath);
     expect(
-      JSON.parse(await readFile(join(original, "author-copilot.json"), "utf8")),
-    ).toMatchObject({ projectId: sharedMetadata.projectId });
+      JSON.parse(await readFile(join(source, "author-copilot.json"), "utf8")),
+    ).toEqual(original);
+    expect(await service.list()).toHaveLength(2);
   });
 
   it("rejects invalid or unsupported existing metadata without rewriting it", async () => {
     const { projects, service } = await fixture();
     const source = join(projects, "损坏元数据");
     await mkdir(source);
-    const rawMetadata = `${JSON.stringify({
+    const rawMetadata = JSON.stringify({
       ...metadata("损坏元数据", "novel"),
       schemaVersion: 99,
-    })}\n`;
-    await writeFile(join(source, "author-copilot.json"), rawMetadata, "utf8");
-
+    });
+    await writeFile(join(source, "author-copilot.json"), rawMetadata);
     await expect(service.previewImport(source, "novel")).rejects.toThrow(
       "schemaVersion 99 is not supported",
     );
@@ -741,119 +714,53 @@ describe("ProjectService import", () => {
     );
   });
 
-  it("copies an import recursively as an independent project", async () => {
-    const { projects, service } = await fixture();
-    const source = join(projects, "源 项目");
-    const destinationParent = join(projects, "目标目录");
-    await mkdir(join(source, "第一幕"), { recursive: true });
-    await mkdir(destinationParent);
-    await writeFile(join(source, "第一幕", "01-咖啡馆.md"), "INT. CAFE");
-
-    const copied = await service.confirmImport({
-      mode: "copy",
-      rootPath: source,
-      template: "screenplay",
-      destinationParent,
-      title: "复制 剧本 #2",
-    });
-
-    expect(
-      await readFile(join(copied.rootPath, "第一幕", "01-咖啡馆.md"), "utf8"),
-    ).toBe("INT. CAFE");
-    expect(copied.metadata.title).toBe("复制 剧本 #2");
-    await expect(
-      lstat(join(source, "author-copilot.json")),
-    ).rejects.toMatchObject({ code: "ENOENT" });
-  });
-
-  it("never deletes an existing copy destination when import fails", async () => {
-    const { projects, service } = await fixture();
+  it("cleans failed imports without changing the source or existing works", async () => {
+    const { projects, userData, registry } = await fixture();
+    const service = new ProjectService({ registry });
+    const existing = await service.createProject("已有作品", "novel");
     const source = join(projects, "源项目");
-    const destinationParent = join(projects, "目标目录");
-    const existingDestination = join(destinationParent, "源项目");
-    await mkdir(join(source, "第一幕"), { recursive: true });
-    await writeFile(join(source, "第一幕", "01-开场.md"), "source", "utf8");
-    await mkdir(existingDestination, { recursive: true });
-    await writeFile(
-      join(existingDestination, "用户已有文件.md"),
-      "must survive",
-      "utf8",
+    await mkdir(source);
+    await writeFile(join(source, "笔记.md"), "source");
+    vi.spyOn(registry, "register").mockRejectedValueOnce(
+      new Error("registry unavailable"),
     );
-
     await expect(
-      service.confirmImport({
-        mode: "copy",
-        rootPath: source,
-        template: "screenplay",
-        destinationParent,
-      }),
-    ).rejects.toThrow("destination folder already exists");
-
-    expect(
-      await readFile(join(existingDestination, "用户已有文件.md"), "utf8"),
-    ).toBe("must survive");
-    expect(
-      (await readdir(destinationParent)).filter((name) =>
-        name.endsWith(".importing"),
-      ),
-    ).toEqual([]);
+      service.confirmImport({ rootPath: source, template: "novel" }),
+    ).rejects.toThrow("registry unavailable");
+    expect(await readdir(join(userData, "projects"))).toEqual([
+      existing.projectId,
+    ]);
+    expect(await readFile(join(source, "笔记.md"), "utf8")).toBe("source");
   });
 
-  it("rejects a copy destination nested inside the source", async () => {
-    const { projects, service } = await fixture();
-    const source = join(projects, "不能递归复制自身");
-    await mkdir(source);
-    await writeFile(join(source, "笔记.md"), "content");
-
+  it("rejects importing an ancestor of managed storage", async () => {
+    const { base, service } = await fixture();
     await expect(
-      service.confirmImport({
-        mode: "copy",
-        rootPath: source,
-        template: "novel",
-        destinationParent: source,
-        title: "子副本",
-      }),
+      service.confirmImport({ rootPath: base, template: "novel" }),
     ).rejects.toThrow("cannot be inside its source");
-    await expect(lstat(join(source, "子副本"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    expect(await service.list()).toEqual([]);
   });
 
   it.skipIf(process.platform === "win32")(
     "rejects symlinks during recursive copy and removes the partial destination",
     async () => {
-      const { projects, service } = await fixture();
+      const { projects, userData, service } = await fixture();
       const source = join(projects, "带链接项目");
-      const destinationParent = join(projects, "复制目标");
       await mkdir(source);
-      await mkdir(destinationParent);
       await writeFile(join(source, "真实.md"), "content");
       await symlink(join(source, "真实.md"), join(source, "链接.md"));
-
       await expect(
-        service.confirmImport({
-          mode: "copy",
-          rootPath: source,
-          template: "novel",
-          destinationParent,
-          title: "不得创建",
-        }),
+        service.confirmImport({ rootPath: source, template: "novel" }),
       ).rejects.toBeInstanceOf(SymbolicLinkNotAllowedError);
-      await expect(
-        lstat(join(destinationParent, "不得创建")),
-      ).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await readdir(join(userData, "projects"))).toEqual([]);
     },
   );
 });
 
 describe("ProjectService document authorization and atomic save", () => {
   it("rejects traversal, absolute paths, metadata, .git, and symlink access", async () => {
-    const { base, projects, service } = await fixture();
-    const project = await service.createProject(
-      projects,
-      "受保护项目",
-      "novel",
-    );
+    const { base, service } = await fixture();
+    const project = await service.createProject("受保护项目", "novel");
     const outside = join(base, "outside.md");
     await writeFile(outside, "secret");
 
@@ -881,7 +788,7 @@ describe("ProjectService document authorization and atomic save", () => {
 
   it("atomically saves with optimistic conflict checks, mode retention, cleanup, and an async event", async () => {
     const events: unknown[] = [];
-    const { projects, userData } = await fixture();
+    const { userData } = await fixture();
     const service = new ProjectService({
       registry: new RegistryStore(userData),
       publishEvent: (event) => {
@@ -889,7 +796,7 @@ describe("ProjectService document authorization and atomic save", () => {
         return new Promise(() => undefined);
       },
     });
-    const project = await service.createProject(projects, "原子保存", "novel");
+    const project = await service.createProject("原子保存", "novel");
     const relativePath = "第一卷/第一章/01-正文.md";
     const documentPath = join(
       project.rootPath,
@@ -936,8 +843,8 @@ describe("ProjectService document authorization and atomic save", () => {
 
 describe("ProjectService project and structure editing", () => {
   it("updates the displayed title without renaming the project folder", async () => {
-    const { projects, userData, service } = await fixture();
-    const project = await service.createProject(projects, "原书名", "novel");
+    const { userData, service } = await fixture();
+    const project = await service.createProject("原书名", "novel");
 
     const updated = await service.updateProjectTitle(
       project.projectId,
@@ -959,12 +866,8 @@ describe("ProjectService project and structure editing", () => {
   });
 
   it("renames volumes, chapters, and documents while retaining storage extensions", async () => {
-    const { projects, service } = await fixture();
-    const project = await service.createProject(
-      projects,
-      "可编辑目录",
-      "novel",
-    );
+    const { service } = await fixture();
+    const project = await service.createProject("可编辑目录", "novel");
 
     expect(await service.renameEntry(project.projectId, "第一卷", "序卷")).toBe(
       "序卷",
@@ -996,12 +899,8 @@ describe("ProjectService project and structure editing", () => {
   });
 
   it("rejects unsafe and colliding structure names", async () => {
-    const { projects, service } = await fixture();
-    const project = await service.createProject(
-      projects,
-      "受保护目录",
-      "novel",
-    );
+    const { service } = await fixture();
+    const project = await service.createProject("受保护目录", "novel");
     await mkdir(join(project.rootPath, "已有卷"));
 
     await expect(
@@ -1016,12 +915,8 @@ describe("ProjectService project and structure editing", () => {
   });
 
   it("deletes only recognized documents and structure directories", async () => {
-    const { projects, service } = await fixture();
-    const project = await service.createProject(
-      projects,
-      "可删除目录",
-      "novel",
-    );
+    const { service } = await fixture();
+    const project = await service.createProject("可删除目录", "novel");
     await mkdir(join(project.rootPath, "隐藏资料"));
 
     await expect(
@@ -1031,11 +926,7 @@ describe("ProjectService project and structure editing", () => {
     await expect(
       lstat(join(project.rootPath, "第一卷", "第一章", "01-正文.md")),
     ).rejects.toMatchObject({ code: "ENOENT" });
-    const directoryProject = await service.createProject(
-      projects,
-      "删除整卷",
-      "novel",
-    );
+    const directoryProject = await service.createProject("删除整卷", "novel");
     await service.deleteEntry(directoryProject.projectId, "第一卷");
     await expect(
       lstat(join(directoryProject.rootPath, "第一卷")),
@@ -1043,12 +934,8 @@ describe("ProjectService project and structure editing", () => {
   });
 
   it("preserves a structure directory when it contains a non-writing file", async () => {
-    const { projects, service } = await fixture();
-    const project = await service.createProject(
-      projects,
-      "包含资料的目录",
-      "novel",
-    );
+    const { service } = await fixture();
+    const project = await service.createProject("包含资料的目录", "novel");
     const chapterPath = join(project.rootPath, "第一卷", "第一章");
     const resourcePath = join(chapterPath, "人物关系.png");
     await writeFile(resourcePath, "image-placeholder", "utf8");

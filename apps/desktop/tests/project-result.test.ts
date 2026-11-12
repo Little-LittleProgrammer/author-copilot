@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   DocumentConflictError,
-  DuplicateProjectIdError,
   InvalidProjectPathError,
   ProjectNotFoundError,
 } from "../src/main/project/index.js";
@@ -26,18 +25,6 @@ describe("project IPC error normalization", () => {
         },
       },
     });
-  });
-
-  it("does not expose absolute registry paths for duplicate IDs", () => {
-    const result = projectOperationFailure(
-      new DuplicateProjectIdError(
-        "10000000-0000-4000-8000-000000000001",
-        "/Users/private/original",
-        "/Users/private/copy",
-      ),
-    );
-    expect(result.error.code).toBe("duplicate_project_id");
-    expect(JSON.stringify(result)).not.toContain("/Users/private");
   });
 
   it("maps path and missing-file failures without raw filesystem details", () => {

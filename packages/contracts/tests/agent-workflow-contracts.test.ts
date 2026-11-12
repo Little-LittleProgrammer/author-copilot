@@ -12,7 +12,7 @@ const grant = {
   prompt: "Revise this work",
   readableFileTypes: ["markdown"],
   writableFileTypes: ["markdown"],
-  allowedTools: ["mcp__author_copilot__write_text"],
+  allowedTools: ["Write"],
   timeoutMs: 60_000,
 };
 describe("Agent desktop workflow contracts", () => {

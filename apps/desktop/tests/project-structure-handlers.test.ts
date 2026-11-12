@@ -43,9 +43,7 @@ describe("project structure IPC", () => {
       getTabManager: () => manager as unknown as TabManager,
       directoryPicker: {
         chooseExportDestination: vi.fn(),
-        chooseCreateParent: vi.fn(),
         chooseImportSource: vi.fn(),
-        chooseCopyDestination: vi.fn(),
         chooseImportFile: vi.fn(),
       },
     });

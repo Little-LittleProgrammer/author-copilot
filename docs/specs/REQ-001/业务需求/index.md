@@ -12,7 +12,11 @@
 2. 需要支持多主题 dark/light
 3. 内置 Git 运行时，不依赖用户预装 Git，详见 [Git 方案](./sub/git.md)
 4. 使用 Git 对书籍、小说等创作项目进行版本管理
-5. Windows 端内置 Git Bash，供 Claude Agent SDK 使用
+5. Windows 端内置 Git Bash 用于经验证的运行流程；Agent Shell 的开放以实际沙箱隔离能力为前提，不把 Git Bash 当作文件权限边界。
+6. 建立账号全局工作区和单部作品工作区，两级均有 `.claude`，分别维护全局与本书 Skill。
+7. 首页全局 AI 助手服务当前账号，支持全局问题、查询某书剧情、比较多部作品关联；作品助手的文件访问限定当前作品。
+8. 大纲与创作资产的读取、维护及写作技巧以 Skill 组织；作品正文、专属 Skill 和资产保存在作品目录，界面与技能使用同一份资产。
+9. 目标采用 Claude 原生工具，通过 Settings、Hooks 与必要的 Shell 沙箱约束访问；权限配置由应用保护。已实现首版（全局助手只读，Shell 关闭），不要求旧作品迁移，详见[工作区与 Skill 规范](../../ai-workspaces-and-skills.md)。
 
 #### 技术栈
 

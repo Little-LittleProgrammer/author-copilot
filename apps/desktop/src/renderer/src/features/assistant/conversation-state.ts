@@ -16,6 +16,7 @@ export function creativeNoteReferences(
     notes.map((note) => ({
       id: note.id,
       kind: note.kind,
+      ...(note.source ? { source: note.source } : {}),
       title: note.title,
       content: note.content.slice(0, AI_CREATIVE_NOTE_MAX_CHARACTERS),
       updatedAt: note.updatedAt,

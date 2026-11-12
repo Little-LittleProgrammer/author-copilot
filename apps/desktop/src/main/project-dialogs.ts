@@ -17,10 +17,8 @@ export interface ProjectDirectoryPicker {
   chooseExportDestination(
     options: ExportDestinationOptions,
   ): Promise<string | undefined>;
-  chooseCreateParent(): Promise<string | undefined>;
   chooseImportFile(): Promise<string | undefined>;
   chooseImportSource(): Promise<string | undefined>;
-  chooseCopyDestination(): Promise<string | undefined>;
 }
 
 async function chooseDirectory(
@@ -60,11 +58,6 @@ export function createProjectDirectoryPicker(): ProjectDirectoryPicker {
         : await dialog.showSaveDialog(options);
       return result.canceled ? undefined : result.filePath;
     },
-    chooseCreateParent: () =>
-      chooseDirectory({
-        title: "Choose where to create the project",
-        buttonLabel: "Choose folder",
-      }),
     chooseImportFile: async () => {
       const options: OpenDialogOptions = {
         title: "Import TXT or Word document",
@@ -83,19 +76,12 @@ export function createProjectDirectoryPicker(): ProjectDirectoryPicker {
         title: "Choose a Markdown project folder",
         buttonLabel: "Preview import",
       }),
-    chooseCopyDestination: () =>
-      chooseDirectory({
-        title: "Choose where to copy the imported project",
-        buttonLabel: "Copy project",
-      }),
   };
 }
 
 export interface FixedProjectDirectories {
   readonly exportDirectory?: string;
-  readonly createParent: string;
   readonly importSource: string;
-  readonly copyDestination: string;
 }
 
 export function createFixedProjectDirectoryPicker(
@@ -103,10 +89,8 @@ export function createFixedProjectDirectoryPicker(
 ): ProjectDirectoryPicker {
   return {
     chooseExportDestination: async ({ fileName }) =>
-      join(directories.exportDirectory ?? directories.createParent, fileName),
-    chooseCreateParent: async () => directories.createParent,
+      join(directories.exportDirectory ?? directories.importSource, fileName),
     chooseImportSource: async () => directories.importSource,
     chooseImportFile: async () => directories.importSource,
-    chooseCopyDestination: async () => directories.copyDestination,
   };
 }

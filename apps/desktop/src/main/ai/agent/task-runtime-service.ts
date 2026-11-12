@@ -15,13 +15,13 @@ import {
 
 import { normalizeClaudeError } from "../errors.js";
 import type { AgentCapabilityService } from "./capability-service.js";
-import type { AgentFileToolService } from "./file-tool-service.js";
+import type { AgentTaskCapability } from "@author-copilot/contracts";
+import type { NativeToolPolicy } from "./native-tool-policy.js";
 import {
   AgentProcessTerminationError,
   AgentSdkProcessTree,
 } from "./process-tree.js";
 import { buildAgentSdkOptions } from "./sdk-policy.js";
-import { createAgentMcpServer } from "./tool-server.js";
 
 const MAX_AGENT_PROMPT_CHARACTERS = 200_000;
 
@@ -77,7 +77,14 @@ export interface AgentTaskRuntimeServiceOptions {
     AgentCapabilityService,
     "authorize" | "authorizeTask" | "revoke"
   >;
-  readonly fileTools: AgentFileToolService;
+  readonly createPolicy: (
+    request: AgentTaskExecutionRequest,
+    capability: AgentTaskCapability,
+  ) => Promise<{
+    policy: NativeToolPolicy;
+    skills: readonly string[];
+    instructions?: string;
+  }>;
   readonly createQuery?: AgentSdkQueryFactory;
   readonly createProcessTree?: () => AgentProcessTreeHandle;
   readonly now?: () => Date;
@@ -93,6 +100,7 @@ export interface AgentTaskExecutionRequest {
   readonly baseURL?: string;
   readonly model?: string;
   readonly sourceEnvironment?: NodeJS.ProcessEnv;
+  readonly readOnly?: boolean;
 }
 
 export class AgentTaskRuntimeError extends Error {
@@ -176,6 +184,14 @@ function processTerminationError(): AppError {
 }
 
 export class AgentTaskRuntimeService {
+  private readonly preparing = new Map<
+    string,
+    {
+      projectId: string;
+      controller: AbortController;
+      reason?: AgentTaskAbortReason;
+    }
+  >();
   private readonly activeByTask = new Map<string, ActiveAgentTask>();
   private readonly activeByProject = new Map<string, ActiveAgentTask>();
   private readonly createQuery: AgentSdkQueryFactory;
@@ -205,7 +221,14 @@ export class AgentTaskRuntimeService {
       sequence: 0,
     };
     const controller = new AbortController();
+    const preparation: {
+      projectId: string;
+      controller: AbortController;
+      reason?: AgentTaskAbortReason;
+    } = { projectId: input.projectId, controller };
+    this.preparing.set(input.taskId, preparation);
     let processTree: AgentProcessTreeHandle | undefined;
+    let policy: NativeToolPolicy | undefined;
     let active: ActiveAgentTask | undefined;
     let timeout: NodeJS.Timeout | undefined;
     let sdkResult: SDKResultMessage | undefined;
@@ -217,19 +240,22 @@ export class AgentTaskRuntimeService {
     try {
       this.emit(events, { type: "agent.task.started" });
       processTree = this.createProcessTree();
-      const mcpServer = createAgentMcpServer({
-        capability,
-        fileTools: this.options.fileTools,
-      });
+      const configured = await this.options.createPolicy(input, capability);
+      policy = configured.policy;
+      if (controller.signal.aborted)
+        throw new Error("Task cancelled during workspace preparation.");
       const sdkOptions = buildAgentSdkOptions({
         capability,
-        capabilityService: this.options.capabilityService,
         projectRoot: input.projectRoot,
         configDirectory: input.configDirectory,
         apiKey: input.apiKey,
         ...(input.baseURL ? { baseURL: input.baseURL } : {}),
         ...(input.model ? { model: input.model } : {}),
-        mcpServer,
+        policy,
+        skills: configured.skills,
+        ...(configured.instructions
+          ? { instructions: configured.instructions }
+          : {}),
         spawnClaudeCodeProcess: processTree.spawn,
         ...(input.sourceEnvironment === undefined
           ? {}
@@ -247,6 +273,7 @@ export class AgentTaskRuntimeService {
         processTree,
         closing: false,
       };
+      this.preparing.delete(input.taskId);
       this.activeByTask.set(active.taskId, active);
       this.activeByProject.set(active.projectId, active);
       timeout = setTimeout(
@@ -292,10 +319,14 @@ export class AgentTaskRuntimeService {
       }
     } catch (error) {
       terminal =
-        active?.abortReason === undefined
+        (active?.abortReason ?? preparation.reason) === undefined
           ? { status: "failed", error: normalizeClaudeError(error) }
-          : { status: "cancelled", reason: active.abortReason };
+          : {
+              status: "cancelled",
+              reason: (active?.abortReason ?? preparation.reason)!,
+            };
     } finally {
+      this.preparing.delete(input.taskId);
       if (timeout !== undefined) clearTimeout(timeout);
       if (active === undefined) {
         controller.abort();
@@ -314,7 +345,7 @@ export class AgentTaskRuntimeService {
           terminal = { status: "failed", error: normalizeClaudeError(error) };
         }
       } finally {
-        await this.options.fileTools.drain(input.taskId);
+        await policy?.drain();
         if (active !== undefined) this.remove(active);
       }
     }
@@ -326,6 +357,13 @@ export class AgentTaskRuntimeService {
   }
 
   cancel(taskId: string): boolean {
+    const preparing = this.preparing.get(taskId);
+    if (preparing) {
+      if (preparing.reason) return false;
+      preparing.reason = "user";
+      preparing.controller.abort();
+      return true;
+    }
     const active = this.activeByTask.get(taskId);
     if (active === undefined || active.closing) return false;
     this.requestCancellation(active, "user");
@@ -333,6 +371,10 @@ export class AgentTaskRuntimeService {
   }
 
   shutdown(): void {
+    for (const preparing of this.preparing.values()) {
+      preparing.reason = "shutdown";
+      preparing.controller.abort();
+    }
     for (const active of this.activeByTask.values()) {
       this.requestCancellation(active, "shutdown");
     }
@@ -349,6 +391,10 @@ export class AgentTaskRuntimeService {
       );
     }
     if (
+      this.preparing.has(input.taskId) ||
+      [...this.preparing.values()].some(
+        (item) => item.projectId === input.projectId,
+      ) ||
       this.activeByTask.has(input.taskId) ||
       this.activeByProject.has(input.projectId)
     ) {

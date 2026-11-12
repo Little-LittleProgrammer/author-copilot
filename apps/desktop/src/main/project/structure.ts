@@ -32,7 +32,15 @@ async function scanMarkdownFiles(rootPath: string): Promise<ScannedDocument[]> {
     entries.sort((left, right) => left.name.localeCompare(right.name));
 
     for (const entry of entries) {
-      if (entry.name === ".git" || entry.name === "author-copilot.json") {
+      if (
+        [
+          ".git",
+          ".claude",
+          "CLAUDE.md",
+          "创作资产",
+          "author-copilot.json",
+        ].includes(entry.name)
+      ) {
         continue;
       }
 

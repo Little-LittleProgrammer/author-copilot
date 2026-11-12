@@ -42,24 +42,14 @@ export interface ImportPreview {
   readonly template: ProjectTemplate;
   readonly metadata: ProjectMetadata;
   readonly metadataAction: "none" | "create" | "migrate";
-  readonly duplicateRegistration?: RegisteredProject;
   readonly structure: Omit<ProjectStructure, "projectId">;
 }
 
-export type ConfirmImportOptions =
-  | {
-      readonly mode: "in-place";
-      readonly rootPath: string;
-      readonly template: ProjectTemplate;
-      readonly reassignProjectId?: boolean;
-    }
-  | {
-      readonly mode: "copy";
-      readonly rootPath: string;
-      readonly template: ProjectTemplate;
-      readonly destinationParent: string;
-      readonly title?: string;
-    };
+export interface ConfirmImportOptions {
+  readonly rootPath: string;
+  readonly template: ProjectTemplate;
+  readonly title?: string;
+}
 
 export interface ReadDocumentResult {
   readonly content: string;

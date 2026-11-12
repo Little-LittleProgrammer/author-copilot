@@ -1,6 +1,10 @@
 export class ProjectOperationQueue {
   private readonly queues = new Map<string, Promise<void>>();
 
+  public async drain(): Promise<void> {
+    await Promise.all(this.queues.values());
+  }
+
   public async run<T>(
     projectId: string,
     operation: () => Promise<T>,

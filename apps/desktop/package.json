@@ -68,12 +68,12 @@
     "electron-builder": "catalog:",
     "electron-vite": "catalog:",
     "eslint": "catalog:",
-    "rolldown": "catalog:",
     "selfsigned": "catalog:",
     "ssh2": "catalog:",
     "tailwindcss": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "electron-builder-squirrel-windows": "catalog:"
   },
   "build": {
     "appId": "com.authorcopilot.desktop",
@@ -105,5 +105,8 @@
     "asarUnpack": [
       "node_modules/@anthropic-ai/claude-agent-sdk-*/**/*"
     ]
+  },
+  "volta": {
+    "extends": "../../package.json"
   }
 }

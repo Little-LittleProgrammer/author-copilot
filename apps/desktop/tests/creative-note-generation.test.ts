@@ -75,6 +75,170 @@ function setup(
 }
 
 describe("creative draft generation", () => {
+  it("extracts independent fact candidates from a saved chapter with main-owned IDs and provenance", async () => {
+    const { service, projects, transport } = setup();
+    transport.stream.mockImplementationOnce(async (input) => {
+      projects.readDocument.mockResolvedValue({
+        content: "later",
+        hash: "b".repeat(64),
+        mode: 0o600,
+        mtimeMs: 2,
+      });
+      await input.tool!.onInput({
+        facts: [
+          { title: "线索", content: "正文中有一条线索。" },
+          { title: "未解", content: "线索尚未解释。" },
+        ],
+      });
+    });
+    const result = await service.generate({
+      ...request(),
+      kind: "fact",
+      documentPaths: ["第一章.md"],
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      candidates: [
+        {
+          kind: "fact",
+          title: "线索",
+          source: { relativePath: "第一章.md", contentHash: "a".repeat(64) },
+        },
+        {
+          kind: "fact",
+          title: "未解",
+          source: { relativePath: "第一章.md", contentHash: "a".repeat(64) },
+        },
+      ],
+    });
+    if (!result.ok || !("candidates" in result)) throw new Error("candidates");
+    expect(new Set(result.candidates.map((fact) => fact.id)).size).toBe(2);
+    const sent = transport.stream.mock.calls[0]![0];
+    expect(sent.tool!.name).toBe("draft_creative_facts");
+    expect(sent.system).toContain("point of view and uncertainty");
+    expect(JSON.stringify(sent.messages)).not.toContain(source.content);
+    expect(projects.readDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts zero reliable facts and rejects forged, oversized or repeated fact tool output", async () => {
+    const { service, transport } = setup();
+    const input = {
+      ...request(),
+      kind: "fact" as const,
+      documentPaths: ["第一章.md"],
+    };
+    transport.stream.mockImplementationOnce(async (sent) => {
+      await sent.tool!.onInput({ facts: [] });
+    });
+    expect(await service.generate(input)).toEqual({ ok: true, candidates: [] });
+    for (const facts of [
+      [
+        {
+          title: "forged",
+          content: "text",
+          source: { relativePath: "forged.md" },
+        },
+      ],
+      [{ title: "large", content: "x".repeat(4001) }],
+      Array.from({ length: 13 }, () => ({ title: "many", content: "text" })),
+    ]) {
+      transport.stream.mockImplementationOnce(async (sent) => {
+        await sent.tool!.onInput({ facts });
+      });
+      expect(
+        await service.generate({ ...input, requestId: randomUUID() }),
+      ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+    }
+    transport.stream.mockImplementationOnce(async (sent) => {
+      await sent.tool!.onInput({ facts: [] });
+      await sent.tool!.onInput({ facts: [] });
+    });
+    expect(
+      await service.generate({ ...input, requestId: randomUUID() }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+  });
+
+  it("does not return extracted facts after cancellation or timeout", async () => {
+    const { service } = setup(async (input) => {
+      await input.tool!.onInput({
+        facts: [{ title: "partial", content: "text" }],
+      });
+      await new Promise<void>((resolve) =>
+        input.signal.addEventListener("abort", () => resolve(), { once: true }),
+      );
+    }, 15);
+    expect(
+      await service.generate({
+        ...request(),
+        kind: "fact",
+        documentPaths: ["第一章.md"],
+      }),
+    ).toMatchObject({ ok: false, error: { code: "TIMEOUT" } });
+  });
+
+  it("summarizes only the selected chapter and records main-owned provenance before model execution", async () => {
+    const { service, projects, transport } = setup();
+    transport.stream.mockImplementationOnce(async (input) => {
+      projects.readDocument.mockResolvedValue({
+        content: "生成期间正文被修改",
+        hash: "b".repeat(64),
+        mode: 0o600,
+        mtimeMs: 2,
+      });
+      await input.tool!.onInput(draft);
+    });
+    const result = await service.generate({
+      ...request(),
+      kind: "summary",
+      documentPaths: ["第一章.md"],
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      draft: {
+        kind: "summary",
+        source: { relativePath: "第一章.md", contentHash: "a".repeat(64) },
+      },
+    });
+    const input = transport.stream.mock.calls[0]![0];
+    expect(input.system).toContain("Do not invent");
+    expect(input.system).toContain(
+      "existing note is an editing baseline, never evidence",
+    );
+    const sent = JSON.stringify(input.messages);
+    expect(sent).toContain("正文中最新保存的线索");
+    expect(sent).not.toContain(source.content);
+    expect(projects.readDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects empty chapters and model-supplied source metadata without saving anything", async () => {
+    const { service, projects, transport } = setup();
+    const input = {
+      ...request(),
+      kind: "summary" as const,
+      documentPaths: ["第一章.md"],
+    };
+    projects.readDocument.mockResolvedValueOnce({
+      content: " \n",
+      hash: "a".repeat(64),
+      mode: 0o600,
+      mtimeMs: 1,
+    });
+    expect(await service.generate(input)).toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION_FAILED" },
+    });
+    expect(transport.stream).not.toHaveBeenCalled();
+    transport.stream.mockImplementationOnce(async (sent) => {
+      await sent.tool!.onInput({
+        ...draft,
+        source: { relativePath: "forged.md" },
+      });
+    });
+    expect(
+      await service.generate({ ...input, requestId: randomUUID() }),
+    ).toMatchObject({ ok: false, error: { code: "VALIDATION_FAILED" } });
+  });
+
   it("generates before a manuscript exists and returns a draft without writing notes", async () => {
     const { service, notes, projects, transport } = setup();
     expect(await service.generate(request())).toEqual({

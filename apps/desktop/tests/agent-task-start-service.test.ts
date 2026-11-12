@@ -36,13 +36,7 @@ function request(requestedProjectId: string = projectId) {
     projectId: requestedProjectId,
     readableFileTypes: ["markdown"],
     writableFileTypes: ["markdown"],
-    allowedTools: [
-      "mcp__author_copilot__read_text",
-      "mcp__author_copilot__write_text",
-      "mcp__author_copilot__edit_text",
-      "mcp__author_copilot__glob",
-      "mcp__author_copilot__grep",
-    ],
+    allowedTools: ["Read", "Write", "Edit", "Glob", "Grep"],
     timeoutMs: 60_000,
   } as const;
 }
@@ -68,11 +62,7 @@ async function fixture(): Promise<{
   const projectService = new ProjectService({
     registry: new RegistryStore(join(root, "user-data")),
   });
-  const project = await projectService.createProject(
-    projects,
-    "启动门禁",
-    "novel",
-  );
+  const project = await projectService.createProject("启动门禁", "novel");
   await execGit(project.rootPath, ["init", "--initial-branch=main"]);
   const snapshotService = new TaskSnapshotService({
     gitExecutable: "git",
@@ -171,7 +161,7 @@ describe("AgentTaskStartService", () => {
       capabilityService.authorize({
         taskId,
         projectId: fx.projectId,
-        tool: "mcp__author_copilot__grep",
+        tool: "Grep",
       }),
     ).toThrow(expect.objectContaining({ code: "task_not_found" }));
   });
@@ -248,7 +238,7 @@ describe("AgentTaskStartService", () => {
       capabilityService.authorize({
         taskId,
         projectId,
-        tool: "mcp__author_copilot__grep",
+        tool: "Grep",
       }),
     ).toThrow(expect.objectContaining({ code: "task_not_found" }));
   });

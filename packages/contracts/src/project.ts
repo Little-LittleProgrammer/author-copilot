@@ -42,7 +42,6 @@ export const ProjectOperationErrorCodeSchema = z.enum([
   "cancelled",
   "not_found",
   "conflict",
-  "duplicate_project_id",
   "invalid_path",
   "io_error",
   "invalid_metadata",
@@ -194,17 +193,9 @@ export type ProjectImportPreviewResponse = z.infer<
   typeof ProjectImportPreviewResponseSchema
 >;
 
-export const ProjectConfirmImportRequestSchema = z.discriminatedUnion("mode", [
-  z.strictObject({
-    previewToken: MainProcessTokenSchema,
-    mode: z.literal("in_place"),
-    reassignProjectId: z.boolean().optional(),
-  }),
-  z.strictObject({
-    previewToken: MainProcessTokenSchema,
-    mode: z.literal("copy"),
-  }),
-]);
+export const ProjectConfirmImportRequestSchema = z.strictObject({
+  previewToken: MainProcessTokenSchema,
+});
 
 export type ProjectConfirmImportRequest = z.infer<
   typeof ProjectConfirmImportRequestSchema

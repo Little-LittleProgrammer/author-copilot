@@ -1,5 +1,10 @@
 import { IPC_INVOKE_CHANNEL_NAMES } from "@author-copilot/contracts";
 
+let workspaceTransition = false;
+export function setWorkspaceTransition(active: boolean): void {
+  workspaceTransition = active;
+}
+
 const allowedInvokeChannels = new Set<string>(IPC_INVOKE_CHANNEL_NAMES);
 
 export interface IpcRequestContext {
@@ -21,6 +26,8 @@ function canonicalUrl(value: string): string | undefined {
 }
 
 export function assertTrustedIpcRequest(context: IpcRequestContext): void {
+  if (workspaceTransition)
+    throw new Error("The account workspace is changing. Please retry.");
   if (!allowedInvokeChannels.has(context.channel)) {
     throw new Error("IPC channel is not allowed");
   }

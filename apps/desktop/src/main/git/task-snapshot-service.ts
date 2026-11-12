@@ -496,6 +496,71 @@ export class TaskSnapshotService {
     });
   }
 
+  public async prepareNativeMutation(
+    projectId: string,
+    taskId: string,
+    relativePath: string,
+    content: string,
+    expectedHash: string | null,
+  ): Promise<string> {
+    return this.withProjectLock(projectId, async () => {
+      const manifest = await this.loadAuthorizedManifest(projectId, taskId);
+      this.assertTaskWritable(manifest);
+      await this.assertHeadUnchanged(manifest);
+      const directory = this.snapshotDirectory(projectId, taskId);
+      const resolved = await this.resolveAuthorizedPath(
+        manifest.repoRoot,
+        relativePath,
+      );
+      const bytes = Buffer.from(content, "utf8");
+      this.assertFileBudget(bytes.length);
+      const after = await this.saveBlob(directory, manifest, bytes, 0o644);
+      const prepared = await this.prepareMutation({
+        manifest,
+        snapshotDirectory: directory,
+        relativePath,
+        after,
+        expectedHash,
+        createdDirectories: await this.createdParentDirectories(
+          manifest.repoRoot,
+          resolved.absolutePath,
+        ),
+      });
+      return prepared.mutation.id;
+    });
+  }
+
+  public async completeNativeMutation(
+    projectId: string,
+    taskId: string,
+    mutationId: string,
+  ): Promise<void> {
+    await this.withProjectLock(projectId, async () => {
+      const manifest = await this.loadAuthorizedManifest(projectId, taskId);
+      const mutation = manifest.mutations.find(
+        (item) => item.id === mutationId,
+      );
+      if (!mutation || mutation.state !== "prepared") return;
+      const resolved = await this.resolveAuthorizedPath(
+        manifest.repoRoot,
+        mutation.path,
+      );
+      const current = await this.inspectFileState(resolved.absolutePath);
+      if (sameState(current, mutation.after)) mutation.state = "applied";
+      else if (sameState(current, mutation.before)) mutation.state = "restored";
+      else
+        throw new TaskSnapshotError(
+          "task_conflict",
+          "Native tool output differs from the recorded mutation. The snapshot is preserved for review.",
+          false,
+        );
+      await this.saveManifest(
+        this.snapshotDirectory(projectId, taskId),
+        manifest,
+      );
+    });
+  }
+
   public async writeTaskFile(
     projectId: string,
     taskId: string,

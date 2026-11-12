@@ -42,9 +42,12 @@ export function useAiSettings(): {
     const refresh = (): void => {
       void reload();
     };
+    const unsubscribeWorkspace =
+      window.authorCopilot.onWorkspaceChanged(refresh);
     window.addEventListener("focus", refresh);
     window.addEventListener("ai-settings-changed", refresh);
     return () => {
+      unsubscribeWorkspace();
       window.clearTimeout(initial);
       window.removeEventListener("focus", refresh);
       window.removeEventListener("ai-settings-changed", refresh);

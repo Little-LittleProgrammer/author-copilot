@@ -65,9 +65,9 @@ const FILE_TYPE_BY_EXTENSION: Readonly<Record<string, AgentFileType>> = {
 const FILE_TOOL_ACCESS: Readonly<
   Partial<Record<AgentToolName, "read" | "write">>
 > = {
-  mcp__author_copilot__read_text: "read",
-  mcp__author_copilot__write_text: "write",
-  mcp__author_copilot__edit_text: "write",
+  Read: "read",
+  Write: "write",
+  Edit: "write",
 };
 
 export class AgentCapabilityService {

@@ -79,9 +79,7 @@ export interface ProjectBridge {
   ) => Promise<Extract<ProjectCreateEntryResponse, { ok: true }>>;
   readonly moveEntry: (input: ProjectMoveEntryRequest) => Promise<void>;
   readonly confirmImport: (input: {
-    readonly mode: "copy" | "in_place";
     readonly previewToken: string;
-    readonly reassignProjectId?: boolean;
   }) => Promise<ProjectSummary>;
   readonly create: (input: {
     readonly name: string;

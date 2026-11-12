@@ -172,18 +172,33 @@ function WriterCenterApp(): JSX.Element {
   const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
   const { state: aiSettings } = useAiSettings();
   const account = aiSettings?.user?.email ?? t("localWorkspace");
+  const workspaceIdentity = aiSettings
+    ? (aiSettings.user?.id ?? "local")
+    : undefined;
+  const [loadedIdentity, setLoadedIdentity] = useState<string>();
 
   useEffect(() => {
     const api = getProjectApi();
-    if (api === undefined) return;
+    if (api === undefined || workspaceIdentity === undefined) return;
+    let active = true;
     void api
       .list()
-      .then(setProjects)
-      .catch((reason: unknown) =>
-        setError(errorMessage(reason, t("errorGeneric"))),
-      )
-      .finally(() => setLoading(false));
-  }, [t]);
+      .then((next) => {
+        if (!active) return;
+        setProjects(next);
+        setLoadedIdentity(workspaceIdentity);
+        setError(undefined);
+      })
+      .catch((reason: unknown) => {
+        if (active) setError(errorMessage(reason, t("errorGeneric")));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [t, workspaceIdentity]);
 
   useEffect(
     () =>
@@ -218,7 +233,7 @@ function WriterCenterApp(): JSX.Element {
         account={account}
         error={error}
         locale={locale}
-        loading={loading}
+        loading={loading || loadedIdentity !== workspaceIdentity}
         onCreate={setProjectDialog}
         onImport={() => setProjectDialog("import")}
         onLocaleChange={setLocale}
@@ -226,7 +241,7 @@ function WriterCenterApp(): JSX.Element {
         onOpenCredentials={() => setCredentialDialogOpen(true)}
         onOpenProject={openProject}
         onOpenTheme={() => setThemeDialogOpen(true)}
-        projects={projects}
+        projects={loadedIdentity === workspaceIdentity ? projects : []}
         t={t}
       />
       <ProjectDialog

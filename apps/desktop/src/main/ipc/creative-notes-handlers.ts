@@ -1,5 +1,8 @@
 import {
+  CreativeNoteSourceStatusRequestSchema,
+  CreativeNoteSourceStatusResponseSchema,
   CreativeNoteCreateRequestSchema,
+  CreativeFactsConfirmRequestSchema,
   CreativeNoteDeleteRequestSchema,
   CreativeNoteDeleteResponseSchema,
   CreativeNoteResponseSchema,
@@ -11,6 +14,7 @@ import {
 import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import { assertTrustedIpcRequest } from "../ipc-policy.js";
 import type { TabManager } from "../tabs/index.js";
+import type { ProjectService } from "../project/index.js";
 import {
   CreativeNotesServiceError,
   type CreativeNotesService,
@@ -19,9 +23,12 @@ import {
 export function registerCreativeNotesIpcHandlers(options: {
   trustedRendererUrl: string;
   service: CreativeNotesService;
+  projects: Pick<ProjectService, "readDocument">;
   getTabManager: () => TabManager | undefined;
 }): void {
   const channels = [
+    IPC_INVOKE_CHANNELS.creativeFactsConfirm,
+    IPC_INVOKE_CHANNELS.creativeNoteSourceStatus,
     IPC_INVOKE_CHANNELS.creativeNotesList,
     IPC_INVOKE_CHANNELS.creativeNoteCreate,
     IPC_INVOKE_CHANNELS.creativeNoteUpdate,
@@ -45,13 +52,17 @@ export function registerCreativeNotesIpcHandlers(options: {
         });
 
         const schema =
-          channel === IPC_INVOKE_CHANNELS.creativeNotesList
-            ? CreativeNotesProjectRequestSchema
-            : channel === IPC_INVOKE_CHANNELS.creativeNoteCreate
-              ? CreativeNoteCreateRequestSchema
-              : channel === IPC_INVOKE_CHANNELS.creativeNoteUpdate
-                ? CreativeNoteUpdateRequestSchema
-                : CreativeNoteDeleteRequestSchema;
+          channel === IPC_INVOKE_CHANNELS.creativeFactsConfirm
+            ? CreativeFactsConfirmRequestSchema
+            : channel === IPC_INVOKE_CHANNELS.creativeNoteSourceStatus
+              ? CreativeNoteSourceStatusRequestSchema
+              : channel === IPC_INVOKE_CHANNELS.creativeNotesList
+                ? CreativeNotesProjectRequestSchema
+                : channel === IPC_INVOKE_CHANNELS.creativeNoteCreate
+                  ? CreativeNoteCreateRequestSchema
+                  : channel === IPC_INVOKE_CHANNELS.creativeNoteUpdate
+                    ? CreativeNoteUpdateRequestSchema
+                    : CreativeNoteDeleteRequestSchema;
         const request = schema.safeParse(args[0]);
         const projectId =
           request.success && "projectId" in request.data
@@ -64,23 +75,55 @@ export function registerCreativeNotesIpcHandlers(options: {
           context?.kind !== "project" ||
           context.project.projectId !== projectId
         ) {
-          return channel === IPC_INVOKE_CHANNELS.creativeNotesList
-            ? CreativeNotesListResponseSchema.parse({
-                ok: false,
-                error: "invalid_request",
-              })
-            : channel === IPC_INVOKE_CHANNELS.creativeNoteDelete
-              ? CreativeNoteDeleteResponseSchema.parse({
-                  ok: false,
-                  error: "invalid_request",
-                })
-              : CreativeNoteResponseSchema.parse({
-                  ok: false,
-                  error: "invalid_request",
-                });
+          return CreativeNoteResponseSchema.parse({
+            ok: false,
+            error: "invalid_request",
+          });
         }
 
         try {
+          if (channel === IPC_INVOKE_CHANNELS.creativeFactsConfirm) {
+            const notes = await options.service.confirmFacts(
+              CreativeFactsConfirmRequestSchema.parse(request.data),
+            );
+            return CreativeNotesListResponseSchema.parse({ ok: true, notes });
+          }
+          if (channel === IPC_INVOKE_CHANNELS.creativeNoteSourceStatus) {
+            const parsed = CreativeNoteSourceStatusRequestSchema.parse(
+              request.data,
+            );
+            const notes = await options.service.list({ projectId });
+            const note = notes.find((item) => item.id === parsed.noteId);
+            if (!note?.source)
+              return CreativeNoteSourceStatusResponseSchema.parse({
+                ok: false,
+                error: "not_found",
+              });
+            try {
+              const document = await options.projects.readDocument(
+                projectId,
+                note.source.relativePath,
+              );
+              return CreativeNoteSourceStatusResponseSchema.parse({
+                ok: true,
+                status:
+                  document.hash === note.source.contentHash
+                    ? "current"
+                    : "changed",
+              });
+            } catch (error) {
+              if (
+                error instanceof Error &&
+                "code" in error &&
+                error.code === "ENOENT"
+              )
+                return CreativeNoteSourceStatusResponseSchema.parse({
+                  ok: true,
+                  status: "missing",
+                });
+              throw error;
+            }
+          }
           if (channel === IPC_INVOKE_CHANNELS.creativeNotesList) {
             const notes = await options.service.list(
               CreativeNotesProjectRequestSchema.parse(request.data),
@@ -108,14 +151,7 @@ export function registerCreativeNotesIpcHandlers(options: {
             error instanceof CreativeNotesServiceError
               ? error.code
               : "unavailable";
-          return channel === IPC_INVOKE_CHANNELS.creativeNotesList
-            ? CreativeNotesListResponseSchema.parse({ ok: false, error: code })
-            : channel === IPC_INVOKE_CHANNELS.creativeNoteDelete
-              ? CreativeNoteDeleteResponseSchema.parse({
-                  ok: false,
-                  error: code,
-                })
-              : CreativeNoteResponseSchema.parse({ ok: false, error: code });
+          return CreativeNoteResponseSchema.parse({ ok: false, error: code });
         }
       },
     );

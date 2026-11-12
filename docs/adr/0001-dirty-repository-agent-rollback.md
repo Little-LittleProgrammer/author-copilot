@@ -6,6 +6,23 @@
 - Related task: M0-05
 - Evidence: [`spikes/dirty-repo-rollback`](../../spikes/dirty-repo-rollback/README.md)
 
+## 2026-11-09 update: native tools and scoped workspaces
+
+The [AI workspace and Skill implementation](../reports/2026-11-09-ai-workspaces-and-skills.md)
+now replaces custom MCP file tools with Claude native Read/Write/Edit and
+Main-owned SDK Hooks. PreToolUse persists the before-image, intended after-image
+and index entry before execution; PostToolUse verifies the native result. The
+read baseline must still match before an existing file can be edited. Missing
+post hooks and cancellation retain the prepared record for verification and
+recovery. Unexpected output preserves the snapshot and stops the task.
+
+The recovery invariants below remain applicable: preserve author changes,
+staging and history, attribute mutations and stop on missing evidence. Historical
+references to the custom controlled file service describe the previous
+implementation rather than a requirement to retain model-facing custom tools.
+Global account queries are read-only; Shell and deletion tools remain disabled.
+Native cross-work writing and additional tools are not qualified by this change.
+
 ## Context
 
 Author Copilot imports existing Git repositories without rewriting their
