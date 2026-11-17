@@ -14,6 +14,7 @@ dist/
 out/
 release/
 apps/desktop/resources/git/
+apps/desktop/resources/release-materials/
 *.tsbuildinfo
 
 # Local configuration

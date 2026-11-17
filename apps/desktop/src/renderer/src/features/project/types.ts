@@ -1,4 +1,7 @@
 import type {
+  ProjectRestoreBackupRequest,
+  ProjectBackupRequest,
+  ProjectBackupResponse,
   ProjectExportRequest,
   ProjectExportResponse,
   ProjectCreateEntryRequest,
@@ -71,6 +74,12 @@ export class ProjectApiError extends Error {
 }
 
 export interface ProjectBridge {
+  readonly restoreBackup: (
+    input: ProjectRestoreBackupRequest,
+  ) => Promise<ProjectSummary | null>;
+  readonly backup: (
+    input: ProjectBackupRequest,
+  ) => Promise<Extract<ProjectBackupResponse, { ok: true }> | null>;
   readonly export: (
     input: ProjectExportRequest,
   ) => Promise<Extract<ProjectExportResponse, { ok: true }> | null>;

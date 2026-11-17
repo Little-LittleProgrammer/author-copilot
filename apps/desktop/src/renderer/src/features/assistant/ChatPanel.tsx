@@ -819,7 +819,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
                 </div>
               </div>
             ) : (
-              current.messages.map((message) => (
+              current.messages.map((message, messageIndex) => (
                 <article
                   className={`copilot-message ${message.role}`}
                   key={message.id}
@@ -856,6 +856,28 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
                     <p className="copilot-error" role="alert">
                       {message.error}
                     </p>
+                  ) : null}
+                  {message.role === "assistant" &&
+                  ["failed", "cancelled", "interrupted"].includes(
+                    message.status,
+                  ) ? (
+                    <button
+                      type="button"
+                      className="text-button"
+                      disabled={working}
+                      onClick={() => {
+                        const previous = current.messages
+                          .slice(0, messageIndex)
+                          .findLast((entry) => entry.role === "user");
+                        if (previous)
+                          setDrafts((items) => ({
+                            ...items,
+                            [current.id]: previous.content,
+                          }));
+                      }}
+                    >
+                      {t("chatEditRetry")}
+                    </button>
                   ) : null}
                   {message.creativeNotes?.length ? (
                     <details className="copilot-sources creative-note-snapshots">

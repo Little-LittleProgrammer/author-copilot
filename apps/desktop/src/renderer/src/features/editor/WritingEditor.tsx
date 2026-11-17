@@ -50,6 +50,7 @@ interface WritingEditorProps {
   readonly onHistory: () => void;
   readonly onToggleAssistant: () => void;
   readonly onSave: () => void;
+  readonly onCompositionChange: (active: boolean) => void;
   readonly children: ReactNode;
   readonly onPreviewHost: (element: HTMLDivElement | null) => void;
   readonly t: (key: MessageKey) => string;
@@ -106,6 +107,7 @@ export function WritingEditor({
   onHistory,
   onToggleAssistant,
   onSave,
+  onCompositionChange,
   children,
   onPreviewHost,
   t,
@@ -541,9 +543,11 @@ export function WritingEditor({
                   lineHeight: font.lineHeight,
                 }}
                 onCompositionStart={() => {
+                  onCompositionChange(true);
                   compositionStart.current = content;
                 }}
                 onCompositionEnd={(event) => {
+                  onCompositionChange(false);
                   const before = compositionStart.current;
                   compositionStart.current = undefined;
                   if (

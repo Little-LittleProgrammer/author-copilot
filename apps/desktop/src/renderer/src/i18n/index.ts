@@ -236,7 +236,32 @@ const messages = {
     aiProposalApplied: "AI proposal applied",
     aiProposalSaveFirst: "Save the current document before proposing edits.",
     aiProposalVersionFailed: "Files were updated, but the Git version failed:",
+    chatEditRetry: "Edit the question and try again",
     aiChatStartFailed: "The Claude response could not be started.",
+    autoSaving: "Auto-saving…",
+    draftRecovery: "Recover drafts",
+    draftChoose: "Document",
+    draftReviewBeforeSave:
+      "Review the draft alongside the saved text. Automatic saving is paused for restored drafts until you explicitly save or discard them.",
+    draftSaveFailed:
+      "Draft protection failed. Keep this window open and save your manuscript.",
+    draftSourceMissing:
+      "The source is unavailable. The draft is preserved for copying or later recovery.",
+    draftRefresh: "Refresh source",
+    draftSourceChangedReload:
+      "The source changed again. Refresh and review both versions before restoring.",
+    draftSourceChanged:
+      "The saved manuscript changed after this draft. Review both versions before saving.",
+    draftSavedText: "Saved manuscript",
+    draftRecoveredText: "Recovered draft",
+    draftRestore: "Open draft for review",
+    draftDiscard: "Delete draft",
+    draftDiscardConfirm:
+      "Permanently delete this recovery draft? The saved manuscript will be kept.",
+    draftEmpty: "No recovery drafts.",
+    draftLater: "Keep drafts and close",
+    draftBusy: "Wait for the current save or AI task before restoring a draft.",
+
     aiChatStarting: "Starting…",
     aiChatThinking: "Claude is thinking…",
     aiContext: "AI context",
@@ -277,6 +302,15 @@ const messages = {
       "JPG, PNG or WebP. Images are compressed and stored locally.",
     backgroundImage: "Workspace background",
     backgroundImageHint: "Add a personal image behind the writing workspace.",
+    restoreBackup: "Restore from backup",
+    restoringBackup: "Restoring backup…",
+    restoreBackupFailed:
+      "Backup restore failed. Choose a complete, unchanged Author Copilot backup folder.",
+    backupProject: "Back up work",
+    backupSaveFirst:
+      "Save manuscript and creative note changes before backing up.",
+    backupSuccess: "Backed up {name} · {count} files",
+    backupFailed: "Backup failed. Check the destination and try again.",
     backgroundInvalid: "This image could not be read. Choose another image.",
     backgroundTooLarge:
       "The processed image is still too large. Choose a smaller image.",
@@ -352,6 +386,17 @@ const messages = {
     workspaceOverview: "Workspace overview",
     quickActions: "Quick actions",
     quickImportHint: "Markdown folders, TXT and Word",
+    firstRunTitle: "Try your first writing task",
+    firstRunImport: "Import an existing manuscript or create a work below.",
+    firstRunImportAction: "Import manuscript or backup",
+    firstRunConnect:
+      "Connect AI when you are ready. Local writing works without it.",
+    firstRunReview:
+      "Open a chapter, ask AI about an earlier scene, check its sources, then try a small revision and review the changes.",
+    firstRunPrivacy:
+      "Manuscripts are stored on this device. Using AI sends selected context or tool-read content to your chosen provider. Custom keys and platform credit are billed separately.",
+    firstRunEditor:
+      "Choose a chapter to write. Use the AI panel to ask about your work and open cited sources. For revisions, save first, authorize a task, then keep or restore the changes. Use the backup button beside the work title to protect your work.",
     quickAi: "Connect AI",
     quickAiHint: "Configure your writing assistant",
     quickAppearance: "Personalize",
@@ -504,7 +549,7 @@ const messages = {
     inAiContext: "Included in AI context",
     importConfirm: "Import project",
     importHint:
-      "Choose a Markdown folder or a TXT / Word file, then preview it. Import creates an independent copy in the app’s local data folder; the source stays unchanged.",
+      "Choose a Markdown folder, an Author Copilot backup folder, or a TXT / Word file, then preview it. Import creates an independent copy in the app’s local data folder; the source stays unchanged.",
     importAutoSplit: "Automatically split TXT / Word into chapters",
     importSplitHint:
       "Match standalone chapter and volume headings with built-in regular expressions, including Chapter 1, 第一章, 序章 and 番外. Turn off to import as one document. Applies to files only.",
@@ -886,7 +931,27 @@ const messages = {
     aiProposalApplied: "AI 提案已应用",
     aiProposalSaveFirst: "请先保存当前正文，再生成修改提案。",
     aiProposalVersionFailed: "文件已更新，但 Git 版本创建失败：",
+    chatEditRetry: "重新编辑问题后重试",
     aiChatStartFailed: "无法启动 Claude 回答。",
+    autoSaving: "正在自动保存…",
+    draftRecovery: "恢复草稿",
+    draftChoose: "文档",
+    draftReviewBeforeSave:
+      "对照已保存正文审阅草稿。恢复后暂停自动保存，直到你明确保存或放弃修改。",
+    draftSaveFailed: "草稿保护失败，请保持窗口打开并保存正文。",
+    draftSourceMissing: "来源正文暂不可用。草稿仍保留，可复制或稍后恢复。",
+    draftRefresh: "刷新来源",
+    draftSourceChangedReload: "来源正文再次变化，请刷新并重新对照后再恢复。",
+    draftSourceChanged: "正文在该草稿之后发生变化，请对照两份内容后再保存。",
+    draftSavedText: "已保存正文",
+    draftRecoveredText: "恢复的草稿",
+    draftRestore: "打开草稿审阅",
+    draftDiscard: "删除草稿",
+    draftDiscardConfirm: "永久删除这份恢复草稿吗？已保存正文会保留。",
+    draftEmpty: "没有待恢复的草稿。",
+    draftLater: "保留草稿并关闭",
+    draftBusy: "请等待当前保存或 AI 任务结束后再恢复草稿。",
+
     aiChatStarting: "正在启动…",
     aiChatThinking: "Claude 正在思考…",
     aiContext: "AI 上下文",
@@ -923,6 +988,14 @@ const messages = {
     backgroundFormats: "支持 JPG、PNG、WebP，图片将压缩后仅保存在本地。",
     backgroundImage: "工作区背景图",
     backgroundImageHint: "为作家中心与编辑区域设置一张个人背景图。",
+    restoreBackup: "从备份恢复",
+    restoringBackup: "正在恢复备份…",
+    restoreBackupFailed:
+      "恢复失败，请选择完整且未经改动的 Author Copilot 备份文件夹。",
+    backupProject: "备份作品",
+    backupSaveFirst: "请先保存正文和创作资料修改，再备份作品。",
+    backupSuccess: "作品已备份：{name} · {count} 个文件",
+    backupFailed: "作品备份失败，请检查目标位置后重试。",
     backgroundInvalid: "无法读取这张图片，请选择其他图片。",
     backgroundTooLarge: "处理后的图片仍然过大，请选择尺寸更小的图片。",
     backgroundVisibility: "图片清晰度",
@@ -992,6 +1065,16 @@ const messages = {
     workspaceOverview: "创作工作台",
     quickActions: "快捷入口",
     quickImportHint: "支持 TXT、Word 和作品文件夹",
+    firstRunTitle: "体验第一次创作任务",
+    firstRunImport: "导入一份已有稿件，或在下方新建作品。",
+    firstRunImportAction: "导入正文或备份",
+    firstRunConnect: "准备好后再连接 AI。本地写作无需连接 AI。",
+    firstRunReview:
+      "打开章节，询问一处前文并核对来源，再试改一小段，审阅修改后决定保留或恢复。",
+    firstRunPrivacy:
+      "正文保存在当前设备。使用 AI 时，选入的上下文或工具读取的内容会发送到所选供应商；自带密钥与平台额度分别计费。",
+    firstRunEditor:
+      "选择章节开始写作。通过 AI 面板询问作品内容并打开引用来源；改稿前先保存，授权任务后审阅并决定保留或恢复。作品名称旁的备份按钮可备份作品。",
     quickAi: "连接 AI",
     quickAiHint: "配置你的创作助手",
     quickAppearance: "装扮工作台",
@@ -1134,7 +1217,7 @@ const messages = {
     inAiContext: "已加入 AI 上下文",
     importConfirm: "确认导入",
     importHint:
-      "选择 Markdown 作品文件夹或 TXT / Word 文件并预览。确认后复制到应用的本地数据目录，原始文件保持不变。",
+      "选择 Markdown 作品文件夹、Author Copilot 备份文件夹或 TXT / Word 文件并预览。确认后复制到应用的本地数据目录，原始文件保持不变。",
     importAutoSplit: "TXT / Word 自动拆章",
     importSplitHint:
       "通过内置正则识别独立成行的章节、卷标题，如第一章、序章、番外、Chapter 1。关闭后整篇导入，仅对文件生效。",

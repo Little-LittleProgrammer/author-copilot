@@ -6,6 +6,9 @@ import type {
   ProjectCreateRequest,
   ProjectExportRequest,
   ProjectExportResponse,
+  ProjectRestoreBackupRequest,
+  ProjectBackupRequest,
+  ProjectBackupResponse,
   ProjectCreateEntryRequest,
   ProjectCreateEntryResponse,
   ProjectMoveEntryRequest,
@@ -38,9 +41,15 @@ import {
 
 interface ProjectWindowApi {
   readonly project?: {
+    readonly restoreBackup: (
+      input: ProjectRestoreBackupRequest,
+    ) => Promise<ProjectCreateResponse>;
     readonly export: (
       input: ProjectExportRequest,
     ) => Promise<ProjectExportResponse>;
+    readonly backup: (
+      input: ProjectBackupRequest,
+    ) => Promise<ProjectBackupResponse>;
     readonly createEntry: (
       input: ProjectCreateEntryRequest,
     ) => Promise<ProjectCreateEntryResponse>;
@@ -87,6 +96,16 @@ export function getProjectApi(): ProjectBridge | undefined {
   if (raw === undefined) return undefined;
 
   return {
+    async restoreBackup(input) {
+      const response = await raw.restoreBackup(input);
+      if (!response.ok && response.error.code === "cancelled") return null;
+      return mapProject(unwrap(response).project);
+    },
+    async backup(input) {
+      const response = await raw.backup(input);
+      if (!response.ok && response.error.code === "cancelled") return null;
+      return unwrap(response);
+    },
     async export(input) {
       const response = await raw.export(input);
       if (!response.ok && response.error.code === "cancelled") return null;

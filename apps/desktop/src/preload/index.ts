@@ -39,6 +39,8 @@ import {
   AiPatchApplyResponseSchema,
   AiPatchDiscardResponseSchema,
   AnthropicCredentialResponseSchema,
+  DocumentDraftResponseSchema,
+  type DocumentDraftRequest,
   DocumentReadResponseSchema,
   DocumentSaveResponseSchema,
   IPC_INVOKE_CHANNELS,
@@ -88,6 +90,9 @@ import {
   type ProjectMoveEntryRequest,
   type ProjectExportRequest,
   ProjectExportResponseSchema,
+  type ProjectRestoreBackupRequest,
+  type ProjectBackupRequest,
+  ProjectBackupResponseSchema,
   type ProjectDeleteEntryRequest,
   type ProjectGetStructureRequest,
   type ProjectImportPreviewRequest,
@@ -356,9 +361,24 @@ const api: AuthorCopilotApi = Object.freeze({
     }),
   }),
   project: Object.freeze({
+    restoreBackup: async (request: ProjectRestoreBackupRequest) =>
+      ProjectCreateResponseSchema.parse(
+        await ipcRenderer.invoke(
+          IPC_INVOKE_CHANNELS.projectRestoreBackup,
+          request,
+        ),
+      ),
+    draft: async (request: DocumentDraftRequest) =>
+      DocumentDraftResponseSchema.parse(
+        await ipcRenderer.invoke(IPC_INVOKE_CHANNELS.documentDraft, request),
+      ),
     export: async (request: ProjectExportRequest) =>
       ProjectExportResponseSchema.parse(
         await ipcRenderer.invoke(IPC_INVOKE_CHANNELS.projectExport, request),
+      ),
+    backup: async (request: ProjectBackupRequest) =>
+      ProjectBackupResponseSchema.parse(
+        await ipcRenderer.invoke(IPC_INVOKE_CHANNELS.projectBackup, request),
       ),
     createEntry: async (request: ProjectCreateEntryRequest) =>
       ProjectCreateEntryResponseSchema.parse(

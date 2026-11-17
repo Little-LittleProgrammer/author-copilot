@@ -23,3 +23,5 @@ export class DocumentConflictError extends ProjectServiceError {
 }
 
 export class SymbolicLinkNotAllowedError extends ProjectServiceError {}
+
+export class ProjectBackupBlockedError extends ProjectServiceError {}

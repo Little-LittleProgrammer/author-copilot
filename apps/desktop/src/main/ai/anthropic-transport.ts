@@ -88,8 +88,8 @@ export class AnthropicClaudeTransport implements ClaudeTransport {
           request.onText(event.delta.text);
         }
       }
+      const message = await stream.finalMessage();
       if (request.tool !== undefined) {
-        const message = await stream.finalMessage();
         const toolUses = message.content.filter(
           (block): block is ToolUseBlock =>
             block.type === "tool_use" && block.name === request.tool?.name,

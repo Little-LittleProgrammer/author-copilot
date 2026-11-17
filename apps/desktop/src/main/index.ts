@@ -50,7 +50,11 @@ import {
   createFixedProjectDirectoryPicker,
   createProjectDirectoryPicker,
 } from "./project-dialogs.js";
-import { ProjectService, RegistryStore } from "./project/index.js";
+import {
+  ProjectBackupBlockedError,
+  ProjectService,
+  RegistryStore,
+} from "./project/index.js";
 import {
   denyAllPermissions,
   installProductionCsp,
@@ -67,6 +71,8 @@ let creativeNoteGenerationService: CreativeNoteGenerationService | undefined;
 let globalAssistantService: GlobalAssistantService | undefined;
 let creativeNotesService: CreativeNotesService | undefined;
 let mainWindow: BrowserWindow | undefined;
+let writingStateService: ProjectService | undefined;
+let conversationService: ConversationStore | undefined;
 let tabManager: TabManager | undefined;
 let quitRequested = false;
 let agentService: AgentTaskService | undefined;
@@ -166,9 +172,23 @@ app.whenReady().then(async () => {
     onRegistryChanged: async () =>
       workspace.publishCatalog(await projectService.list()),
     assertCanMutate: (projectId) => agentService?.assertIdle(projectId),
+    assertBackupReady: async (projectId) => {
+      if (
+        await taskSnapshotService.hasRecoverableTaskWhileProjectLocked(
+          projectId,
+        )
+      )
+        throw new ProjectBackupBlockedError(
+          "请先审阅并保留或恢复 AI 任务，再备份作品 / Review and keep or restore pending AI changes before backing up.",
+        );
+    },
     publishEvent: domainEvents.publish,
     operationQueue: gitOperationQueue,
   });
+  writingStateService = projectService;
+  conversationService = new ConversationStore(() =>
+    workspace.runtime("conversations"),
+  );
   const credentialStore = new SecureCredentialStore({
     filePath: join(
       app.getPath("userData"),
@@ -362,6 +382,7 @@ app.whenReady().then(async () => {
     await writingStatisticsService?.drain();
     await creativeNotesService?.drain();
     await projectService.drain();
+    await conversationService?.drain();
     await gitOperationQueue.drain();
   };
   registerIpcHandlers(target.url, {
@@ -385,9 +406,7 @@ app.whenReady().then(async () => {
       }
     },
     creativeNoteGenerationService,
-    conversationStore: new ConversationStore(() =>
-      workspace.runtime("conversations"),
-    ),
+    conversationStore: conversationService,
     writingStatisticsService,
     creativeNotesService,
     providerService,
@@ -468,6 +487,8 @@ app.on("will-quit", (event) => {
         globalAssistantService?.cancelAll(),
         writingStatisticsService?.drain(),
         creativeNotesService?.drain(),
+        writingStateService?.drain(),
+        conversationService?.drain(),
       ]).finally(() => {
         agentShutdownComplete = true;
         setImmediate(() => app.quit());

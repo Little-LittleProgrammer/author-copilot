@@ -1,10 +1,19 @@
-import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type JSX,
+} from "react";
 
 import type {
   AiContextSelection,
   AiPatchReview,
   RuntimeInfo,
   ProjectCreateEntryRequest,
+  DocumentDraft,
+  DocumentDraftRequest,
 } from "@author-copilot/contracts";
 
 import type { MessageKey } from "../../i18n/index.js";
@@ -21,6 +30,7 @@ import { VersionDialog } from "../version/VersionDialog.js";
 import type { VersionResult } from "../version/version-api.js";
 import { getProposalApi } from "../assistant/assistant-api.js";
 import { EditorWorkspace } from "./EditorWorkspace.js";
+import { DraftRecoveryDialog } from "./DraftRecoveryDialog.js";
 
 interface ProjectEditorTabProps {
   readonly onDirtyChange: (projectId: string, dirty: boolean) => void;
@@ -66,6 +76,14 @@ export function ProjectEditorTab({
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(() => getProjectApi() !== undefined);
   const [saving, setSaving] = useState(false);
+  const [recoveryDrafts, setRecoveryDrafts] = useState<DocumentDraft[]>([]);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [reviewingDraft, setReviewingDraft] = useState(false);
+  const [composing, setComposing] = useState(false);
+  const [draftError, setDraftError] = useState<string>();
+  const draftQueue = useRef(Promise.resolve());
+  const draftRevisions = useRef(new Map<string, string>());
+  const saveInFlight = useRef(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportNotice, setExportNotice] = useState<string>();
@@ -88,6 +106,7 @@ export function ProjectEditorTab({
   const [aiContextPaths, setAiContextPaths] = useState<ReadonlySet<string>>(
     () => loadAiContext(project.id),
   );
+  const autoSaveAttemptedRef = useRef<string | undefined>(undefined);
   const dirty = document !== undefined && content !== document.content;
   const aiContextNodes = useMemo(() => {
     const nodeByPath = new Map(
@@ -155,6 +174,8 @@ export function ProjectEditorTab({
         .then((snapshot) => {
           setDocument(snapshot);
           setContent(snapshot.content);
+          setReviewingDraft(false);
+          autoSaveAttemptedRef.current = undefined;
           setSelection(undefined);
           setProposalOpen(false);
         })
@@ -175,34 +196,105 @@ export function ProjectEditorTab({
     ],
   );
 
+  const draftRequest = useCallback(async (request: DocumentDraftRequest) => {
+    const response = await window.authorCopilot.project.draft(request);
+    if (!response.ok) throw new Error(response.error.message);
+    return response.drafts;
+  }, []);
+
+  const enqueueDraft = useCallback(
+    (request: DocumentDraftRequest): Promise<void> => {
+      const next = draftQueue.current.then(async () => {
+        await draftRequest(request);
+        setDraftError(undefined);
+      });
+      draftQueue.current = next.catch((reason: unknown) => {
+        setDraftError(errorMessage(reason, t("draftSaveFailed")));
+      });
+      return next;
+    },
+    [draftRequest, t],
+  );
+
+  useEffect(() => {
+    let alive = true;
+    void draftRequest({ action: "list", projectId: project.id })
+      .then((drafts) => {
+        if (!alive) return;
+        setRecoveryDrafts(drafts);
+        setRecoveryOpen(drafts.length > 0);
+        for (const draft of drafts)
+          draftRevisions.current.set(draft.relativePath, draft.revision);
+      })
+      .catch((reason: unknown) => {
+        if (alive) setDraftError(errorMessage(reason, t("draftSaveFailed")));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [draftRequest, project.id, t]);
+
+  const changeContent = useCallback(
+    (next: string) => {
+      setContent(next);
+      if (!document) return;
+      const revision = crypto.randomUUID();
+      draftRevisions.current.set(document.path, revision);
+      void enqueueDraft({
+        action: "put",
+        projectId: project.id,
+        relativePath: document.path,
+        baseHash: document.version,
+        content: next,
+        revision,
+      }).catch(() => undefined);
+    },
+    [document, enqueueDraft, project.id],
+  );
+
   const save = useCallback(() => {
     const api = getProjectApi();
     if (
-      api === undefined ||
-      document === undefined ||
-      saving ||
+      !api ||
+      !document ||
+      saveInFlight.current ||
       loading ||
       proposalApplying ||
       repositoryChanging ||
-      agentBusy
+      agentBusy ||
+      composing
     )
       return;
+    saveInFlight.current = true;
     setSaving(true);
     setError(undefined);
     setVersionNotice(undefined);
-    void api
-      .saveDocument({
+    const revision = draftRevisions.current.get(document.path);
+    void (async () => {
+      await draftQueue.current;
+      const snapshot = await api.saveDocument({
         content,
         expectedVersion: document.version,
         path: document.path,
         projectId: project.id,
-      })
-      .then((snapshot) => {
-        setDocument(snapshot);
-        setContent((current) =>
-          current === content ? snapshot.content : current,
+      });
+      setDocument(snapshot);
+      setContent((current) =>
+        current === content ? snapshot.content : current,
+      );
+      setReviewingDraft(false);
+      if (revision) {
+        await enqueueDraft({
+          action: "delete",
+          projectId: project.id,
+          relativePath: snapshot.path,
+          revision,
+        });
+        setRecoveryDrafts((drafts) =>
+          drafts.filter((draft) => draft.revision !== revision),
         );
-      })
+      }
+    })()
       .catch((reason: unknown) => {
         setError(
           reason instanceof ProjectApiError && reason.code === "conflict"
@@ -210,18 +302,96 @@ export function ProjectEditorTab({
             : errorMessage(reason, t("errorGeneric")),
         );
       })
-      .finally(() => setSaving(false));
+      .finally(() => {
+        saveInFlight.current = false;
+        setSaving(false);
+      });
   }, [
+    agentBusy,
+    composing,
     content,
     document,
-    project.id,
-    t,
-    saving,
+    enqueueDraft,
     loading,
+    project.id,
     proposalApplying,
     repositoryChanging,
-    agentBusy,
+    t,
   ]);
+
+  useEffect(() => {
+    if (
+      !dirty ||
+      !document ||
+      loading ||
+      saving ||
+      composing ||
+      reviewingDraft ||
+      recoveryOpen ||
+      error ||
+      proposalApplying ||
+      repositoryChanging ||
+      agentBusy
+    )
+      return;
+    const attemptKey = `${document.path}\0${document.version}\0${content}`;
+    if (autoSaveAttemptedRef.current === attemptKey) return;
+    const timer = window.setTimeout(() => {
+      autoSaveAttemptedRef.current = attemptKey;
+      save();
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [
+    agentBusy,
+    composing,
+    content,
+    dirty,
+    document,
+    error,
+    loading,
+    proposalApplying,
+    recoveryOpen,
+    repositoryChanging,
+    reviewingDraft,
+    save,
+    saving,
+  ]);
+
+  const openDrafts = async () => {
+    try {
+      await draftQueue.current;
+      setRecoveryDrafts(
+        await draftRequest({ action: "list", projectId: project.id }),
+      );
+      setRecoveryOpen(true);
+    } catch (reason) {
+      setDraftError(errorMessage(reason, t("draftSaveFailed")));
+    }
+  };
+
+  const restoreDraft = async (
+    draft: DocumentDraft,
+    expectedVersion: string,
+  ) => {
+    const api = getProjectApi();
+    if (!api || saving || agentBusy || proposalApplying || repositoryChanging)
+      throw new Error(t("draftBusy"));
+    if (dirty && !window.confirm(t("discardPrompt"))) return;
+    const snapshot = await api.readDocument({
+      projectId: project.id,
+      path: draft.relativePath,
+    });
+    if (snapshot.version !== expectedVersion)
+      throw new Error(t("draftSourceChangedReload"));
+    setDocument(snapshot);
+    setContent(draft.content);
+    setReviewingDraft(true);
+    draftRevisions.current.set(draft.relativePath, draft.revision);
+    setRecoveryOpen(false);
+    setError(undefined);
+    setVersionNotice(t("draftReviewBeforeSave"));
+    setVersionWarning(true);
+  };
 
   const reload = useCallback(() => {
     if (document === undefined) return;
@@ -278,6 +448,46 @@ export function ProjectEditorTab({
         throw new Error(key ? t(key) : t("exportFailed"));
       }
       throw reason;
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const backupProject = async (): Promise<void> => {
+    const api = getProjectApi();
+    if (api === undefined) {
+      setError(t("projectApiUnavailable"));
+      return;
+    }
+    if (
+      dirty ||
+      creativeNotesDirty ||
+      saving ||
+      loading ||
+      exporting ||
+      repositoryChanging ||
+      proposalApplying ||
+      agentBusy
+    ) {
+      setError(t("backupSaveFirst"));
+      return;
+    }
+    setExporting(true);
+    try {
+      await draftQueue.current;
+      const result = await api.backup({
+        projectId: project.id,
+        locale:
+          window.document.documentElement.lang === "en-US" ? "en-US" : "zh-CN",
+      });
+      if (result === null) return;
+      setExportNotice(
+        t("backupSuccess")
+          .replace("{name}", result.directoryName)
+          .replace("{count}", String(result.fileCount)),
+      );
+    } catch (reason) {
+      setError(errorMessage(reason, t("backupFailed")));
     } finally {
       setExporting(false);
     }
@@ -731,10 +941,31 @@ export function ProjectEditorTab({
 
   return (
     <div className="project-editor-tab">
+      {recoveryOpen ? (
+        <DraftRecoveryDialog
+          drafts={recoveryDrafts}
+          projectId={project.id}
+          onClose={() => setRecoveryOpen(false)}
+          onRestore={restoreDraft}
+          onDiscard={async (draft) => {
+            await enqueueDraft({
+              action: "delete",
+              projectId: project.id,
+              relativePath: draft.relativePath,
+              revision: draft.revision,
+            });
+            setRecoveryDrafts((drafts) =>
+              drafts.filter((item) => item.revision !== draft.revision),
+            );
+          }}
+          t={t}
+        />
+      ) : null}
       <div className="workspace">
         <EditorWorkspace
           sidebar={
             <ProjectSidebar
+              onBackup={() => void backupProject()}
               onExport={() => {
                 setExportNotice(undefined);
                 setExportDialogOpen(true);
@@ -774,13 +1005,16 @@ export function ProjectEditorTab({
           aiContext={aiContextNodes}
           content={content}
           document={document}
+          autoSavePending={saving}
+          onCompositionChange={setComposing}
+          onOpenDrafts={() => void openDrafts()}
           documentTitle={
             flattenStructure(structure).find(
               (node) => node.path === document?.path,
             )?.name
           }
           dirty={dirty}
-          error={error}
+          error={draftError ? `${t("draftSaveFailed")} ${draftError}` : error}
           loading={
             loading ||
             repositoryChanging ||
@@ -788,9 +1022,22 @@ export function ProjectEditorTab({
             agentBusy ||
             exporting
           }
-          onChange={setContent}
+          onChange={changeContent}
           onDiscard={() => {
-            if (document !== undefined) setContent(document.content);
+            if (document !== undefined) {
+              setContent(document.content);
+              setVersionNotice(undefined);
+              setError(undefined);
+              setReviewingDraft(false);
+              const revision = draftRevisions.current.get(document.path);
+              if (revision)
+                void enqueueDraft({
+                  action: "delete",
+                  projectId: project.id,
+                  relativePath: document.path,
+                  revision,
+                }).catch(() => undefined);
+            }
           }}
           onCreateVersion={() => setVersionDialogOpen(true)}
           onAcceptAllProposalChanges={acceptAllProposalChanges}

@@ -59,6 +59,8 @@ import {
   TaskRecoveryRestoreResponseSchema,
 } from "./task-recovery.js";
 import {
+  DocumentDraftRequestSchema,
+  DocumentDraftResponseSchema,
   DocumentReadRequestSchema,
   DocumentReadResponseSchema,
   DocumentSaveRequestSchema,
@@ -70,6 +72,9 @@ import {
   ProjectCreateEntryResponseSchema,
   ProjectExportRequestSchema,
   ProjectExportResponseSchema,
+  ProjectRestoreBackupRequestSchema,
+  ProjectBackupRequestSchema,
+  ProjectBackupResponseSchema,
   ProjectMoveEntryRequestSchema,
   ProjectMoveEntryResponseSchema,
   ProjectCreateResponseSchema,
@@ -185,6 +190,8 @@ export const IPC_INVOKE_CHANNELS = {
   projectCreateEntry: "project:create-entry",
   projectMoveEntry: "project:move-entry",
   projectExport: "project:export",
+  projectBackup: "project:backup",
+  projectRestoreBackup: "project:restore-backup",
   projectDeleteEntry: "project:delete-entry",
   projectUpdate: "project:update",
   projectPreviewImport: "project:preview-import",
@@ -192,6 +199,7 @@ export const IPC_INVOKE_CHANNELS = {
   projectList: "project:list",
   projectGetStructure: "project:get-structure",
   projectRenameEntry: "project:rename-entry",
+  documentDraft: "document:draft",
   documentRead: "document:read",
   documentSave: "document:save",
   versionCreate: "version:create",
@@ -262,6 +270,8 @@ export const IPC_INVOKE_CHANNEL_NAMES = [
   IPC_INVOKE_CHANNELS.projectCreateEntry,
   IPC_INVOKE_CHANNELS.projectMoveEntry,
   IPC_INVOKE_CHANNELS.projectExport,
+  IPC_INVOKE_CHANNELS.projectBackup,
+  IPC_INVOKE_CHANNELS.projectRestoreBackup,
   IPC_INVOKE_CHANNELS.projectDeleteEntry,
   IPC_INVOKE_CHANNELS.projectUpdate,
   IPC_INVOKE_CHANNELS.projectPreviewImport,
@@ -269,6 +279,7 @@ export const IPC_INVOKE_CHANNEL_NAMES = [
   IPC_INVOKE_CHANNELS.projectList,
   IPC_INVOKE_CHANNELS.projectGetStructure,
   IPC_INVOKE_CHANNELS.projectRenameEntry,
+  IPC_INVOKE_CHANNELS.documentDraft,
   IPC_INVOKE_CHANNELS.documentRead,
   IPC_INVOKE_CHANNELS.documentSave,
   IPC_INVOKE_CHANNELS.versionCreate,
@@ -320,6 +331,14 @@ export type IpcEventChannel = z.infer<typeof IpcEventChannelSchema>;
 export type IpcChannel = z.infer<typeof IpcChannelSchema>;
 
 export const IPC_INVOKE_CONTRACTS = {
+  [IPC_INVOKE_CHANNELS.projectRestoreBackup]: {
+    request: ProjectRestoreBackupRequestSchema,
+    response: ProjectCreateResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.documentDraft]: {
+    request: DocumentDraftRequestSchema,
+    response: DocumentDraftResponseSchema,
+  },
   [IPC_INVOKE_CHANNELS.globalAssistant]: {
     request: GlobalAssistantRequestSchema,
     response: GlobalAssistantResponseSchema,
@@ -439,6 +458,10 @@ export const IPC_INVOKE_CONTRACTS = {
   [IPC_INVOKE_CHANNELS.projectExport]: {
     request: ProjectExportRequestSchema,
     response: ProjectExportResponseSchema,
+  },
+  [IPC_INVOKE_CHANNELS.projectBackup]: {
+    request: ProjectBackupRequestSchema,
+    response: ProjectBackupResponseSchema,
   },
   [IPC_INVOKE_CHANNELS.projectMoveEntry]: {
     request: ProjectMoveEntryRequestSchema,

@@ -27,6 +27,9 @@ interface EditorWorkspaceProps {
   readonly onAgentBusyChange: (busy: boolean) => void;
   readonly onCreativeNotesDirtyChange: (dirty: boolean) => void;
   readonly activeProject: ProjectSummary | undefined;
+  readonly autoSavePending: boolean;
+  readonly onCompositionChange: (active: boolean) => void;
+  readonly onOpenDrafts: () => void;
   readonly aiContext: readonly StructureNode[];
   readonly content: string;
   readonly document: DocumentSnapshot | undefined;
@@ -69,6 +72,7 @@ interface EditorWorkspaceProps {
 export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
   const {
     activeProject,
+    autoSavePending,
     aiContext,
     content,
     document,
@@ -134,14 +138,20 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
         </div>
       ) : null}
 
+      {!document ? (
+        <p className="px-4 py-2 text-sm">{t("firstRunEditor")}</p>
+      ) : null}
       <WritingEditor
+        onCompositionChange={props.onCompositionChange}
         onPreviewHost={setPreviewHost}
         sidebar={props.sidebar}
         documentTitle={documentName}
         onOpenTheme={() => setThemeOpen(true)}
         toolbarActions={
           <div className="editor-status" aria-live="polite">
-            {versionNotice !== undefined ? (
+            {autoSavePending ? (
+              <span>{t("autoSaving")}</span>
+            ) : versionNotice !== undefined ? (
               <span
                 className={`max-w-52 overflow-hidden text-ellipsis whitespace-nowrap ${versionWarning ? "text-destructive" : "text-primary"}`}
                 title={versionNotice}
@@ -158,6 +168,13 @@ export function EditorWorkspace(props: EditorWorkspaceProps): JSX.Element {
                 {t("discard")}
               </button>
             ) : null}
+            <button
+              className="text-button"
+              type="button"
+              onClick={props.onOpenDrafts}
+            >
+              {t("draftRecovery")}
+            </button>
             <Button
               type="button"
               className="h-8 min-w-[78px] text-xs"

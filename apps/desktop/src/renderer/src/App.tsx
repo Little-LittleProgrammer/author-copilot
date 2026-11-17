@@ -165,6 +165,7 @@ function WriterCenterApp(): JSX.Element {
   const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
   const [loading, setLoading] = useState(() => getProjectApi() !== undefined);
   const [error, setError] = useState<string>();
+  const [restoringBackup, setRestoringBackup] = useState(false);
   const [projectDialog, setProjectDialog] = useState<
     ProjectType | "import" | null
   >(null);
@@ -236,6 +237,21 @@ function WriterCenterApp(): JSX.Element {
         loading={loading || loadedIdentity !== workspaceIdentity}
         onCreate={setProjectDialog}
         onImport={() => setProjectDialog("import")}
+        restoringBackup={restoringBackup}
+        onRestoreBackup={() => {
+          if (restoringBackup) return;
+          setRestoringBackup(true);
+          setError(undefined);
+          void getProjectApi()
+            ?.restoreBackup({ locale })
+            .then((project) => {
+              if (project) completeProject(project);
+            })
+            .catch((reason: unknown) =>
+              setError(errorMessage(reason, t("restoreBackupFailed"))),
+            )
+            .finally(() => setRestoringBackup(false));
+        }}
         onLocaleChange={setLocale}
         onLogout={() => void window.authorCopilot.tabs.requestLogout()}
         onOpenCredentials={() => setCredentialDialogOpen(true)}

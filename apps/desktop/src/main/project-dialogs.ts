@@ -19,6 +19,12 @@ export interface ProjectDirectoryPicker {
   ): Promise<string | undefined>;
   chooseImportFile(): Promise<string | undefined>;
   chooseImportSource(): Promise<string | undefined>;
+  chooseRestoreBackup?(options: {
+    readonly locale: "zh-CN" | "en-US";
+  }): Promise<string | undefined>;
+  chooseBackupDestination?(options: {
+    readonly locale: "zh-CN" | "en-US";
+  }): Promise<string | undefined>;
 }
 
 async function chooseDirectory(
@@ -76,6 +82,21 @@ export function createProjectDirectoryPicker(): ProjectDirectoryPicker {
         title: "Choose a Markdown project folder",
         buttonLabel: "Preview import",
       }),
+    chooseRestoreBackup: ({ locale }) =>
+      chooseDirectory({
+        title:
+          locale === "zh-CN"
+            ? "选择作品备份文件夹"
+            : "Choose an Author Copilot backup folder",
+        buttonLabel:
+          locale === "zh-CN" ? "恢复为独立作品" : "Restore as a new work",
+      }),
+    chooseBackupDestination: ({ locale }) =>
+      chooseDirectory({
+        title:
+          locale === "zh-CN" ? "选择作品备份位置" : "Choose backup location",
+        buttonLabel: locale === "zh-CN" ? "备份到这里" : "Back up here",
+      }),
   };
 }
 
@@ -92,5 +113,8 @@ export function createFixedProjectDirectoryPicker(
       join(directories.exportDirectory ?? directories.importSource, fileName),
     chooseImportSource: async () => directories.importSource,
     chooseImportFile: async () => directories.importSource,
+    chooseRestoreBackup: async () => directories.importSource,
+    chooseBackupDestination: async () =>
+      directories.exportDirectory ?? directories.importSource,
   };
 }

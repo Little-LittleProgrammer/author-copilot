@@ -149,6 +149,8 @@ const gitMakeOptions = [
   "NO_TCLTK=YesPlease",
   "NO_PERL=YesPlease",
   "NO_PYTHON=YesPlease",
+  // The pinned Git source supports its C implementation without a Rust toolchain.
+  "NO_RUST=YesPlease",
   "NO_INSTALL_HARDLINKS=YesPlease",
   "APPLE_COMMON_CRYPTO=YesPlease",
   "NO_OPENSSL=YesPlease",

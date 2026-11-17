@@ -42,6 +42,8 @@ import type {
   AiPatchDiscardResponse,
   AnthropicCredentialResponse,
   AnthropicCredentialSetRequest,
+  DocumentDraftRequest,
+  DocumentDraftResponse,
   DocumentReadRequest,
   DocumentReadResponse,
   DocumentSaveRequest,
@@ -57,6 +59,9 @@ import type {
   ProjectCreateRequest,
   ProjectExportRequest,
   ProjectExportResponse,
+  ProjectRestoreBackupRequest,
+  ProjectBackupRequest,
+  ProjectBackupResponse,
   ProjectCreateEntryRequest,
   ProjectCreateEntryResponse,
   ProjectMoveEntryRequest,
@@ -221,9 +226,18 @@ export interface AuthorCopilotApi {
     };
   };
   readonly project: {
+    readonly restoreBackup: (
+      request: ProjectRestoreBackupRequest,
+    ) => Promise<ProjectCreateResponse>;
+    readonly draft: (
+      request: DocumentDraftRequest,
+    ) => Promise<DocumentDraftResponse>;
     readonly export: (
       request: ProjectExportRequest,
     ) => Promise<ProjectExportResponse>;
+    readonly backup: (
+      request: ProjectBackupRequest,
+    ) => Promise<ProjectBackupResponse>;
     readonly createEntry: (
       request: ProjectCreateEntryRequest,
     ) => Promise<ProjectCreateEntryResponse>;

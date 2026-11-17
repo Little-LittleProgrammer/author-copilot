@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 
 import {
+  DocumentDraftRequestSchema,
+  DocumentDraftResponseSchema,
   DocumentReadRequestSchema,
   DocumentReadResponseSchema,
   DocumentSaveRequestSchema,
@@ -15,6 +17,9 @@ import {
   ProjectMoveEntryRequestSchema,
   ProjectMoveEntryResponseSchema,
   ProjectCreateResponseSchema,
+  ProjectRestoreBackupRequestSchema,
+  ProjectBackupRequestSchema,
+  ProjectBackupResponseSchema,
   ProjectDeleteEntryRequestSchema,
   ProjectDeleteEntryResponseSchema,
   ProjectGetStructureRequestSchema,
@@ -200,6 +205,35 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
       },
     );
   }
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.documentDraft,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.documentDraft,
+        args,
+        options.trustedRendererUrl,
+      );
+      try {
+        const request = DocumentDraftRequestSchema.parse(args[0]);
+        const context = options.getTabManager()?.getContext(event.sender.id);
+        if (
+          context?.kind !== "project" ||
+          context.project.projectId !== request.projectId
+        )
+          throw new InvalidProjectPathError(
+            "Draft access is limited to the owning project tab.",
+          );
+        const drafts = await options.projectService.draft(request);
+        return DocumentDraftResponseSchema.parse({ ok: true, drafts });
+      } catch (error) {
+        return DocumentDraftResponseSchema.parse(
+          projectOperationFailure(error),
+        );
+      }
+    },
+  );
 
   const previews = new Map<string, PreviewEntry>();
 
@@ -472,6 +506,103 @@ export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
         });
       } catch (error) {
         return ProjectListResponseSchema.parse(projectOperationFailure(error));
+      }
+    },
+  );
+
+  const pendingRestores = new Set<number>();
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.projectRestoreBackup,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.projectRestoreBackup,
+        args,
+        options.trustedRendererUrl,
+      );
+      if (pendingRestores.has(event.sender.id))
+        return ProjectCreateResponseSchema.parse(cancelledOperation());
+      pendingRestores.add(event.sender.id);
+      try {
+        const request = ProjectRestoreBackupRequestSchema.parse(args[0]);
+        const workspaceId = options.getWorkspaceId?.();
+        const assertOwner = () => {
+          if (
+            options.getTabManager()?.getContext(event.sender.id).kind !==
+              "center" ||
+            options.getWorkspaceId?.() !== workspaceId
+          )
+            throw new InvalidProjectPathError(
+              "Backup restore is limited to the account home.",
+            );
+        };
+        assertOwner();
+        const source =
+          await options.directoryPicker.chooseRestoreBackup?.(request);
+        if (!source)
+          return ProjectCreateResponseSchema.parse(cancelledOperation());
+        assertOwner();
+        const project = summary(
+          await options.projectService.restoreBackup(source),
+        );
+        options.onProjectChanged?.(project);
+        return ProjectCreateResponseSchema.parse({ ok: true, project });
+      } catch (error) {
+        return ProjectCreateResponseSchema.parse(
+          projectOperationFailure(error),
+        );
+      } finally {
+        pendingRestores.delete(event.sender.id);
+      }
+    },
+  );
+
+  const pendingBackups = new Set<number>();
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.projectBackup,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.projectBackup,
+        args,
+        options.trustedRendererUrl,
+      );
+      if (pendingBackups.has(event.sender.id))
+        return ProjectBackupResponseSchema.parse(cancelledOperation());
+      pendingBackups.add(event.sender.id);
+      try {
+        const request = ProjectBackupRequestSchema.parse(args[0]);
+        const workspaceId = options.getWorkspaceId?.();
+        const assertOwner = () => {
+          const context = options.getTabManager()?.getContext(event.sender.id);
+          if (
+            context?.kind !== "project" ||
+            context.project.projectId !== request.projectId ||
+            options.getWorkspaceId?.() !== workspaceId
+          )
+            throw new InvalidProjectPathError(
+              "Backup is limited to the owning project tab and account.",
+            );
+        };
+        assertOwner();
+        const destination =
+          await options.directoryPicker.chooseBackupDestination?.({
+            locale: request.locale,
+          });
+        if (destination === undefined)
+          return ProjectBackupResponseSchema.parse(cancelledOperation());
+        assertOwner();
+        const result = await options.projectService.backupProject(
+          request.projectId,
+          destination,
+        );
+        return ProjectBackupResponseSchema.parse({ ok: true, ...result });
+      } catch (error) {
+        return ProjectBackupResponseSchema.parse(
+          projectOperationFailure(error),
+        );
+      } finally {
+        pendingBackups.delete(event.sender.id);
       }
     },
   );

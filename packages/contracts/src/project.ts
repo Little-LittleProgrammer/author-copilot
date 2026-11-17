@@ -379,6 +379,22 @@ export const ProjectExportResponseSchema = z.discriminatedUnion("ok", [
 ]);
 export type ProjectExportResponse = z.infer<typeof ProjectExportResponseSchema>;
 
+export const ProjectBackupRequestSchema = z.strictObject({
+  projectId: z.uuid(),
+  locale: z.enum(["zh-CN", "en-US"]),
+});
+export type ProjectBackupRequest = z.infer<typeof ProjectBackupRequestSchema>;
+
+export const ProjectBackupResponseSchema = z.discriminatedUnion("ok", [
+  z.strictObject({
+    ok: z.literal(true),
+    directoryName: DisplayNameSchema,
+    fileCount: z.number().int().nonnegative().max(10000),
+  }),
+  ProjectOperationFailureSchema,
+]);
+export type ProjectBackupResponse = z.infer<typeof ProjectBackupResponseSchema>;
+
 export const ProjectDeleteEntryRequestSchema = z.strictObject({
   projectId: z.uuid(),
   relativePath: RelativeProjectPathSchema,
@@ -440,3 +456,43 @@ export const DocumentSaveResponseSchema = z.discriminatedUnion("ok", [
 ]);
 
 export type DocumentSaveResponse = z.infer<typeof DocumentSaveResponseSchema>;
+
+export const DocumentDraftSchema = z.strictObject({
+  projectId: z.uuid(),
+  relativePath: RelativeProjectPathSchema,
+  baseHash: ContentHashSchema,
+  content: z.string().max(10 * 1024 * 1024),
+  revision: z.uuid(),
+  updatedAt: z.iso.datetime(),
+});
+export type DocumentDraft = z.infer<typeof DocumentDraftSchema>;
+export const DocumentDraftRequestSchema = z.discriminatedUnion("action", [
+  z.strictObject({ action: z.literal("list"), projectId: z.uuid() }),
+  z.strictObject({
+    action: z.literal("put"),
+    projectId: z.uuid(),
+    relativePath: RelativeProjectPathSchema,
+    baseHash: ContentHashSchema,
+    content: z.string().max(10 * 1024 * 1024),
+    revision: z.uuid(),
+  }),
+  z.strictObject({
+    action: z.literal("delete"),
+    projectId: z.uuid(),
+    relativePath: RelativeProjectPathSchema,
+    revision: z.uuid(),
+  }),
+]);
+export type DocumentDraftRequest = z.infer<typeof DocumentDraftRequestSchema>;
+export const DocumentDraftResponseSchema = z.discriminatedUnion("ok", [
+  z.strictObject({ ok: z.literal(true), drafts: z.array(DocumentDraftSchema) }),
+  ProjectOperationFailureSchema,
+]);
+export type DocumentDraftResponse = z.infer<typeof DocumentDraftResponseSchema>;
+
+export const ProjectRestoreBackupRequestSchema = z.strictObject({
+  locale: z.enum(["zh-CN", "en-US"]),
+});
+export type ProjectRestoreBackupRequest = z.infer<
+  typeof ProjectRestoreBackupRequestSchema
+>;

@@ -36,6 +36,30 @@ async function fixture() {
   return { root, conversation, store: new ConversationStore(root) };
 }
 describe("durable conversation history", () => {
+  it("captures the account directory when writes are queued", async () => {
+    const { root, conversation } = await fixture();
+    let active = join(root, "account-a");
+    const store = new ConversationStore(() => active);
+    const write = store.request({ action: "save", conversation });
+    active = join(root, "account-b");
+    await write;
+    await store.drain();
+    expect(
+      await store.request({
+        action: "list",
+        projectId: conversation.projectId,
+      }),
+    ).toEqual({ ok: true, conversations: [] });
+    const firstAccount = new ConversationStore(join(root, "account-a"));
+    expect(
+      await firstAccount.request({
+        action: "get",
+        projectId: conversation.projectId,
+        id: conversation.id,
+      }),
+    ).toMatchObject({ conversation });
+  });
+
   it("restores messages and review decisions after restart and isolates projects", async () => {
     const { root, store, conversation } = await fixture();
     await store.request({ action: "save", conversation });

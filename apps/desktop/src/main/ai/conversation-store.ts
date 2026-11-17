@@ -18,19 +18,25 @@ export class ConversationStore {
 
   request(input: ConversationRequest): Promise<ConversationResponse> {
     const request = ConversationRequestSchema.parse(input);
-    const next = this.pending.then(() => this.perform(request));
+    const root = storageRoot(this.root);
+    const next = this.pending.then(() => this.perform(request, root));
     this.pending = next.catch(() => undefined);
     return next;
   }
 
+  async drain(): Promise<void> {
+    await this.pending;
+  }
+
   private async perform(
     request: ConversationRequest,
+    root: string,
   ): Promise<ConversationResponse> {
     const projectId =
       request.action === "save"
         ? request.conversation.projectId
         : request.projectId;
-    const directory = join(storageRoot(this.root), projectId);
+    const directory = join(root, projectId);
     if (request.action === "save") {
       const content = JSON.stringify(request.conversation);
       if (Buffer.byteLength(content) > 16 * 1024 * 1024)

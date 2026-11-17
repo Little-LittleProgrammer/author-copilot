@@ -21,6 +21,17 @@ import {
   PROJECT_METADATA_FILE_NAME,
 } from "@author-copilot/project-schema";
 
+import {
+  BACKUP_MANIFEST,
+  createProjectBackup,
+  validateBackup,
+  sanitizeRestoredGit,
+} from "./project-backup.js";
+import { operateDrafts } from "./draft-store.js";
+import {
+  DocumentDraftRequestSchema,
+  type DocumentDraftRequest,
+} from "@author-copilot/contracts";
 import { copyDirectoryWithoutSymlinks } from "./copy-project.js";
 import {
   DocumentConflictError,
@@ -81,6 +92,7 @@ export interface ProjectServiceOptions {
   readonly publishEvent?: ProjectEventPublisher;
   readonly writeDocument?: typeof atomicWriteFile;
   readonly operationQueue?: ProjectOperationQueue;
+  readonly assertBackupReady?: (projectId: string) => Promise<void>;
   readonly assertCanMutate?: (projectId: string) => void;
 }
 
@@ -450,6 +462,16 @@ export class ProjectService {
       options.template,
     );
 
+    let hasBackup = false;
+    try {
+      await lstat(join(preview.rootPath, BACKUP_MANIFEST));
+      hasBackup = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const backup = hasBackup
+      ? await validateBackup(preview.rootPath)
+      : undefined;
     const title = validateTitle(options.title ?? preview.metadata.title);
     const metadata = {
       ...createMetadata(title, options.template),
@@ -465,7 +487,22 @@ export class ProjectService {
       preview.rootPath,
       destination,
       createRegisteredProject(destination, metadata),
+      backup,
     );
+  }
+
+  restoreBackup(rootPath: string): Promise<RegisteredProject> {
+    return this.trackJob(async () => {
+      const root = await canonicalDirectory(rootPath);
+      await validateBackup(root);
+      const { metadata } = await readMetadata(root);
+      if (!metadata)
+        throw new ProjectServiceError("Missing backup project metadata.");
+      return this.confirmImportInternal({
+        rootPath: root,
+        template: metadata.template,
+      });
+    });
   }
 
   async list(): Promise<readonly RegisteredProject[]> {
@@ -502,6 +539,62 @@ export class ProjectService {
         metadata.title,
         structure,
         request,
+      );
+    });
+  }
+
+  draft(input: DocumentDraftRequest) {
+    const request = DocumentDraftRequestSchema.parse(input);
+    const runtimeRoot = dirname(this.registry.registryPath);
+    return this.trackJob(async () => {
+      await this.requireProject(request.projectId);
+      const directory = join(
+        await realpath(runtimeRoot),
+        "drafts",
+        request.projectId,
+      );
+      return this.withDocumentLock(directory, async () => {
+        const drafts = await operateDrafts(directory, request);
+        if (request.action !== "list") return drafts;
+        const recoverable = [];
+        for (const draft of drafts) {
+          let matchesSaved = false;
+          try {
+            matchesSaved =
+              (await this.readDocument(request.projectId, draft.relativePath))
+                .hash === hashContent(draft.content);
+          } catch {
+            // Missing or unreadable sources must never discard a recovery draft.
+          }
+          if (matchesSaved)
+            await operateDrafts(directory, {
+              action: "delete",
+              projectId: request.projectId,
+              relativePath: draft.relativePath,
+              revision: draft.revision,
+            });
+          else recoverable.push(draft);
+        }
+        return recoverable;
+      });
+    });
+  }
+
+  async backupProject(
+    projectId: string,
+    destinationDirectory: string,
+  ): Promise<{ readonly directoryName: string; readonly fileCount: number }> {
+    return this.withProjectLock(projectId, async () => {
+      await this.options.assertBackupReady?.(projectId);
+      const project = await this.requireProject(projectId);
+      const metadata = await this.currentMetadata(project);
+      const drafts = await this.draft({ action: "list", projectId });
+      return createProjectBackup(
+        project.rootPath,
+        destinationDirectory,
+        metadata.title,
+        (await this.list()).map((item) => item.rootPath),
+        drafts,
       );
     });
   }
@@ -993,6 +1086,7 @@ export class ProjectService {
     sourcePath: string,
     destinationPath: string,
     project: RegisteredProject,
+    backup?: Awaited<ReturnType<typeof validateBackup>>,
   ): Promise<RegisteredProject> {
     const canonicalParent = dirname(destinationPath);
     const stagingPath = join(
@@ -1015,6 +1109,11 @@ export class ProjectService {
     await assertPathDoesNotExist(destinationPath);
     try {
       await copyDirectoryWithoutSymlinks(sourcePath, stagingPath);
+      if (backup) {
+        await validateBackup(stagingPath);
+        await sanitizeRestoredGit(stagingPath);
+        await rm(join(stagingPath, BACKUP_MANIFEST));
+      }
       await writeMetadata(stagingPath, project.metadata);
       await this.options.initializeProject?.(
         stagingPath,
@@ -1023,6 +1122,27 @@ export class ProjectService {
       await assertPathDoesNotExist(destinationPath);
       await rename(stagingPath, destinationPath);
       published = true;
+      // Persist recovery drafts before registering the new work. A failed
+      // restore never advertises a partial work in the catalog.
+      if (backup) {
+        for (const draft of backup.drafts) {
+          await operateDrafts(
+            join(
+              dirname(this.registry.registryPath),
+              "drafts",
+              project.projectId,
+            ),
+            {
+              action: "put",
+              projectId: project.projectId,
+              relativePath: draft.relativePath,
+              baseHash: draft.baseHash,
+              content: draft.content,
+              revision: draft.revision,
+            },
+          );
+        }
+      }
       await this.registry.register(project);
       await this.notifyRegistryChanged();
       return project;
@@ -1031,6 +1151,15 @@ export class ProjectService {
         recursive: true,
         force: true,
       }).catch(() => undefined);
+      if (backup)
+        await rm(
+          join(
+            dirname(this.registry.registryPath),
+            "drafts",
+            project.projectId,
+          ),
+          { recursive: true, force: true },
+        ).catch(() => undefined);
       throw error;
     }
   }

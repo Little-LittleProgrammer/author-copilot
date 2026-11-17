@@ -11,12 +11,12 @@
     "clean": "rm -rf out release coverage",
     "dev": "electron-vite dev",
     "lint": "eslint --config eslint.config.ts .",
-    "package": "pnpm package:prepare && pnpm runtime:fetch && pnpm build && electron-builder",
-    "package:mac:arm64": "pnpm package:prepare && pnpm runtime:fetch:mac:arm64 && pnpm build && electron-builder --mac --arm64",
-    "package:mac:x64": "pnpm package:prepare && pnpm runtime:fetch:mac:x64 && pnpm build && electron-builder --mac --x64",
+    "package": "pnpm package:prepare && pnpm runtime:fetch && pnpm release:materials && pnpm build && electron-builder",
+    "package:mac:arm64": "pnpm package:prepare && pnpm runtime:fetch:mac:arm64 && pnpm release:materials && pnpm build && electron-builder --mac --arm64",
+    "package:mac:x64": "pnpm package:prepare && pnpm runtime:fetch:mac:x64 && pnpm release:materials && pnpm build && electron-builder --mac --x64",
     "package:prepare": "pnpm --workspace-root turbo run build --filter=@author-copilot/desktop^...",
-    "package:win:arm64": "pnpm package:prepare && pnpm runtime:fetch:win:arm64 && pnpm build && electron-builder --win --arm64",
-    "package:win:x64": "pnpm package:prepare && pnpm runtime:fetch:win:x64 && pnpm build && electron-builder --win --x64",
+    "package:win:arm64": "pnpm package:prepare && pnpm runtime:fetch:win:arm64 && pnpm release:materials && pnpm build && electron-builder --win --arm64",
+    "package:win:x64": "pnpm package:prepare && pnpm runtime:fetch:win:x64 && pnpm release:materials && pnpm build && electron-builder --win --x64",
     "runtime:fetch": "node ../../tooling/scripts/fetch-git-runtime.ts",
     "runtime:fetch:mac:arm64": "node ../../tooling/scripts/fetch-git-runtime.ts --platform=darwin --arch=arm64",
     "runtime:fetch:mac:x64": "node ../../tooling/scripts/fetch-git-runtime.ts --platform=darwin --arch=x64",
@@ -29,7 +29,9 @@
     "smoke": "pnpm build && node ./scripts/electron-smoke.ts",
     "test": "vitest run",
     "test:e2e": "pnpm build && playwright test --config playwright.config.ts",
-    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.e2e.json --noEmit && tsc -p tsconfig.web.json --noEmit"
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.e2e.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "release:materials": "node ../../tooling/scripts/release-materials.mjs",
+    "release:qualify-live": "vitest run tests/live-ai-qualification.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "catalog:",
@@ -90,6 +92,13 @@
       {
         "from": "resources/git",
         "to": "git",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/release-materials",
+        "to": "release-materials",
         "filter": [
           "**/*"
         ]

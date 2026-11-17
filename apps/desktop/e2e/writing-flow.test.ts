@@ -4333,3 +4333,355 @@ test("isolates local and signed-in account workspaces during account switches", 
     await rm(temporaryRoot, { recursive: true, force: true });
   }
 });
+
+for (const locale of ["zh-CN", "en-US"] as const) {
+  test(`auto-saves, survives renderer loss, reviews conflict drafts, and backs up a work (${locale})`, async () => {
+    const temporaryRoot = await mkdtemp(
+      join(tmpdir(), "author-copilot-safety-"),
+    );
+    let application = await launchApplication(temporaryRoot);
+    try {
+      const { center } = await enterWorkspace(application, locale);
+      await expect(
+        center.getByRole("region", {
+          name: /体验第一次创作任务|Try your first writing task/u,
+        }),
+      ).toBeVisible();
+      await center.getByRole("button", { name: /新建小说|New novel/u }).click();
+      await center.getByTestId("project-name").fill("P01 Safety");
+      await center.getByTestId("project-dialog-submit").click();
+      const page = await rendererPage(application, "project");
+      const root = await managedProjectRoot(temporaryRoot, "P01 Safety");
+      const documentPath = join(root, "第一卷/第一章/01-正文.md");
+      await page.getByRole("button", { name: "第一章", exact: true }).click();
+      const editor = page.getByTestId("document-editor");
+      await editor.fill("自动保存基线");
+      await expect
+        .poll(() => readFile(documentPath, "utf8"))
+        .toBe("自动保存基线");
+      await expect(page.getByTestId("save-document")).toBeDisabled();
+
+      // An IME composition can outlive the debounce. It must not publish preedit.
+      await editor.dispatchEvent("compositionstart");
+      await editor.fill("未完成的拼音草稿");
+      await expect
+        .poll(async () => {
+          return page.evaluate(async () => {
+            const api = (
+              window as unknown as { authorCopilot: AuthorCopilotApi }
+            ).authorCopilot;
+            const context = await api.tabs.getContext();
+            if (context.kind !== "project") return [];
+            const result = await api.project.draft({
+              action: "list",
+              projectId: context.project.projectId,
+            });
+            return result.ok ? result.drafts.map((draft) => draft.content) : [];
+          });
+        })
+        .toContain("未完成的拼音草稿");
+      await page.waitForTimeout(1400);
+      expect(await readFile(documentPath, "utf8")).toBe("自动保存基线");
+      await editor.dispatchEvent("compositionend");
+      await expect
+        .poll(() => readFile(documentPath, "utf8"))
+        .toBe("未完成的拼音草稿");
+
+      // Change disk behind the editor. Automatic saving must fail closed.
+      await writeFile(documentPath, "外部更新正文");
+      await editor.fill("崩溃前最新输入");
+      await expect(page.locator(".editor-alert")).toContainText(
+        /changed on disk|磁盘|发生/u,
+      );
+      expect(await readFile(documentPath, "utf8")).toBe("外部更新正文");
+      await page.reload();
+      const recovery = page.getByRole("dialog", {
+        name: /恢复草稿|Recover drafts/u,
+      });
+      await expect(recovery).toBeVisible();
+      await expect(recovery.getByRole("textbox").nth(0)).toHaveValue(
+        "外部更新正文",
+      );
+      await expect(recovery.getByRole("textbox").nth(1)).toHaveValue(
+        "崩溃前最新输入",
+      );
+      await page.screenshot({
+        path: `test-results/p01-recovery-${locale}.png`,
+      });
+      await recovery
+        .getByRole("button", { name: /打开草稿审阅|Open draft for review/u })
+        .click();
+      await expect(editor).toHaveValue("崩溃前最新输入");
+      await page.waitForTimeout(1400);
+      expect(await readFile(documentPath, "utf8")).toBe("外部更新正文");
+      await page.getByTestId("save-document").click();
+      await expect
+        .poll(() => readFile(documentPath, "utf8"))
+        .toBe("崩溃前最新输入");
+      await expect(page.getByTestId("save-document")).toBeDisabled();
+      await page
+        .getByRole("button", { name: /备份作品|Back up work/u, exact: true })
+        .click();
+      await expect(page.locator(".statusbar")).toContainText(
+        /作品已备份|Backed up/u,
+      );
+      await page.screenshot({ path: `test-results/p01-saved-${locale}.png` });
+      const names = await import("node:fs/promises").then((fs) =>
+        fs.readdir(temporaryRoot),
+      );
+      const backup = names.find((name) =>
+        name.endsWith(".author-copilot-backup"),
+      );
+      expect(backup).toBeDefined();
+      expect(
+        await readFile(
+          join(temporaryRoot, backup!, "第一卷/第一章/01-正文.md"),
+          "utf8",
+        ),
+      ).toBe("崩溃前最新输入");
+      await application.close();
+      application = await launchApplication(temporaryRoot, {
+        AUTHOR_COPILOT_E2E_IMPORT_SOURCE: join(temporaryRoot, backup!),
+      });
+      const restartedShell = await application.firstWindow();
+      await expect(restartedShell.getByTestId("shell-app")).toBeVisible();
+      if (await restartedShell.getByTestId("continue-local").isVisible())
+        await restartedShell.getByTestId("continue-local").click();
+      const home = await rendererPage(application, "center");
+      await home
+        .getByRole("button", {
+          name: /从备份恢复|Restore from backup/u,
+          exact: true,
+        })
+        .click();
+      const restored = await rendererPage(application, "project");
+      await restored
+        .getByRole("button", { name: "第一章", exact: true })
+        .click();
+      await expect(restored.getByTestId("document-editor")).toHaveValue(
+        "崩溃前最新输入",
+      );
+      const works = await home.evaluate(async () => {
+        const response = await (
+          window as unknown as { authorCopilot: AuthorCopilotApi }
+        ).authorCopilot.project.list();
+        return response.ok ? response.projects.length : 0;
+      });
+      expect(works).toBe(2);
+      await restored.screenshot({
+        path: `test-results/p01-restored-${locale}.png`,
+      });
+    } finally {
+      await application.close();
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+}
+
+test("recovers an acknowledged draft after the Electron process is killed", async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "author-copilot-crash-"));
+  let application = await launchApplication(temporaryRoot);
+  try {
+    const { center } = await enterWorkspace(application, "zh-CN");
+    await center.getByRole("button", { name: "新建小说", exact: true }).click();
+    await center.getByTestId("project-name").fill("Crash recovery");
+    await center.getByTestId("project-dialog-submit").click();
+    const page = await rendererPage(application, "project");
+    await page.getByRole("button", { name: "第一章", exact: true }).click();
+    const editor = page.getByTestId("document-editor");
+    await editor.dispatchEvent("compositionstart");
+    await editor.fill("进程终止前的草稿");
+    await expect
+      .poll(async () =>
+        page.evaluate(async () => {
+          const api = (window as unknown as { authorCopilot: AuthorCopilotApi })
+            .authorCopilot;
+          const context = await api.tabs.getContext();
+          if (context.kind !== "project") return [];
+          const result = await api.project.draft({
+            action: "list",
+            projectId: context.project.projectId,
+          });
+          return result.ok ? result.drafts.map((draft) => draft.content) : [];
+        }),
+      )
+      .toContain("进程终止前的草稿");
+    const child = application.process();
+    const exited = new Promise<void>((resolveExit) =>
+      child.once("exit", () => resolveExit()),
+    );
+    child.kill("SIGKILL");
+    await exited;
+    await application.close().catch(() => undefined);
+    application = await launchApplication(temporaryRoot);
+    const shell = await application.firstWindow();
+    await expect(shell.getByTestId("shell-app")).toBeVisible();
+    if (await shell.getByTestId("continue-local").isVisible())
+      await shell.getByTestId("continue-local").click();
+    const home = await rendererPage(application, "center");
+    await home
+      .getByRole("button", { name: /打开作品.*Crash recovery/u })
+      .click();
+    const restoredPage = await rendererPage(application, "project");
+    await application.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]?.setSize(880, 640),
+    );
+    const dialog = restoredPage.getByRole("dialog", {
+      name: "恢复草稿",
+      exact: true,
+    });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("textbox").nth(1)).toHaveValue(
+      "进程终止前的草稿",
+    );
+    await dialog.getByRole("button", { name: "保留草稿并关闭" }).click();
+    await restoredPage
+      .getByRole("button", { name: "恢复草稿", exact: true })
+      .click();
+    await expect(dialog.getByRole("textbox").nth(1)).toHaveValue(
+      "进程终止前的草稿",
+    );
+    await restoredPage.screenshot({
+      path: "test-results/p01-crash-narrow.png",
+    });
+    await dialog.getByRole("button", { name: "打开草稿审阅" }).click();
+    await expect(restoredPage.getByTestId("document-editor")).toHaveValue(
+      "进程终止前的草稿",
+    );
+    const root = await managedProjectRoot(temporaryRoot, "Crash recovery");
+    expect(await readFile(join(root, "第一卷/第一章/01-正文.md"), "utf8")).toBe(
+      "",
+    );
+    await restoredPage.getByTestId("save-document").click();
+    await expect
+      .poll(() => readFile(join(root, "第一卷/第一章/01-正文.md"), "utf8"))
+      .toBe("进程终止前的草稿");
+  } finally {
+    await application.close().catch(() => undefined);
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("preserves a failed partial AI answer across reload and requires an explicit retry", async () => {
+  const temporaryRoot = await mkdtemp(
+    join(tmpdir(), "author-copilot-ai-fault-"),
+  );
+  let calls = 0;
+  const server = createServer((_request, response) => {
+    calls++;
+    const text = calls === 1 ? "断流前的部分回答" : "重试后的完整回答";
+    const events: { type: string; [key: string]: unknown }[] = [
+      {
+        type: "message_start",
+        message: {
+          id: `msg_${calls}`,
+          type: "message",
+          role: "assistant",
+          model: "claude-sonnet-4-6",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 0 },
+        },
+      },
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "" },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text },
+      },
+    ];
+    if (calls > 1)
+      events.push(
+        { type: "content_block_stop", index: 0 },
+        {
+          type: "message_delta",
+          delta: { stop_reason: "end_turn", stop_sequence: null },
+          usage: { output_tokens: 8 },
+        },
+        { type: "message_stop" },
+      );
+    response.writeHead(200, {
+      "content-type": "text/event-stream",
+      connection: "close",
+    });
+    response.end(
+      events
+        .map(
+          (event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+        )
+        .join(""),
+    );
+  });
+  await new Promise<void>((resolveServer) =>
+    server.listen(0, "127.0.0.1", resolveServer),
+  );
+  const address = server.address();
+  if (!address || typeof address === "string")
+    throw new Error("Missing loopback address");
+  const application = await launchApplication(temporaryRoot, {
+    AUTHOR_COPILOT_E2E_ANTHROPIC_BASE_URL: `http://127.0.0.1:${address.port}`,
+    AUTHOR_COPILOT_E2E_CREDENTIAL_ENCRYPTION: "1",
+  });
+  try {
+    const { center } = await enterWorkspace(application, "zh-CN");
+    await center.evaluate(async () => {
+      await (
+        window as unknown as { authorCopilot: AuthorCopilotApi }
+      ).authorCopilot.credentials.anthropic.set({
+        apiKey: "sk-ant-synthetic-fault",
+      });
+    });
+    await center.getByRole("button", { name: "新建小说", exact: true }).click();
+    await center.getByTestId("project-name").fill("AI fault recovery");
+    await center.getByTestId("project-dialog-submit").click();
+    const page = await rendererPage(application, "project");
+    await page.getByRole("button", { name: "第一章", exact: true }).click();
+    await page.getByTestId("document-editor").fill("作者正文保持不变");
+    await expect(page.getByTestId("save-document")).toBeDisabled();
+    await openAssistant(page);
+    await page.getByTestId("ai-chat-input").fill("核对这段正文");
+    await page.getByTestId("ai-chat-send").click();
+    await expect(
+      page
+        .locator(".copilot-message-content")
+        .filter({ hasText: "断流前的部分回答" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "重新编辑问题后重试" }),
+    ).toBeVisible();
+    expect(calls).toBe(1);
+    await page.reload();
+    await page.getByRole("button", { name: "第一章", exact: true }).click();
+    await openAssistant(page);
+    await expect(
+      page
+        .locator(".copilot-message-content")
+        .filter({ hasText: "断流前的部分回答" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "重新编辑问题后重试" }).click();
+    await expect(page.getByTestId("ai-chat-input")).toHaveValue("核对这段正文");
+    expect(calls).toBe(1);
+    await page.getByTestId("ai-chat-send").click();
+    await expect(
+      page
+        .locator(".copilot-message-content")
+        .filter({ hasText: "重试后的完整回答" }),
+    ).toBeVisible();
+    expect(calls).toBe(2);
+    await expect(page.getByTestId("document-editor")).toHaveValue(
+      "作者正文保持不变",
+    );
+    await page.screenshot({ path: "test-results/p01-ai-fault.png" });
+  } finally {
+    await application.close();
+    await new Promise<void>((resolveServer) =>
+      server.close(() => resolveServer()),
+    );
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});

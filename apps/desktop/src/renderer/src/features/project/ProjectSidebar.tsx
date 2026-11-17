@@ -4,6 +4,7 @@ import { createEntryLabel } from "./structure-presentation.js";
 import {
   ArrowDown,
   ArrowUp,
+  Archive,
   Check,
   Download,
   Pencil,
@@ -21,6 +22,7 @@ import { ProjectInfoDialog } from "./ProjectInfoDialog.js";
 import type { ProjectSummary, StructureNode } from "./types.js";
 
 interface ProjectSidebarProps {
+  readonly onBackup: () => void;
   readonly onExport: () => void;
   readonly activeDocumentPath: string | undefined;
   readonly activeProject: ProjectSummary;
@@ -352,6 +354,16 @@ export function ProjectSidebar(props: ProjectSidebarProps): JSX.Element {
             onClick={props.onExport}
           >
             <Download size={14} />
+          </button>
+          <button
+            className="project-info-button"
+            type="button"
+            aria-label={t("backupProject")}
+            title={t("backupProject")}
+            disabled={loading}
+            onClick={props.onBackup}
+          >
+            <Archive size={14} />
           </button>
           <button
             className="project-info-button"

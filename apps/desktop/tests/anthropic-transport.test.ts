@@ -210,3 +210,87 @@ describe("Anthropic transport", () => {
     ).rejects.toBeInstanceOf(APIConnectionError);
   });
 });
+
+it("rejects an incomplete stream while preserving text already delivered", async () => {
+  const baseURL = await loopback((_request, response) => {
+    response.writeHead(200, {
+      "content-type": "text/event-stream",
+      connection: "close",
+    });
+    const events = [
+      {
+        type: "message_start",
+        message: {
+          id: "msg_partial",
+          type: "message",
+          role: "assistant",
+          model: "claude-sonnet-4-6",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 0 },
+        },
+      },
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "" },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "可保留的部分回答" },
+      },
+    ];
+    response.end(
+      events
+        .map(
+          (event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+        )
+        .join(""),
+    );
+  });
+  const chunks: string[] = [];
+  await expect(
+    new AnthropicClaudeTransport({ baseURL }).stream({
+      apiKey: "sk-ant-loopback",
+      messages: [{ role: "user", content: "继续" }],
+      signal: new AbortController().signal,
+      system: "test",
+      timeoutMs: 1000,
+      onText: (text) => chunks.push(text),
+    }),
+  ).rejects.toThrow();
+  expect(chunks).toEqual(["可保留的部分回答"]);
+});
+
+it.each([402, 429, 503])(
+  "does not automatically retry an HTTP %i response",
+  async (status) => {
+    let calls = 0;
+    const baseURL = await loopback((_request, response) => {
+      calls++;
+      response.writeHead(status, {
+        "content-type": "application/json",
+        connection: "close",
+      });
+      response.end(
+        JSON.stringify({
+          type: "error",
+          error: { type: "api_error", message: "synthetic fault" },
+        }),
+      );
+    });
+    await expect(
+      new AnthropicClaudeTransport({ baseURL }).stream({
+        apiKey: "sk-ant-loopback",
+        messages: [{ role: "user", content: "继续" }],
+        signal: new AbortController().signal,
+        system: "test",
+        timeoutMs: 1000,
+        onText: vi.fn(),
+      }),
+    ).rejects.toMatchObject({ status });
+    expect(calls).toBe(1);
+  },
+);

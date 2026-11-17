@@ -91,7 +91,10 @@ describe("IPC contracts", () => {
   });
 
   it("keeps every declared channel in the validated whitelist", () => {
-    expect(IPC_CHANNEL_NAMES).toHaveLength(71);
+    expect(IPC_CHANNEL_NAMES).toHaveLength(
+      Object.keys(IPC_INVOKE_CHANNELS).length +
+        Object.keys(IPC_EVENT_CHANNELS).length,
+    );
     for (const channel of IPC_CHANNEL_NAMES) {
       expect(IpcChannelSchema.parse(channel)).toBe(channel);
     }

@@ -37,6 +37,8 @@ interface WriterCenterProps {
   readonly loading: boolean;
   readonly onCreate: (type: ProjectType) => void;
   readonly onImport: () => void;
+  readonly onRestoreBackup: () => void;
+  readonly restoringBackup: boolean;
   readonly onLocaleChange: (locale: Locale) => void;
   readonly onLogout: () => void;
   readonly onOpenCredentials: () => void;
@@ -59,6 +61,8 @@ export function WriterCenter({
   loading,
   onCreate,
   onImport,
+  onRestoreBackup,
+  restoringBackup,
   onLocaleChange,
   onLogout,
   onOpenCredentials,
@@ -284,7 +288,48 @@ export function WriterCenter({
           </button>
         </div>
 
+        {!loading && projects.length === 0 ? (
+          <section
+            className="rounded-md border border-border p-4"
+            aria-label={t("firstRunTitle")}
+          >
+            <h2>{t("firstRunTitle")}</h2>
+            <ol className="list-decimal space-y-2 pl-5">
+              <li>
+                {t("firstRunImport")}{" "}
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={onImport}
+                >
+                  {t("firstRunImportAction")}
+                </button>
+              </li>
+              <li>
+                {t("firstRunConnect")}{" "}
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={onOpenCredentials}
+                >
+                  {t("quickAi")}
+                </button>
+              </li>
+              <li>{t("firstRunReview")}</li>
+            </ol>
+            <p className="mt-3 text-sm">{t("firstRunPrivacy")}</p>
+          </section>
+        ) : null}
+
         <div className="works-toolbar">
+          <button
+            className="button secondary"
+            type="button"
+            disabled={restoringBackup}
+            onClick={onRestoreBackup}
+          >
+            {restoringBackup ? t("restoringBackup") : t("restoreBackup")}
+          </button>
           <div className="filter-tabs">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

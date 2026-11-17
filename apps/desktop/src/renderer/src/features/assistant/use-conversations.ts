@@ -29,12 +29,16 @@ export function useConversations(projectId: string, untitled: string) {
       const timer = timers.current.get(conversation.id);
       if (timer) clearTimeout(timer);
       timers.current.delete(conversation.id);
-      const next = pending.current.then(async () => {
-        await request({ action: "save", conversation });
-      });
-      pending.current = next.catch((reason: unknown) =>
-        setError(reason instanceof Error ? reason.message : String(reason)),
+      // Dispatch immediately: Main serializes writes. Keeping unsent saves in
+      // a renderer promise chain loses terminal/partial results during reload.
+      const next = request({ action: "save", conversation }).then(
+        () => undefined,
       );
+      pending.current = Promise.all([pending.current, next])
+        .then(() => undefined)
+        .catch((reason: unknown) =>
+          setError(reason instanceof Error ? reason.message : String(reason)),
+        );
       return next;
     },
     [request],

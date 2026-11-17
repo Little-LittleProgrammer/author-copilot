@@ -8,6 +8,7 @@ import {
   DocumentConflictError,
   InvalidProjectPathError,
   ProjectNotFoundError,
+  ProjectBackupBlockedError,
   ProjectRootAlreadyRegisteredError,
   SymbolicLinkNotAllowedError,
 } from "../project/index.js";
@@ -30,6 +31,12 @@ export function cancelledOperation(): ProjectOperationFailure {
 export function projectOperationFailure(
   error: unknown,
 ): ProjectOperationFailure {
+  if (error instanceof ProjectBackupBlockedError)
+    return failure({
+      code: "conflict",
+      message: error.message,
+      retryable: true,
+    });
   if (error instanceof DocumentExportError) {
     return failure({
       code:
