@@ -1,0 +1,732 @@
+import { randomUUID } from "node:crypto";
+import { basename } from "node:path";
+
+import {
+  DocumentDraftRequestSchema,
+  DocumentDraftResponseSchema,
+  DocumentReadRequestSchema,
+  DocumentReadResponseSchema,
+  DocumentSaveRequestSchema,
+  DocumentSaveResponseSchema,
+  IPC_INVOKE_CHANNELS,
+  ProjectConfirmImportRequestSchema,
+  ProjectConfirmImportResponseSchema,
+  ProjectCreateRequestSchema,
+  ProjectCreateEntryRequestSchema,
+  ProjectCreateEntryResponseSchema,
+  ProjectMoveEntryRequestSchema,
+  ProjectMoveEntryResponseSchema,
+  ProjectCreateResponseSchema,
+  ProjectRestoreBackupRequestSchema,
+  ProjectBackupRequestSchema,
+  ProjectBackupResponseSchema,
+  ProjectDeleteEntryRequestSchema,
+  ProjectDeleteEntryResponseSchema,
+  ProjectGetStructureRequestSchema,
+  ProjectGetStructureResponseSchema,
+  ProjectImportPreviewRequestSchema,
+  ProjectImportPreviewResponseSchema,
+  ProjectListRequestSchema,
+  ProjectListResponseSchema,
+  ProjectRenameEntryRequestSchema,
+  ProjectRenameEntryResponseSchema,
+  ProjectUpdateRequestSchema,
+  ProjectUpdateResponseSchema,
+  type ProjectImportRecognizedNode,
+  type ProjectStructureNode as ProjectStructureNodeDto,
+  type ProjectSummary,
+} from "@author-copilot/contracts";
+import { ipcMain, type IpcMainInvokeEvent } from "electron";
+
+import { assertTrustedIpcRequest } from "../ipc-policy.js";
+import { InvalidProjectPathError } from "../project/errors.js";
+import type { TabManager } from "../tabs/index.js";
+import type { ProjectDirectoryPicker } from "../project-dialogs.js";
+import type {
+  ProjectService,
+  ProjectDocument,
+  ProjectStructureNode,
+  RegisteredProject,
+} from "../project/index.js";
+import {
+  cancelledOperation,
+  projectOperationFailure,
+} from "./project-result.js";
+
+import {
+  previewDocumentImport,
+  assertImportSourceUnchanged,
+  type DocumentImportPreview,
+} from "../project/document-import.js";
+
+import {
+  buildDocumentImportPlan,
+  type DocumentImportPlan,
+} from "../project/document-import-plan.js";
+
+interface PreviewEntry {
+  readonly ownerId: number;
+  readonly workspaceId: string;
+  readonly document?: DocumentImportPreview & {
+    readonly plan: DocumentImportPlan;
+  };
+  readonly rootPath: string;
+  readonly template: "novel" | "screenplay";
+  readonly expiresAt: number;
+}
+
+export interface ProjectIpcOptions {
+  readonly trustedRendererUrl: string;
+  readonly getWorkspaceId?: () => string;
+  readonly projectService: ProjectService;
+  readonly getTabManager: () => TabManager | undefined;
+  readonly directoryPicker: ProjectDirectoryPicker;
+  readonly onProjectChanged?: (project: ProjectSummary) => void;
+}
+
+function authorize(
+  event: IpcMainInvokeEvent,
+  channel: string,
+  args: readonly unknown[],
+  trustedRendererUrl: string,
+): void {
+  const senderFrame = event.senderFrame;
+  assertTrustedIpcRequest({
+    channel,
+    senderFrameUrl: senderFrame?.url ?? "",
+    mainFrameUrl: event.sender.mainFrame.url,
+    trustedRendererUrl,
+    isMainFrame: senderFrame !== null && senderFrame === event.sender.mainFrame,
+    args,
+    expectedArgumentCount: 1,
+  });
+}
+
+function summary(project: RegisteredProject): ProjectSummary {
+  return {
+    projectId: project.projectId,
+    title: project.metadata.title,
+    template: project.metadata.template,
+    rootDisplayName: project.metadata.title,
+  };
+}
+
+function importNode(
+  node: ProjectStructureNode | ProjectDocument,
+): ProjectImportRecognizedNode {
+  if (node.kind === "document") {
+    return {
+      role: "scene",
+      displayName: node.name,
+      relativePath: node.relativePath,
+      children: [],
+    };
+  }
+  return {
+    role: node.kind,
+    displayName: node.name,
+    relativePath: node.relativePath,
+    children: node.children.map(importNode),
+  };
+}
+
+function structureNode(
+  node: ProjectStructureNode | ProjectDocument,
+): ProjectStructureNodeDto {
+  if (node.kind === "document") {
+    return {
+      kind: "document",
+      role: "scene",
+      displayName: node.name,
+      relativePath: node.relativePath,
+      children: [],
+    };
+  }
+  return {
+    kind: "directory",
+    role: node.kind,
+    displayName: node.name,
+    relativePath: node.relativePath,
+    children: node.children.map(structureNode),
+  };
+}
+
+export function registerProjectIpcHandlers(options: ProjectIpcOptions): void {
+  for (const channel of [
+    IPC_INVOKE_CHANNELS.projectCreateEntry,
+    IPC_INVOKE_CHANNELS.projectMoveEntry,
+  ]) {
+    ipcMain.handle(
+      channel,
+      async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+        authorize(event, channel, args, options.trustedRendererUrl);
+        const responseSchema =
+          channel === IPC_INVOKE_CHANNELS.projectCreateEntry
+            ? ProjectCreateEntryResponseSchema
+            : ProjectMoveEntryResponseSchema;
+        try {
+          const context = options.getTabManager()?.getContext(event.sender.id);
+          const request = (
+            channel === IPC_INVOKE_CHANNELS.projectCreateEntry
+              ? ProjectCreateEntryRequestSchema
+              : ProjectMoveEntryRequestSchema
+          ).parse(args[0]);
+          if (
+            context?.kind !== "project" ||
+            context.project.projectId !== request.projectId
+          ) {
+            throw new InvalidProjectPathError(
+              "This operation is limited to the owning project tab.",
+            );
+          }
+          if (channel === IPC_INVOKE_CHANNELS.projectCreateEntry) {
+            const created = await options.projectService.createEntry(
+              ProjectCreateEntryRequestSchema.parse(request),
+            );
+            return ProjectCreateEntryResponseSchema.parse({
+              ok: true,
+              projectId: request.projectId,
+              ...created,
+            });
+          }
+          const move = ProjectMoveEntryRequestSchema.parse(request);
+          await options.projectService.moveEntry(
+            move.projectId,
+            move.relativePath,
+            move.direction,
+          );
+          return ProjectMoveEntryResponseSchema.parse({
+            ok: true,
+            projectId: request.projectId,
+          });
+        } catch (error) {
+          return responseSchema.parse(projectOperationFailure(error));
+        }
+      },
+    );
+  }
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.documentDraft,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.documentDraft,
+        args,
+        options.trustedRendererUrl,
+      );
+      try {
+        const request = DocumentDraftRequestSchema.parse(args[0]);
+        const context = options.getTabManager()?.getContext(event.sender.id);
+        if (
+          context?.kind !== "project" ||
+          context.project.projectId !== request.projectId
+        )
+          throw new InvalidProjectPathError(
+            "Draft access is limited to the owning project tab.",
+          );
+        const drafts = await options.projectService.draft(request);
+        return DocumentDraftResponseSchema.parse({ ok: true, drafts });
+      } catch (error) {
+        return DocumentDraftResponseSchema.parse(
+          projectOperationFailure(error),
+        );
+      }
+    },
+  );
+
+  const previews = new Map<string, PreviewEntry>();
+
+  const getPreview = (token: string): PreviewEntry | undefined => {
+    const preview = previews.get(token);
+    if (preview !== undefined && preview.expiresAt <= Date.now()) {
+      previews.delete(token);
+      return undefined;
+    }
+    return preview;
+  };
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.projectCreate,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.projectCreate,
+        args,
+        options.trustedRendererUrl,
+      );
+      try {
+        const request = ProjectCreateRequestSchema.parse(args[0]);
+        const project = await options.projectService.createProject(
+          request.title,
+          request.template,
+        );
+        const changedProject = summary(project);
+        const response = ProjectCreateResponseSchema.parse({
+          ok: true,
+          project: changedProject,
+        });
+        options.onProjectChanged?.(changedProject);
+        return response;
+      } catch (error) {
+        return ProjectCreateResponseSchema.parse(
+          projectOperationFailure(error),
+        );
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.projectPreviewImport,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.projectPreviewImport,
+        args,
+        options.trustedRendererUrl,
+      );
+      try {
+        const request = ProjectImportPreviewRequestSchema.parse(args[0]);
+        const workspaceId = options.getWorkspaceId?.() ?? "local";
+        for (const [token, entry] of previews) {
+          if (
+            entry.expiresAt <= Date.now() ||
+            entry.ownerId === event.sender.id
+          )
+            previews.delete(token);
+        }
+        const rootPath =
+          request.sourceKind === "file"
+            ? await options.directoryPicker.chooseImportFile()
+            : await options.directoryPicker.chooseImportSource();
+        if (rootPath === undefined) {
+          return ProjectImportPreviewResponseSchema.parse(cancelledOperation());
+        }
+        if (request.sourceKind === "file") {
+          const document = await previewDocumentImport(rootPath);
+          const plan = buildDocumentImportPlan(
+            document.content,
+            request.template,
+            request.splitChapters,
+          );
+          if ((options.getWorkspaceId?.() ?? "local") !== workspaceId)
+            throw new InvalidProjectPathError(
+              "The account changed during import preview.",
+            );
+          const previewToken = randomUUID();
+          previews.set(previewToken, {
+            rootPath: document.sourcePath,
+            template: request.template,
+            document: { ...document, plan },
+            ownerId: event.sender.id,
+            workspaceId,
+            expiresAt: Date.now() + 15 * 60_000,
+          });
+          return ProjectImportPreviewResponseSchema.parse({
+            ok: true,
+            previewToken,
+            sourceKind: "file",
+            sourceRoot: { displayName: basename(document.sourcePath) },
+            template: request.template,
+            document: {
+              format: document.format,
+              textPreview: document.content.slice(0, 2000),
+              characterCount: document.content.length,
+              splitChapters: request.splitChapters,
+              matchedChapterCount: plan.matchedChapterCount,
+            },
+            recognizedTree: plan.structure.map(importNode),
+            unclassifiedFiles: [],
+          });
+        }
+        const preview = await options.projectService.previewImport(
+          rootPath,
+          request.template,
+        );
+        if ((options.getWorkspaceId?.() ?? "local") !== workspaceId)
+          throw new InvalidProjectPathError(
+            "The account changed during import preview.",
+          );
+        const previewToken = randomUUID();
+        previews.set(previewToken, {
+          ownerId: event.sender.id,
+          workspaceId,
+          rootPath: preview.rootPath,
+          template: preview.template,
+          expiresAt: Date.now() + 15 * 60_000,
+        });
+        return ProjectImportPreviewResponseSchema.parse({
+          ok: true,
+          previewToken,
+          sourceKind: "folder",
+          sourceRoot: { displayName: basename(preview.rootPath) },
+          template: preview.template,
+          recognizedTree: preview.structure.nodes.map(importNode),
+          unclassifiedFiles: preview.structure.unclassified.map((document) => ({
+            displayName: document.name,
+            relativePath: document.relativePath,
+          })),
+        });
+      } catch (error) {
+        return ProjectImportPreviewResponseSchema.parse(
+          projectOperationFailure(error),
+        );
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.projectDeleteEntry,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.projectDeleteEntry,
+        args,
+        options.trustedRendererUrl,
+      );
+      try {
+        const request = ProjectDeleteEntryRequestSchema.parse(args[0]);
+        await options.projectService.deleteEntry(
+          request.projectId,
+          request.relativePath,
+        );
+        return ProjectDeleteEntryResponseSchema.parse({
+          ok: true,
+          projectId: request.projectId,
+          relativePath: request.relativePath,
+        });
+      } catch (error) {
+        return ProjectDeleteEntryResponseSchema.parse(
+          projectOperationFailure(error),
+        );
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.projectUpdate,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.projectUpdate,
+        args,
+        options.trustedRendererUrl,
+      );
+      try {
+        const request = ProjectUpdateRequestSchema.parse(args[0]);
+        const project = await options.projectService.updateProjectTitle(
+          request.projectId,
+          request.title,
+        );
+        const changedProject = summary(project);
+        const response = ProjectUpdateResponseSchema.parse({
+          ok: true,
+          project: changedProject,
+        });
+        options.onProjectChanged?.(changedProject);
+        return response;
+      } catch (error) {
+        return ProjectUpdateResponseSchema.parse(
+          projectOperationFailure(error),
+        );
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.projectConfirmImport,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.projectConfirmImport,
+        args,
+        options.trustedRendererUrl,
+      );
+      try {
+        const request = ProjectConfirmImportRequestSchema.parse(args[0]);
+        const preview = getPreview(request.previewToken);
+        if (
+          preview === undefined ||
+          preview.ownerId !== event.sender.id ||
+          preview.workspaceId !== (options.getWorkspaceId?.() ?? "local")
+        ) {
+          return ProjectConfirmImportResponseSchema.parse({
+            ok: false,
+            error: {
+              code: "not_found",
+              message:
+                "The import preview expired. Select the source and preview it again.",
+              retryable: true,
+            },
+          });
+        }
+        if (preview.document) {
+          await assertImportSourceUnchanged(preview.document);
+        }
+        const project = preview.document
+          ? await options.projectService.createProject(
+              preview.document.title,
+              preview.template,
+              preview.document.plan.documents,
+            )
+          : await options.projectService.confirmImport({
+              rootPath: preview.rootPath,
+              template: preview.template,
+            });
+        previews.delete(request.previewToken);
+        const changedProject = summary(project);
+        const response = ProjectConfirmImportResponseSchema.parse({
+          ok: true,
+          project: changedProject,
+        });
+        options.onProjectChanged?.(changedProject);
+        return response;
+      } catch (error) {
+        return ProjectConfirmImportResponseSchema.parse(
+          projectOperationFailure(error),
+        );
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.projectList,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.projectList,
+        args,
+        options.trustedRendererUrl,
+      );
+      try {
+        ProjectListRequestSchema.parse(args[0]);
+        return ProjectListResponseSchema.parse({
+          ok: true,
+          projects: (await options.projectService.list()).map(summary),
+        });
+      } catch (error) {
+        return ProjectListResponseSchema.parse(projectOperationFailure(error));
+      }
+    },
+  );
+
+  const pendingRestores = new Set<number>();
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.projectRestoreBackup,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.projectRestoreBackup,
+        args,
+        options.trustedRendererUrl,
+      );
+      if (pendingRestores.has(event.sender.id))
+        return ProjectCreateResponseSchema.parse(cancelledOperation());
+      pendingRestores.add(event.sender.id);
+      try {
+        const request = ProjectRestoreBackupRequestSchema.parse(args[0]);
+        const workspaceId = options.getWorkspaceId?.();
+        const assertOwner = () => {
+          if (
+            options.getTabManager()?.getContext(event.sender.id).kind !==
+              "center" ||
+            options.getWorkspaceId?.() !== workspaceId
+          )
+            throw new InvalidProjectPathError(
+              "Backup restore is limited to the account home.",
+            );
+        };
+        assertOwner();
+        const source =
+          await options.directoryPicker.chooseRestoreBackup?.(request);
+        if (!source)
+          return ProjectCreateResponseSchema.parse(cancelledOperation());
+        assertOwner();
+        const project = summary(
+          await options.projectService.restoreBackup(source),
+        );
+        options.onProjectChanged?.(project);
+        return ProjectCreateResponseSchema.parse({ ok: true, project });
+      } catch (error) {
+        return ProjectCreateResponseSchema.parse(
+          projectOperationFailure(error),
+        );
+      } finally {
+        pendingRestores.delete(event.sender.id);
+      }
+    },
+  );
+
+  const pendingBackups = new Set<number>();
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.projectBackup,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.projectBackup,
+        args,
+        options.trustedRendererUrl,
+      );
+      if (pendingBackups.has(event.sender.id))
+        return ProjectBackupResponseSchema.parse(cancelledOperation());
+      pendingBackups.add(event.sender.id);
+      try {
+        const request = ProjectBackupRequestSchema.parse(args[0]);
+        const workspaceId = options.getWorkspaceId?.();
+        const assertOwner = () => {
+          const context = options.getTabManager()?.getContext(event.sender.id);
+          if (
+            context?.kind !== "project" ||
+            context.project.projectId !== request.projectId ||
+            options.getWorkspaceId?.() !== workspaceId
+          )
+            throw new InvalidProjectPathError(
+              "Backup is limited to the owning project tab and account.",
+            );
+        };
+        assertOwner();
+        const destination =
+          await options.directoryPicker.chooseBackupDestination?.({
+            locale: request.locale,
+          });
+        if (destination === undefined)
+          return ProjectBackupResponseSchema.parse(cancelledOperation());
+        assertOwner();
+        const result = await options.projectService.backupProject(
+          request.projectId,
+          destination,
+        );
+        return ProjectBackupResponseSchema.parse({ ok: true, ...result });
+      } catch (error) {
+        return ProjectBackupResponseSchema.parse(
+          projectOperationFailure(error),
+        );
+      } finally {
+        pendingBackups.delete(event.sender.id);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.projectGetStructure,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.projectGetStructure,
+        args,
+        options.trustedRendererUrl,
+      );
+      try {
+        const request = ProjectGetStructureRequestSchema.parse(args[0]);
+        const structure = await options.projectService.getStructure(
+          request.projectId,
+        );
+        const nodes = structure.nodes.map(structureNode);
+        if (structure.unclassified.length > 0) {
+          nodes.push({
+            kind: "directory",
+            role: "unclassified",
+            displayName: "Unclassified",
+            relativePath: "__unclassified__",
+            children: structure.unclassified.map(structureNode),
+          });
+        }
+        return ProjectGetStructureResponseSchema.parse({
+          ok: true,
+          projectId: request.projectId,
+          nodes,
+        });
+      } catch (error) {
+        return ProjectGetStructureResponseSchema.parse(
+          projectOperationFailure(error),
+        );
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.documentRead,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.documentRead,
+        args,
+        options.trustedRendererUrl,
+      );
+      try {
+        const request = DocumentReadRequestSchema.parse(args[0]);
+        const document = await options.projectService.readDocument(
+          request.projectId,
+          request.relativePath,
+        );
+        return DocumentReadResponseSchema.parse({
+          ok: true,
+          relativePath: request.relativePath,
+          content: document.content,
+          contentHash: document.hash,
+          mtimeMs: document.mtimeMs,
+        });
+      } catch (error) {
+        return DocumentReadResponseSchema.parse(projectOperationFailure(error));
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.projectRenameEntry,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.projectRenameEntry,
+        args,
+        options.trustedRendererUrl,
+      );
+      try {
+        const request = ProjectRenameEntryRequestSchema.parse(args[0]);
+        const relativePath = await options.projectService.renameEntry(
+          request.projectId,
+          request.relativePath,
+          request.name,
+        );
+        return ProjectRenameEntryResponseSchema.parse({
+          ok: true,
+          projectId: request.projectId,
+          previousRelativePath: request.relativePath,
+          relativePath,
+        });
+      } catch (error) {
+        return ProjectRenameEntryResponseSchema.parse(
+          projectOperationFailure(error),
+        );
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_INVOKE_CHANNELS.documentSave,
+    async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
+      authorize(
+        event,
+        IPC_INVOKE_CHANNELS.documentSave,
+        args,
+        options.trustedRendererUrl,
+      );
+      try {
+        const request = DocumentSaveRequestSchema.parse(args[0]);
+        const saved = await options.projectService.saveDocument(
+          request.projectId,
+          request.relativePath,
+          request.content,
+          request.expectedHash,
+        );
+        return DocumentSaveResponseSchema.parse({
+          ok: true,
+          contentHash: saved.hash,
+          mtimeMs: saved.mtimeMs,
+        });
+      } catch (error) {
+        return DocumentSaveResponseSchema.parse(projectOperationFailure(error));
+      }
+    },
+  );
+}

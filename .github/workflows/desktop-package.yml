@@ -1,0 +1,164 @@
+name: Desktop package matrix
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/desktop-package.yml"
+      - ".node-version"
+      - "apps/desktop/**"
+      - "packages/**"
+      - "tooling/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  schedule:
+    - cron: "17 18 * * *"
+  workflow_dispatch:
+    inputs:
+      signed:
+        description: "Build a signed release candidate (requires certificates, notarization and legal review)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-package-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  VOLTA_FEATURE_PNPM: "1"
+
+jobs:
+  package:
+    name: Package ${{ matrix.os }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos
+            target: mac
+            arch: x64
+            runner: macos-15-intel
+            executable: apps/desktop/release/mac/Author Copilot.app/Contents/MacOS/Author Copilot
+          - os: macos
+            target: mac
+            arch: arm64
+            runner: macos-15
+            executable: apps/desktop/release/mac-arm64/Author Copilot.app/Contents/MacOS/Author Copilot
+          - os: windows
+            target: win
+            arch: x64
+            runner: windows-2025
+            executable: apps/desktop/release/win-unpacked/Author Copilot.exe
+          - os: windows
+            target: win
+            arch: arm64
+            runner: windows-11-arm
+            executable: apps/desktop/release/win-arm64-unpacked/Author Copilot.exe
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Volta
+        uses: volta-cli/action@v4
+        with:
+          volta-version: "2.0.2"
+
+      - name: Install pinned Node.js and pnpm
+        run: volta install node@24.22.2 pnpm@11.28.11
+
+      - name: Require signing credentials and distribution license
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.signed }}
+        shell: bash
+        env:
+          CSC_LINK: ${{ matrix.os == 'macos' && secrets.MAC_CSC_LINK || secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ matrix.os == 'macos' && secrets.MAC_CSC_KEY_PASSWORD || secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          test -n "$CSC_LINK" || { echo "Missing signing certificate"; exit 1; }
+          test -n "$CSC_KEY_PASSWORD" || { echo "Missing signing certificate password"; exit 1; }
+          test -f LICENSE || { echo "Choose an application distribution license before signed release"; exit 1; }
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: pnpm --filter @author-copilot/desktop package:prepare
+
+      - name: Validate source workflow on the target architecture
+        run: pnpm --filter @author-copilot/desktop test:e2e
+
+      - name: Package desktop
+        if: ${{ !inputs.signed }}
+        id: package
+        run: pnpm --filter @author-copilot/desktop package:${{ matrix.target }}:${{ matrix.arch }}
+
+      - name: Package signed release candidate
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.signed }}
+        id: signed_package
+        env:
+          CSC_LINK: ${{ matrix.os == 'macos' && secrets.MAC_CSC_LINK || secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ matrix.os == 'macos' && secrets.MAC_CSC_KEY_PASSWORD || secrets.WIN_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: pnpm --filter @author-copilot/desktop package:${{ matrix.target }}:${{ matrix.arch }} --config.forceCodeSigning=true ${{ matrix.os == 'macos' && '--config.mac.notarize=true' || '' }}
+
+      - name: Verify macOS signature and notarization
+        if: ${{ inputs.signed && matrix.os == 'macos' }}
+        run: |
+          codesign --verify --deep --strict "$(dirname '${{ matrix.executable }}')/../.."
+          spctl --assess --type execute --verbose "$(dirname '${{ matrix.executable }}')/../.."
+
+      - name: Verify Windows signature
+        if: ${{ inputs.signed && matrix.os == 'windows' }}
+        shell: pwsh
+        run: |
+          $signature = Get-AuthenticodeSignature '${{ matrix.executable }}'
+          if ($signature.Status -ne 'Valid') { throw 'Release signature verification failed' }
+
+      - name: Qualify Electron SQLite FTS5 runtime
+        run: pnpm --filter @author-copilot/desktop knowledge:qualify-runtime
+
+      - name: Qualify bundled Git runtime
+        run: pnpm --filter @author-copilot/desktop runtime:verify
+
+      - name: Qualify bundled Git production services
+        env:
+          AUTHOR_COPILOT_TEST_GIT_RESOURCES_PATH: ${{ github.workspace }}/apps/desktop/resources
+        run: pnpm --filter @author-copilot/desktop runtime:qualify-services
+
+      - name: Qualify bundled Git network security
+        env:
+          AUTHOR_COPILOT_TEST_GIT_RESOURCES_PATH: ${{ github.workspace }}/apps/desktop/resources
+        run: pnpm --filter @author-copilot/desktop runtime:qualify-network
+
+      - name: Assert macOS package contains Git runtime
+        if: matrix.os == 'macos'
+        run: test -x "$(dirname '${{ matrix.executable }}')/../Resources/git/bin/git"
+
+      - name: Assert Windows package contains Git runtime
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          $runtime = Join-Path (Split-Path '${{ matrix.executable }}') 'resources\git\cmd\git.exe'
+          if (-not (Test-Path -PathType Leaf $runtime)) {
+            throw "Packaged Git runtime is missing: $runtime"
+          }
+
+      - name: Smoke-test packaged application
+        run: node apps/desktop/scripts/electron-smoke.ts --executable "${{ matrix.executable }}"
+
+      - name: Upload desktop package
+        if: always() && (steps.package.outcome == 'success' || steps.signed_package.outcome == 'success')
+        uses: actions/upload-artifact@v4
+        with:
+          name: author-copilot-${{ matrix.os }}-${{ matrix.arch }}
+          path: apps/desktop/release/**
+          if-no-files-found: error
+          retention-days: 14

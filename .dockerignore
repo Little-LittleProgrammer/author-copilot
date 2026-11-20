@@ -1,0 +1,9 @@
+.git
+**/node_modules
+**/out
+**/dist
+**/test-results
+**/release
+**/.env
+.env
+.turbo

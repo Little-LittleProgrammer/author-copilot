@@ -1,0 +1,32 @@
+.superpowers/
+
+# Workspace dependencies and caches
+node_modules/
+.turbo/
+.pnpm-store/
+.cache/git-runtime/
+coverage/
+playwright-report/
+test-results/
+
+# Build and package outputs
+dist/
+out/
+release/
+apps/desktop/resources/git/
+apps/desktop/resources/release-materials/
+*.tsbuildinfo
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# OS and editor files
+.DS_Store
+*.swp
+
+# Python benchmark environment
+.venv/
+__pycache__/
+*.py[cod]

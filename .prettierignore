@@ -1,0 +1,17 @@
+.omx/
+.claude/
+.turbo/
+coverage/
+playwright-report/
+pnpm-lock.yaml
+test-results/
+dist/
+docs/
+node_modules/
+out/
+release/
+README*.md
+spikes/**/.work/
+spikes/**/dist/
+spikes/**/node_modules/
+spikes/**/pnpm-lock.yaml

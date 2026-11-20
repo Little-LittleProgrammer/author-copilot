@@ -1,0 +1,26 @@
+{
+  "status": "passed",
+  "scope": "smoke-only",
+  "date": "2026-07-13",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "runtime": {
+    "node": "24.16.0",
+    "pnpm": "11.7.0",
+    "electron": "43.1.0",
+    "electronBuilder": "26.15.3",
+    "electronGetOverride": "3.1.0",
+    "anthropicSdk": "0.111.0",
+    "claudeAgentSdk": "0.3.207"
+  },
+  "checks": {
+    "sdkContractTests": "4/4 passed",
+    "developmentElectronSmoke": "passed",
+    "unsignedDirectoryPackage": "passed",
+    "packagedApplicationSmoke": "passed",
+    "agentSdkTaskCancellation": "not-run",
+    "agentSdkChildProcessCleanup": "not-run",
+    "applicationOwnedFileTools": "contract-only"
+  },
+  "remainingArchitectures": ["darwin-x64", "win32-x64", "win32-arm64"]
+}

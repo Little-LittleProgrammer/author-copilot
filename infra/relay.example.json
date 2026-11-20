@@ -1,0 +1,18 @@
+{
+  "baseURL": "https://api.anthropic.com",
+  "apiKeyEnv": "ANTHROPIC_API_KEY",
+  "defaultModel": "claude-sonnet-4-6",
+  "models": [
+    {
+      "id": "claude-sonnet-4-6",
+      "name": "Claude Sonnet",
+      "maxOutputTokens": 4096,
+      "price": {
+        "input": 1000000,
+        "output": 2000000,
+        "cacheRead": 100000,
+        "cacheWrite": 2000000
+      }
+    }
+  ]
+}
